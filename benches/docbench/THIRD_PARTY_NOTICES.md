@@ -2,7 +2,7 @@
 
 ## js-yaml
 
-- Package: `js-yaml` 5.3.0
+- Package: `js-yaml` 5.4.1
 - Project: https://github.com/nodeca/js-yaml
 - License: MIT
 
@@ -19,7 +19,7 @@ exact, including integers outside JavaScript's safe numeric range.
 
 ## Marked
 
-- Package: `marked` 18.0.10
+- Package: `marked` 18.0.11
 - Project: https://github.com/markedjs/marked
 - License: MIT
 
