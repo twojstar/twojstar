@@ -7,6 +7,7 @@ for (const path of [
   "public/document-enhancements.css",
   "public/text-inspector-core.js",
   "public/text-inspector.js",
+  "public/webmcp.js",
   "public/pdf-app.mjs",
   "public/pdf-core.mjs",
   "public/fonts.css",
@@ -188,6 +189,8 @@ for (const leaked of [
   "/document-enhancements.mjs",
   "/text-inspector.js",
   "/text-inspector-core.js",
+  "webmcp.js",
+  "/webmcp.js",
   "/pdf-app.mjs",
   "/pdf-core.mjs",
   "/fonts.css",
@@ -212,6 +215,11 @@ if (!portable.includes("marked")) throw new Error("Portable build is missing Mar
 if (!portable.includes("parseTree")) throw new Error("Portable build is missing JSON tree runtime");
 if (!portable.includes("Text safety inspection") || !portable.includes("inspect-button")) {
   throw new Error("Portable build is missing text inspector support.");
+}
+for (const toolName of ["read_document", "set_document_text", "validate_document", "format_document", "inspect_document"]) {
+  if (!portable.includes(`name: "${toolName}"`)) {
+    throw new Error(`Portable build is missing WebMCP tool: ${toolName}`);
+  }
 }
 if (!portable.includes("showSaveFilePicker") || !portable.includes("createWritable")) {
   throw new Error("Portable build is missing direct-save support");

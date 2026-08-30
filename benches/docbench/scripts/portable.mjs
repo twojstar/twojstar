@@ -13,6 +13,7 @@ const [
   documentEnhancements,
   inspectorCore,
   inspector,
+  webmcp,
   tokenCounterCore,
   tokenCounter,
   tiktokenLite,
@@ -43,6 +44,7 @@ const [
   readFile("public/document-enhancements.mjs", "utf8"),
   readFile("public/text-inspector-core.js", "utf8"),
   readFile("public/text-inspector.js", "utf8"),
+  readFile("public/webmcp.js", "utf8"),
   readFile("public/token-counter-core.mjs", "utf8"),
   readFile("public/token-counter.mjs", "utf8"),
   readFile("public/vendor/js-tiktoken/lite.js", "utf8"),
@@ -182,6 +184,7 @@ const portable = html
     '<script src="/text-inspector.js"></script>',
     `${portableTokenizerAssets}\n<script>${safeScript(inspectorPortable)}</script>`,
   )
+  .replace('<script src="/webmcp.js"></script>', `<script>${safeScript(webmcp)}</script>`)
   .replace('<script type="module" src="/pdf-app.mjs"></script>', portablePdfScripts)
   .replace('<link rel="manifest" href="/site.webmanifest">', "")
   .replace('<link rel="canonical" href="https://docbench.travny.workers.dev/">', "")

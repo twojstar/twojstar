@@ -422,6 +422,12 @@
   });
   eolSelect.addEventListener("change", () => { state.mixedEol = false; updateMeta(); });
   let validationTimer;
+  function syncValidation({ revealError = false } = {}) {
+    clearTimeout(validationTimer);
+    validationTimer = undefined;
+    return renderValidation({ revealError });
+  }
+  globalThis.DocBenchDocumentUi = Object.freeze({ validate: syncValidation });
   editor.addEventListener("input", () => {
     clearTimeout(validationTimer);
     validationTimer = setTimeout(renderValidation, 120);
