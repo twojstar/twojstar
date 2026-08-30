@@ -1,0 +1,29 @@
+{
+  "name": "trvny-benches",
+  "private": true,
+  "description": "Shared workspace for Codebench, Docbench and Streambench.",
+  "workspaces": [
+    "codebench",
+    "docbench",
+    "streambench"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "check": "npm run check --workspaces --if-present",
+    "build:codebench": "npm run build --workspace=codebench",
+    "build:docbench": "npm run build --workspace=docbench",
+    "build:streambench": "npm run build --workspace=streambench",
+    "check:codebench": "npm run check --workspace=codebench",
+    "check:docbench": "npm run check --workspace=docbench",
+    "check:streambench": "npm run check --workspace=streambench",
+    "deploy:codebench": "npm run deploy:worker --workspace=codebench",
+    "deploy:docbench": "npm run deploy:worker --workspace=docbench",
+    "deploy:streambench": "npm run deploy:worker --workspace=streambench",
+    "preview:codebench": "npm run preview:worker --workspace=codebench",
+    "preview:docbench": "npm run preview:worker --workspace=docbench",
+    "preview:streambench": "npm run preview:worker --workspace=streambench"
+  },
+  "overrides": {
+    "pako": "^2.2.0"
+  }
+}

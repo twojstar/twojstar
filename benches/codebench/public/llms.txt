@@ -1,0 +1,24 @@
+# Code Bench
+
+> Local-first browser studio for generating, styling, scanning and exporting QR codes and barcodes.
+
+Code Bench runs at https://codebench.trfny.com/. User content is processed in the browser and is not uploaded to a Code Bench backend.
+
+## Main capabilities
+
+- Generate and style QR codes.
+- Generate Code 128, EAN, Data Matrix, Aztec, PDF417 and other barcode formats.
+- Scan QR codes and barcodes with local files or the browser camera where supported.
+- Export generated codes in common image and vector formats.
+
+## Public pages
+
+- [Application](https://codebench.trfny.com/): Code Bench interface.
+- [Source](https://github.com/trvny/trvny/tree/main/benches/codebench): application source.
+
+## Related TRAVNY tools
+
+- [TRAVNY hub](https://trfny.com/): family landing page.
+- [Streambench](https://streambench.trfny.com/): IPTV, radio, HLS and playlist workshop.
+- [Doc Bench](https://docbench.travny.workers.dev/): local-first document and PDF studio.
+- [Weather](https://weather.trfny.com/): local weather ensemble.

@@ -1,0 +1,35 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "streambench",
+  "main": "src/entry.ts",
+  "compatibility_date": "2026-07-26",
+  "preview_urls": false,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": [
+      "/",
+      "/index.html",
+      "/api/*",
+      "/health",
+      "/favicon-16x16.png",
+      "/favicon-32x32.png",
+      "/favicon-96x96.png",
+      "/favicon.ico",
+      "/apple-touch-icon.png",
+      "/android-chrome-192x192.png",
+      "/android-chrome-512x512.png"
+    ]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.01,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 0.01,
+      "persist": false,
+      "invocation_logs": false
+    }
+  }
+}

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Streambench</title>
+  <desc id="desc">Neonowy przycisk odtwarzania i fala sygnału</desc>
+  <defs>
+    <linearGradient id="bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#182028"/>
+      <stop offset="1" stop-color="#06080b"/>
+    </linearGradient>
+    <linearGradient id="signal" x1="14" y1="17" x2="51" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#55e6a5"/>
+      <stop offset="1" stop-color="#52c7ff"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="1.8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#bg)" stroke="#303b46" stroke-width="2"/>
+  <path d="M10 16h44M10 24h44M10 40h44M10 48h44" stroke="#ffffff" stroke-opacity=".045"/>
+  <path d="M17 17v30" stroke="#55e6a5" stroke-opacity=".28" stroke-width="2" stroke-linecap="round"/>
+  <path d="M20 20.5 41.5 32 20 43.5Z" fill="url(#signal)" filter="url(#glow)"/>
+  <path d="M43 22c4 2.6 6 5.9 6 10s-2 7.4-6 10" fill="none" stroke="#52c7ff" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+  <circle cx="49" cy="14" r="3" fill="#55e6a5"/>
+</svg>

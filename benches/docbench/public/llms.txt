@@ -1,0 +1,40 @@
+# Doc Bench
+
+> Local-first document and PDF studio that runs in the browser without uploading user files.
+
+Doc Bench runs at https://docbench.travny.workers.dev/. It is part of the TRAVNY Bench family and is designed for document inspection, editing and PDF maintenance while keeping source files on the device.
+
+## Documents
+
+- Edit TXT, Markdown, JSON, YAML/YML and XML.
+- Preserve and deliberately change UTF-8 BOM and LF/CRLF/CR line endings.
+- Validate and format structured documents.
+- Render Markdown safely and inspect JSON/YAML/XML in structured tree previews.
+- Save directly back to a selected local file in supported browsers, with download as the portable fallback.
+
+## PDF tools
+
+- Preview PDFs locally.
+- Merge files and reorder or delete pages.
+- Inspect, add, edit, move and remove bookmark trees.
+- Preserve and remap bookmark targets when pages change.
+- Apply lossless optimization, optional lossy image recompression and Fast Web View.
+- Rebuild and verify the resulting PDF before it is offered for download.
+
+## Privacy and portability
+
+User documents and PDFs are processed locally in the browser. The application has no telemetry and ships a portable single-file build in the Benches rolling release.
+
+## Public pages
+
+- [Application](https://docbench.travny.workers.dev/): Doc Bench interface.
+- [Source](https://github.com/trvny/trvny/tree/main/benches/docbench): application source and documentation.
+- [Benches portable release](https://github.com/trvny/trvny/releases/tag/benches-portable-latest): rolling standalone builds.
+
+## Related TRAVNY tools
+
+- [TRAVNY hub](https://trfny.com/): family landing page.
+- [Streambench](https://streambench.trfny.com/): IPTV, radio, HLS, M3U and XMLTV workshop.
+- [Codebench](https://codebench.trfny.com/): local QR and barcode studio.
+- [Weather](https://weather.trfny.com/): local weather ensemble.
+- [Feeds](https://trvny.github.io/feedseek/): feed directory and generated RSS/Atom feeds.

@@ -1,0 +1,27 @@
+{
+  "name": "streambench",
+  "private": true,
+  "version": "0.9.0",
+  "description": "Browser-based IPTV, radio and stream tester.",
+  "scripts": {
+    "build:client": "tsc -p tsconfig.client.json && tsc -p tsconfig.client-orchestrators.json",
+    "build": "npm run build:client && node scripts/vendor.mjs && node scripts/portable.mjs",
+    "typecheck": "wrangler types && tsc --noEmit",
+    "check": "npm run build && npm run typecheck && npm run check:syntax && npm run test:raw && wrangler deploy --dry-run",
+    "check:syntax": "node scripts/syntax-check.mjs",
+    "dev": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "smoke": "node scripts/smoke.mjs",
+    "test": "npm run build:client && npm run test:raw",
+    "test:raw": "node --test \"scripts/*-check.mjs\"",
+    "deploy:worker": "wrangler deploy",
+    "preview:worker": "wrangler versions upload"
+  },
+  "dependencies": {
+    "hls.js": "1.7.1"
+  },
+  "devDependencies": {
+    "wrangler": "^4",
+    "typescript": "7.0.2"
+  }
+}

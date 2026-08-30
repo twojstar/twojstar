@@ -1,0 +1,31 @@
+{
+  "name": "docbench",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Local-first document and PDF toolbox.",
+  "scripts": {
+    "build": "node scripts/vendor.mjs && node scripts/portable.mjs",
+    "typecheck": "wrangler types && tsc --noEmit",
+    "check": "npm run build && npm run typecheck && node --check public/app.js && node --check public/document-enhancements.mjs && node --check public/text-inspector-core.js && node --check public/text-inspector.js && node --check public/token-counter.mjs && node scripts/check.mjs && node tests/document-preview.test.mjs && node tests/text-inspector.test.js && node tests/token-counter.test.mjs && node tests/pdf-core.test.mjs && node tests/pdf-attachment-review.test.mjs && wrangler deploy --dry-run",
+    "dev": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "deploy:worker": "wrangler deploy",
+    "preview:worker": "wrangler versions upload"
+  },
+  "dependencies": {
+    "@cantoo/pdf-lib": "2.9.1",
+    "@fontsource-variable/space-grotesk": "5.3.0",
+    "@fontsource/space-mono": "5.3.0",
+    "fflate": "0.8.3",
+    "js-tiktoken": "1.0.21",
+    "js-yaml": "5.3.0",
+    "jsonc-parser": "3.3.1",
+    "marked": "18.0.10",
+    "pdfjs-dist": "6.2.108",
+    "qpdf-run": "0.2.1"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "wrangler": "^4"
+  }
+}

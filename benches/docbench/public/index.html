@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b0d11">
+  <meta name="google-site-verification" content="Qu5-7v2tWoKtUYUVlQXisaFkGGVEImYlmycKDUg0QBw">
+  <meta name="application-name" content="Doc Bench">
+  <meta name="description" content="Local-first browser studio for editing and previewing TXT, Markdown, JSON, YAML and XML, plus merging, organizing and optimizing PDFs without uploads.">
+  <meta name="author" content="trvny">
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
+  <meta property="og:title" content="Doc Bench — local document & PDF studio">
+  <meta property="og:description" content="Edit structured text and work with PDFs locally in the browser: previews, validation, merge, pages, bookmarks and optimization.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Doc Bench">
+  <meta property="og:url" content="https://docbench.travny.workers.dev/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Doc Bench — local document & PDF studio">
+  <meta name="twitter:description" content="Local-first document editing, rich previews and PDF tools without uploads.">
+  <title>Doc Bench — Document & PDF Studio</title>
+  <link rel="canonical" href="https://docbench.travny.workers.dev/">
+  <link rel="sitemap" type="application/xml" href="/sitemap.xml">
+  <link rel="alternate" type="text/plain" href="/llms.txt" title="Doc Bench llms.txt">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="mask-icon" href="/favicon.svg" color="#f59e0b">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="stylesheet" href="/fonts.css">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/document-enhancements.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">TRVNY / BENCHES</p>
+        <div class="title-row">
+          <h1>Doc Bench</h1>
+          <span class="privacy-chip"><span class="privacy-dot" aria-hidden="true"></span>Local only</span>
+        </div>
+        <p class="tagline">Document & PDF Studio · edit, inspect and export without uploading.</p>
+      </div>
+    </header>
+
+    <nav class="mode-tabs" role="tablist" aria-label="Workspace">
+      <button id="document-tab" class="mode-tab active" type="button" role="tab" aria-selected="true" aria-controls="document-workspace" data-mode="document">Documents</button>
+      <button id="pdf-tab" class="mode-tab" type="button" role="tab" aria-selected="false" aria-controls="pdf-workspace" data-mode="pdf">PDF</button>
+    </nav>
+
+    <section id="document-workspace" class="workspace" role="tabpanel" aria-labelledby="document-tab">
+      <div class="toolbar document-toolbar">
+        <div class="toolbar-group document-file-group">
+          <button id="open-button" class="button compact primary" type="button">Open file</button>
+          <button id="new-button" class="button compact" type="button">New</button>
+          <input id="file-input" type="file" hidden accept="*/*">
+        </div>
+        <div class="toolbar-group fields-group">
+          <label>Format
+            <select id="format-select">
+              <option value="txt">TXT</option>
+              <option value="md">Markdown</option>
+              <option value="json">JSON</option>
+              <option value="yaml">YAML</option>
+              <option value="xml">XML</option>
+            </select>
+          </label>
+          <label>Line endings
+            <select id="eol-select">
+              <option value="LF">LF</option>
+              <option value="CRLF">CRLF</option>
+              <option value="CR">CR</option>
+            </select>
+          </label>
+        </div>
+        <div class="toolbar-group action-group">
+          <button id="validate-button" class="button compact" type="button">Validate</button>
+          <button id="inspect-button" class="button compact" type="button">Inspect</button>
+          <button id="format-button" class="button compact" type="button">Auto-format</button>
+          <button id="copy-button" class="button compact" type="button">Copy</button>
+          <button id="save-button" class="button compact primary" type="button" aria-keyshortcuts="Control+S Meta+S">Save</button>
+          <button id="download-button" class="button compact" type="button">Download</button>
+        </div>
+      </div>
+
+      <div id="drop-zone" class="editor-grid">
+        <section class="panel editor-panel" aria-label="Editor">
+          <div class="panel-header">
+            <strong id="filename-label">untitled.txt</strong>
+            <span id="encoding-label">UTF-8 · LF</span>
+          </div>
+          <textarea id="editor" spellcheck="false" aria-label="Document editor" placeholder="Drop a file here or start typing…"></textarea>
+        </section>
+        <section class="panel preview-panel" aria-label="Parsed preview">
+          <div class="panel-header">
+            <strong id="preview-title">Parsed preview</strong>
+            <span id="status-badge" class="status neutral" role="status" aria-live="polite">Plain text</span>
+          </div>
+          <div id="preview" class="preview-raw" tabindex="0"></div>
+        </section>
+      </div>
+      <p id="detail-status" class="detail-status">UTF-8 · LF · 1 line</p>
+    </section>
+
+    <section id="pdf-workspace" class="workspace" role="tabpanel" aria-labelledby="pdf-tab" hidden>
+      <div class="toolbar pdf-toolbar">
+        <div class="toolbar-group action-group">
+          <button id="pdf-open-button" class="button compact primary" type="button">Open PDF</button>
+          <button id="pdf-add-button" class="button compact" type="button">Add PDF</button>
+          <input id="pdf-input" type="file" hidden accept="application/pdf,.pdf">
+          <input id="pdf-add-input" type="file" hidden multiple accept="application/pdf,.pdf">
+        </div>
+        <div class="toolbar-group page-action-group">
+          <button id="pdf-move-left" class="button compact" type="button" disabled>← Move</button>
+          <button id="pdf-move-right" class="button compact" type="button" disabled>Move →</button>
+          <button id="pdf-extract-page" class="button compact" type="button" disabled>Extract page</button>
+          <button id="pdf-split-all" class="button compact" type="button" disabled>Split all</button>
+          <button id="pdf-remove-page" class="button compact danger" type="button" disabled>Delete page</button>
+        </div>
+        <div class="toolbar-group option-group">
+          <label class="toggle-label">
+            <input id="pdf-optimize" type="checkbox" checked>
+            Lossless optimize
+          </label>
+          <label class="toggle-label">
+            <input id="pdf-lossy-images" type="checkbox">
+            Lossy images
+          </label>
+          <label id="pdf-image-quality-row" class="quality-label" hidden>
+            JPEG quality
+            <input id="pdf-image-quality" type="range" min="30" max="95" step="5" value="75">
+            <output id="pdf-image-quality-value" for="pdf-image-quality">75</output>
+          </label>
+          <label class="toggle-label">
+            <input id="pdf-linearize" type="checkbox">
+            Fast Web View
+          </label>
+        </div>
+        <div class="toolbar-group save-group">
+          <button id="pdf-save-button" class="button compact primary" type="button" aria-keyshortcuts="Control+S Meta+S" disabled>Save PDF</button>
+        </div>
+      </div>
+
+      <div class="pdf-meta-row">
+        <strong id="pdf-filename">No PDF loaded</strong>
+        <span id="pdf-status" role="status" aria-live="polite">Open a PDF to begin.</span>
+      </div>
+
+      <details id="pdf-metadata-panel" class="pdf-metadata-panel">
+        <summary>
+          <strong>Metadata</strong>
+          <span id="pdf-metadata-state">No PDF</span>
+        </summary>
+        <fieldset id="pdf-metadata-fields" class="pdf-metadata-grid" disabled>
+          <label>Title
+            <input id="pdf-meta-title" type="text" maxlength="1000">
+          </label>
+          <label>Author
+            <input id="pdf-meta-author" type="text" maxlength="1000">
+          </label>
+          <label>Subject
+            <input id="pdf-meta-subject" type="text" maxlength="2000">
+          </label>
+          <label>Keywords
+            <input id="pdf-meta-keywords" type="text" maxlength="4000">
+          </label>
+          <label>Creator
+            <input id="pdf-meta-creator" type="text" maxlength="1000">
+          </label>
+          <label>Producer
+            <input id="pdf-meta-producer" type="text" maxlength="1000">
+          </label>
+          <label>Created
+            <input id="pdf-meta-created" type="datetime-local" step="1">
+          </label>
+          <label>Modified
+            <input id="pdf-meta-modified" type="datetime-local" step="1">
+          </label>
+        </fieldset>
+        <div class="pdf-metadata-footer">
+          <span>Dates use local time. Edits apply to Save, Extract and Split.</span>
+          <button id="pdf-metadata-reset" class="mini-button" type="button" disabled>Reset</button>
+        </div>
+      </details>
+
+      <details id="pdf-attachments-panel" class="pdf-metadata-panel pdf-attachments-panel">
+      <summary>
+        <strong>Attachments</strong>
+        <span id="pdf-attachments-state">No PDF</span>
+      </summary>
+      <input id="pdf-attachment-input" type="file" multiple hidden>
+      <div id="pdf-attachments" class="pdf-attachments-list">Open a PDF to manage embedded files.</div>
+      <div class="pdf-metadata-footer">
+        <span>Embedded files are preserved across Save, Extract and Split.</span>
+        <button id="pdf-attachment-add" class="mini-button" type="button" disabled>Add files</button>
+      </div>
+    </details>
+
+      <div class="pdf-grid">
+        <aside class="pdf-outline-panel" aria-label="PDF bookmarks">
+          <div class="panel-header bookmark-panel-header">
+            <strong>Bookmarks</strong>
+            <button id="bookmark-add-root" class="mini-button" type="button" disabled>Add</button>
+          </div>
+          <div id="pdf-outline" class="pdf-outline">No bookmarks yet.</div>
+          <form id="bookmark-editor" class="bookmark-editor" hidden>
+            <label>Title
+              <input id="bookmark-title" type="text" maxlength="500">
+            </label>
+            <label>Target
+              <select id="bookmark-target-type">
+                <option value="page">Page</option>
+                <option value="url">URL</option>
+                <option value="named">Named action</option>
+                <option value="none">No target</option>
+              </select>
+            </label>
+            <label id="bookmark-page-row">Page
+              <select id="bookmark-page"></select>
+            </label>
+            <label id="bookmark-url-row" hidden>URL
+              <input id="bookmark-url" type="url" placeholder="https://example.com/">
+            </label>
+            <label id="bookmark-named-row" hidden>Named action
+              <input id="bookmark-named" type="text" placeholder="NextPage">
+            </label>
+            <div class="bookmark-flags">
+              <label><input id="bookmark-bold" type="checkbox"> Bold</label>
+              <label><input id="bookmark-italic" type="checkbox"> Italic</label>
+              <label><input id="bookmark-open" type="checkbox"> Open</label>
+            </div>
+            <div class="bookmark-actions">
+              <button id="bookmark-add-sibling" class="mini-button" type="button">+ Sibling</button>
+              <button id="bookmark-add-child" class="mini-button" type="button">+ Child</button>
+              <button id="bookmark-up" class="mini-button" type="button" aria-label="Move bookmark up" title="Move bookmark up">↑</button>
+              <button id="bookmark-down" class="mini-button" type="button" aria-label="Move bookmark down" title="Move bookmark down">↓</button>
+              <button id="bookmark-indent" class="mini-button" type="button">→ Nest</button>
+              <button id="bookmark-outdent" class="mini-button" type="button">← Out</button>
+              <button id="bookmark-delete" class="mini-button danger" type="button">Delete</button>
+            </div>
+          </form>
+        </aside>
+        <section class="pdf-preview-panel" aria-label="PDF preview">
+          <div class="panel-header"><strong>Preview</strong><span>PDF.js · scripting off</span></div>
+          <div class="pdf-canvas-stage">
+            <canvas id="pdf-preview-canvas" hidden></canvas>
+            <p class="pdf-empty-hint">Open a PDF. Everything stays on this device.</p>
+          </div>
+        </section>
+        <aside class="pdf-pages-panel" aria-label="PDF pages">
+          <div class="panel-header"><strong>Pages</strong><span>drag to reorder</span></div>
+          <div id="pdf-pages" class="pdf-pages"></div>
+        </aside>
+      </div>
+    </section>
+
+    <footer>
+      <span>Local-first by design · no uploads · no telemetry.</span>
+      <span><a href="https://trfny.com/">TRAVNY hub</a> · <a href="https://github.com/trvny/trvny/tree/main/benches/docbench">source</a> · <a href="/llms.txt">llms.txt</a></span>
+    </footer>
+  </main>
+  <script src="/vendor/js-yaml.min.js"></script>
+  <script src="/vendor/marked.umd.js"></script>
+  <script src="/vendor/pdf-lib.min.js"></script>
+  <script src="/vendor/fflate.min.js"></script>
+  <script src="/app.js"></script>
+  <script type="module" src="/document-enhancements.mjs"></script>
+  <script src="/text-inspector-core.js"></script>
+  <script src="/text-inspector.js"></script>
+  <script type="module" src="/pdf-app.mjs"></script>
+</body>
+</html>

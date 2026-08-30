@@ -1,0 +1,318 @@
+<!-- htmlhint id-class-value:false,head-script-disabled:false -->
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="google-site-verification" content="Qu5-7v2tWoKtUYUVlQXisaFkGGVEImYlmycKDUg0QBw">
+  <meta name="theme-color" content="#101318">
+  <meta name="color-scheme" content="dark">
+  <meta name="application-name" content="Streambench">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Streambench">
+  <meta name="description" content="Przeglądarkowy warsztat do lokalnego testowania streamów IPTV, radia, HLS oraz playlist M3U i M3U8 z EPG, metadanymi i diagnostyką.">
+  <meta name="keywords" content="Streambench, IPTV, radio internetowe, HLS, M3U, M3U8, XMLTV, EPG, tester streamów">
+  <meta name="author" content="trvny">
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+  <meta name="googlebot" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+  <meta name="referrer" content="no-referrer">
+  <meta property="og:title" content="Streambench: tester IPTV, radia i playlist M3U">
+  <meta property="og:description" content="Lokalny warsztat do odtwarzania, sprawdzania i porządkowania streamów IPTV, radia, HLS oraz playlist M3U/M3U8.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Streambench">
+  <meta property="og:locale" content="pl_PL">
+  <meta property="og:url" content="https://streambench.trfny.com/">
+  <meta property="og:image" content="https://streambench.trfny.com/og.svg">
+  <meta property="og:image:secure_url" content="https://streambench.trfny.com/og.svg">
+  <meta property="og:image:type" content="image/svg+xml">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Streambench, neonowy warsztat do streamów IPTV i radia">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Streambench: tester IPTV, radia i playlist M3U">
+  <meta name="twitter:description" content="Testuj streamy IPTV, radio, HLS i lokalne playlisty M3U/M3U8 bez wysyłania ich na serwer.">
+  <meta name="twitter:image" content="https://streambench.trfny.com/og.svg">
+  <meta name="twitter:image:alt" content="Streambench, neonowy warsztat do streamów IPTV i radia">
+  <title>Streambench: tester IPTV, radia, HLS i playlist M3U</title>
+  <link rel="canonical" href="https://streambench.trfny.com/">
+  <link rel="image_src" href="https://streambench.trfny.com/og.svg">
+  <link rel="sitemap" type="application/xml" href="/sitemap.xml">
+  <link rel="alternate" type="text/plain" href="/llms.txt" title="Streambench llms.txt">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="mask-icon" href="/favicon.svg" color="#55e6a5">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/playlist-workspace.css">
+  <link rel="stylesheet" href="/workspace-layout.css">
+  <link rel="stylesheet" href="/mobile-workspace.css">
+  <link rel="stylesheet" href="/playlist-import.css">
+  <script type="module" src="/stream-bridge.js"></script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Streambench","url":"https://streambench.trfny.com/","applicationCategory":"MultimediaApplication","operatingSystem":"Any","inLanguage":"pl-PL","description":"Przeglądarkowy warsztat do lokalnego testowania streamów IPTV, radia, HLS oraz playlist M3U i M3U8 z EPG, metadanymi i diagnostyką.","isAccessibleForFree":true}</script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="Streambench">
+      <span class="brand-mark" aria-hidden="true">▶</span>
+      <span>Streambench</span>
+    </a>
+    <span class="privacy-note">Własne playlisty i EPG są przetwarzane lokalnie</span>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">IPTV · radio · HLS</p>
+      <h1>Warsztat do streamów.</h1>
+      <p>Wklej adres, otwórz M3U albo wybierz źródło z katalogu Streambencha.</p>
+    </section>
+
+    <nav id="mobileWorkspaceNav" class="mobile-workspace-nav" aria-label="Widok Streambencha">
+      <button type="button" data-mobile-view-target="player" aria-pressed="true">Odtwarzacz</button>
+      <button type="button" data-mobile-view-target="playlist" aria-pressed="false">Playlista <span id="mobilePlaylistCount" class="mobile-count">0</span></button>
+      <button type="button" data-mobile-view-target="tools" aria-pressed="false">Narzędzia</button>
+    </nav>
+
+    <section class="workspace" aria-label="Odtwarzacz i aktualna playlista">
+      <div class="panel player-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Odtwarzacz</p>
+            <h2 id="nowPlaying">Brak wybranego streamu</h2>
+          </div>
+          <span id="status" class="status" data-state="idle">Gotowy</span>
+        </div>
+
+        <div class="media-shell">
+          <video id="videoPlayer" controls playsinline></video>
+          <audio id="audioPlayer" controls></audio>
+          <div id="mediaPlaceholder" class="media-placeholder">
+            <span aria-hidden="true">⌁</span>
+            <p>Podaj bezpośredni URL albo wybierz pozycję z playlisty.</p>
+          </div>
+        </div>
+
+        <form id="streamForm" class="stream-form">
+          <label for="streamUrl">Adres streamu</label>
+          <div class="input-row">
+            <input id="streamUrl" name="streamUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://example.com/live/index.m3u8" required>
+            <select id="mediaMode" name="mediaMode" aria-label="Rodzaj odtwarzacza">
+              <option value="auto">Auto</option>
+              <option value="video">Wideo</option>
+              <option value="audio">Audio</option>
+            </select>
+            <button type="submit">Odtwórz</button>
+          </div>
+          <p id="streamHint" class="hint">HLS działa przez lokalnie dostarczony hls.js, a obsługiwane formaty bezpośrednie przez przeglądarkę.</p>
+        </form>
+      </div>
+
+      <aside class="panel source-panel">
+        <div class="panel-heading compact">
+          <div>
+            <p class="eyebrow">Playlista</p>
+            <h2>Aktualna playlista</h2>
+          </div>
+          <span id="entryCount" class="count">0</span>
+        </div>
+
+        <label class="search-label" for="playlistSearch">Szukaj po nazwie, metadanych lub oznaczeniach</label>
+        <input id="playlistSearch" type="search" autocomplete="off" placeholder="np. HLS, HD, Polska, HTTPS" disabled>
+
+        <div id="playlistEmpty" class="playlist-empty">
+          <p>Jeszcze pusto. Otwórz Narzędzia i wczytaj katalog albo własną playlistę.</p>
+        </div>
+        <ol id="playlistEntries" class="playlist-entries" aria-live="polite"></ol>
+      </aside>
+    </section>
+
+    <details id="toolsPanel" class="panel tools-panel">
+      <summary class="tools-summary">
+        <div>
+          <p class="eyebrow">Narzędzia</p>
+          <h2>Źródła, edycja, diagnostyka i EPG</h2>
+        </div>
+        <span>Rozwiń panel</span>
+      </summary>
+
+      <div class="tools-content">
+        <div class="tools-grid">
+          <section class="tool-section source-tools" aria-labelledby="providerHeading">
+            <div class="tool-heading">
+              <div>
+                <p class="eyebrow">Źródła</p>
+                <h3>Katalog i własne M3U</h3>
+              </div>
+              <span id="workspaceStatus" data-state="idle">Wczytaj playlistę</span>
+            </div>
+
+            <section class="provider-box" aria-labelledby="providerHeading">
+              <div class="provider-heading">
+                <div>
+                  <p class="eyebrow">Publiczny katalog</p>
+                  <h3 id="providerHeading">Ładowanie…</h3>
+                </div>
+                <a id="providerLink" href="https://example.invalid" target="_blank" rel="noopener noreferrer" hidden>GitHub ↗</a>
+              </div>
+              <div class="provider-controls">
+                <label for="providerName">
+                  Źródło
+                  <select id="providerName" disabled>
+                    <option>Ładowanie…</option>
+                  </select>
+                </label>
+                <label for="providerScope">
+                  Widok
+                  <select id="providerScope" disabled></select>
+                </label>
+                <label for="providerValue">
+                  Playlista
+                  <select id="providerValue" disabled></select>
+                </label>
+                <button id="loadProvider" type="button" disabled>Wczytaj</button>
+              </div>
+              <p id="providerStatus" class="provider-status" data-state="loading">Pobieranie źródeł…</p>
+            </section>
+
+            <div class="source-divider"><span>lub własna playlista</span></div>
+
+            <label class="file-button" for="playlistFile">
+              <span>Otwórz plik M3U</span>
+              <input id="playlistFile" type="file">
+            </label>
+
+            <details class="paste-box">
+              <summary>Lub wklej treść playlisty</summary>
+              <textarea id="playlistText" rows="6" spellcheck="false" placeholder="#EXTM3U&#10;#EXTINF:-1,Przykładowy kanał&#10;https://example.com/live.m3u8"></textarea>
+              <button id="parsePlaylist" type="button" class="secondary">Wczytaj tekst</button>
+            </details>
+
+            <section class="playlist-tools" aria-label="Edycja i eksport playlisty">
+              <div>
+                <strong>Edycja i eksport</strong>
+                <span>lokalnie</span>
+              </div>
+              <label class="compact-check"><input id="dedupeExport" type="checkbox" checked> Usuń identyczne URL-e</label>
+              <div class="playlist-tool-buttons">
+                <button id="exportPlaylist" type="button" class="secondary">Eksportuj M3U</button>
+                <button id="copyPlaylist" type="button" class="secondary">Kopiuj</button>
+              </div>
+            </section>
+          </section>
+
+          <section class="diagnostics-panel" aria-labelledby="diagnosticsHeading">
+            <div class="diagnostics-heading">
+              <div>
+                <p class="eyebrow">Lokalnie w przeglądarce</p>
+                <h3 id="diagnosticsHeading">Diagnostyka</h3>
+              </div>
+              <span>bez proxy</span>
+            </div>
+            <dl class="diagnostics-grid">
+              <div><dt>Adres</dt><dd id="diagnosticAddress">Brak źródła</dd></div>
+              <div><dt>Typ</dt><dd id="diagnosticType">Brak danych</dd></div>
+              <div><dt>Bezpieczeństwo</dt><dd id="diagnosticSecurity">Brak danych</dd></div>
+              <div><dt>HLS</dt><dd id="diagnosticHls">Nie dotyczy</dd></div>
+              <div><dt>Media</dt><dd id="diagnosticMedia">Brak danych odtwarzacza</dd></div>
+              <div><dt>Ostatni błąd</dt><dd id="diagnosticError">Brak</dd></div>
+            </dl>
+          </section>
+
+          <section class="epg-panel" aria-labelledby="epgHeading">
+            <div class="diagnostics-heading">
+              <div>
+                <p class="eyebrow">XMLTV</p>
+                <h3 id="epgHeading">Program teraz i następnie</h3>
+              </div>
+              <span id="epgStatus" data-state="idle">Brak EPG</span>
+            </div>
+            <div class="epg-import">
+              <label class="file-button" for="epgFile">
+                <span>Otwórz plik XMLTV</span>
+                <input id="epgFile" type="file" accept=".xml,.xmltv,application/xml,text/xml">
+              </label>
+              <details class="paste-box">
+                <summary>Lub wklej XMLTV</summary>
+                <textarea id="epgText" rows="5" spellcheck="false" placeholder="&lt;tv&gt;&#10;  &lt;programme channel=&quot;channel.id&quot; start=&quot;20260726120000 +0200&quot;&gt;...&#10;&lt;/tv&gt;"></textarea>
+                <button id="loadEpgText" type="button" class="secondary">Wczytaj XMLTV</button>
+              </details>
+            </div>
+            <dl class="epg-grid">
+              <div><dt>Teraz</dt><dd id="epgNow">Wczytaj XMLTV i wybierz kanał</dd></div>
+              <div><dt>Następnie</dt><dd id="epgNext">Brak danych</dd></div>
+            </dl>
+          </section>
+
+          <section class="library-box" aria-labelledby="libraryHeading">
+            <div class="library-heading">
+              <div>
+                <p class="eyebrow">Tylko na tym urządzeniu</p>
+                <h3 id="libraryHeading">Biblioteka</h3>
+              </div>
+              <span id="libraryCount" class="count">0</span>
+            </div>
+            <div class="library-controls">
+              <select id="libraryView" aria-label="Widok biblioteki">
+                <option value="favorites">Ulubione</option>
+                <option value="recent">Ostatnie</option>
+                <option value="hidden">Ukryte</option>
+              </select>
+              <button id="clearRecent" type="button" class="secondary" hidden>Wyczyść</button>
+            </div>
+            <p id="libraryEmpty" class="library-empty">Ten widok jest pusty.</p>
+            <ol id="libraryEntries" class="library-entries"></ol>
+          </section>
+        </div>
+      </div>
+    </details>
+  </main>
+
+  <dialog id="editChannelDialog" class="edit-dialog">
+    <form id="editChannelForm" method="dialog">
+      <div class="dialog-heading">
+        <div>
+          <p class="eyebrow">Lokalna nakładka</p>
+          <h2>Edytuj pozycję</h2>
+        </div>
+        <button id="cancelChannelEdit" type="button" class="icon-button" aria-label="Zamknij">×</button>
+      </div>
+      <label>Nazwa<input id="editTitle" required maxlength="180"></label>
+      <label>URL<input id="editUrl" type="url" required></label>
+      <div class="edit-grid">
+        <label>Grupa<input id="editGroup" maxlength="120"></label>
+        <label>tvg-id<input id="editId" maxlength="180"></label>
+        <label>Kraj<input id="editCountry" maxlength="40"></label>
+        <label>Język<input id="editLanguage" maxlength="100"></label>
+      </div>
+      <label>Logo<input id="editLogo" type="url"></label>
+      <label class="compact-check"><input id="editRadio" type="checkbox"> Traktuj jako radio</label>
+      <div class="dialog-actions">
+        <button id="resetChannelEdit" type="button" class="secondary">Przywróć oryginał</button>
+        <button type="submit">Zapisz</button>
+      </div>
+    </form>
+  </dialog>
+
+  <footer>
+    <span>Streambench 0.9</span>
+    <span>Publiczne katalogi pobiera Worker; własne M3U, XMLTV i biblioteka nie opuszczają urządzenia.</span>
+  </footer>
+
+  <script src="/vendor/hls.min.js"></script>
+  <script type="module" src="/epg-ui.js"></script>
+  <script type="module" src="/playlist-import.js"></script>
+  <script type="module" src="/playlist-workspace.js"></script>
+  <script type="module" src="/mobile-workspace.js"></script>
+  <script type="module" src="/app.js"></script>
+  <script type="module" src="/workspace-layout.js"></script>
+  <script type="module" src="/default-playlists.js"></script>
+  <script type="module" src="/source-workspace.js"></script>
+  <script type="module" src="/playback-recovery.js"></script>
+  <script type="module" src="/library-export.js"></script>
+  <script type="module" src="/radio-metadata.js"></script>
+</body>
+</html>

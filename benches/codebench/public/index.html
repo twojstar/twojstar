@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Code Bench — QR & Barcode Studio</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="mask-icon" href="/favicon.svg" color="#DA2B1F">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#16150F">
+<meta name="google-site-verification" content="Qu5-7v2tWoKtUYUVlQXisaFkGGVEImYlmycKDUg0QBw" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="vendor/qr-code-styling.js"></script>
+<script src="vendor/bwip-js-min.js"></script>
+<script src="vendor/zxing-wasm-reader.js"></script>
+<style>
+  :root{
+    --paper:#F1EFE8; --ink:#16150F; --accent:#DA2B1F; --accent-ink:#B21E14;
+    --line:rgba(22,21,15,.14); --line-soft:rgba(22,21,15,.07);
+    --muted:#6C6A5E; --panel:#FBFAF5; --panel-2:#EDEBE2;
+    --ok:#2E7D32; --grid:26px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:"Space Grotesk",system-ui,sans-serif;
+    color:var(--ink); background:var(--paper);
+    background-image:
+      linear-gradient(var(--line-soft) 1px,transparent 1px),
+      linear-gradient(90deg,var(--line-soft) 1px,transparent 1px);
+    background-size:var(--grid) var(--grid);
+    -webkit-font-smoothing:antialiased; line-height:1.45;
+  }
+  .mono{font-family:"Space Mono",monospace}
+  a{color:var(--accent-ink)}
+
+  header{
+    border-bottom:1.5px solid var(--ink);
+    padding:18px clamp(16px,4vw,40px);
+    display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+    background:var(--paper);
+  }
+  .brand{display:flex; align-items:center; gap:12px}
+  .glyph{width:30px;height:30px;flex:none}
+  .glyph rect{fill:var(--ink)}
+  .glyph .a{fill:var(--accent)}
+  h1{font-size:20px; font-weight:700; letter-spacing:-.02em; margin:0}
+  h1 small{display:block; font:400 11px/1.3 "Space Mono",monospace; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+  .privacy{margin-left:auto; font:400 11px/1.4 "Space Mono",monospace; color:var(--muted); text-align:right; max-width:230px}
+  .privacy b{color:var(--ink)}
+
+  nav.tabs{display:flex; gap:0; padding:0 clamp(16px,4vw,40px); border-bottom:1px solid var(--line); background:var(--paper); position:sticky; top:0; z-index:20}
+  .tab{
+    appearance:none; border:none; background:none; cursor:pointer;
+    font-family:inherit; font-size:14px; font-weight:600; color:var(--muted);
+    padding:14px 20px; border-bottom:2.5px solid transparent; margin-bottom:-1px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .tab .n{font:700 11px/1 "Space Mono",monospace; color:var(--line); }
+  .tab:hover{color:var(--ink)}
+  .tab[aria-selected="true"]{color:var(--ink); border-color:var(--accent)}
+  .tab[aria-selected="true"] .n{color:var(--accent)}
+
+  main{padding:clamp(18px,3vw,32px) clamp(16px,4vw,40px); max-width:1240px; margin:0 auto}
+  .workspace{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.05fr); gap:clamp(20px,3vw,40px); align-items:start}
+  @media(max-width:860px){ .workspace{grid-template-columns:1fr} }
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:2px}
+  .panel-h{font:700 11px/1 "Space Mono",monospace; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px}
+  .panel-b{padding:16px}
+
+  label.f{display:block; margin:0 0 14px}
+  label.f > span{display:block; font:600 12px/1 "Space Grotesk"; letter-spacing:.02em; margin-bottom:6px; color:var(--ink)}
+  label.f small{color:var(--muted); font-weight:400}
+  input[type=text],input[type=url],input[type=tel],input[type=email],input[type=number],input[type=password],input[type=datetime-local],textarea,select{
+    width:100%; font-family:"Space Mono",monospace; font-size:13px; color:var(--ink);
+    background:var(--paper); border:1px solid var(--line); border-radius:2px; padding:9px 10px;
+  }
+  textarea{resize:vertical; min-height:70px; line-height:1.5}
+  input:focus,textarea:focus,select:focus{outline:2px solid var(--accent); outline-offset:-1px; border-color:var(--accent)}
+  select{cursor:pointer; appearance:none; background-image:linear-gradient(45deg,transparent 50%,var(--ink) 50%),linear-gradient(135deg,var(--ink) 50%,transparent 50%); background-position:calc(100% - 15px) 55%,calc(100% - 10px) 55%; background-size:5px 5px,5px 5px; background-repeat:no-repeat; padding-right:30px}
+  input[type=color]{width:100%; height:34px; padding:2px; border:1px solid var(--line); border-radius:2px; background:var(--paper); cursor:pointer}
+  input[type=range]{width:100%; accent-color:var(--accent)}
+  input[type=file]{font:400 12px/1.4 "Space Mono",monospace; width:100%}
+  .row{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  .row-3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px}
+  .hint{font:400 11px/1.4 "Space Mono",monospace; color:var(--muted); margin:-8px 0 14px}
+
+  .chips{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px}
+  .chip{appearance:none; border:1px solid var(--line); background:var(--paper); color:var(--muted); cursor:pointer; font-family:"Space Mono",monospace; font-size:11px; letter-spacing:.04em; padding:7px 11px; border-radius:2px; text-transform:uppercase}
+  .chip:hover{border-color:var(--ink); color:var(--ink)}
+  .chip[aria-pressed="true"]{background:var(--ink); color:var(--paper); border-color:var(--ink)}
+
+  .btn{appearance:none; cursor:pointer; font-family:inherit; font-weight:600; font-size:13px; border-radius:2px; padding:10px 16px; border:1.5px solid var(--ink); background:var(--ink); color:var(--paper); display:inline-flex; align-items:center; gap:8px; justify-content:center}
+  .btn:hover{background:#000}
+  .btn.ghost{background:transparent; color:var(--ink)}
+  .btn.ghost:hover{background:var(--panel-2)}
+  .btn.accent{background:var(--accent); border-color:var(--accent)}
+  .btn.accent:hover{background:var(--accent-ink); border-color:var(--accent-ink)}
+  .btn:disabled{opacity:.4; cursor:not-allowed}
+  .btn-row{display:flex; gap:8px; flex-wrap:wrap}
+
+  /* stage with crop marks — the signature frame */
+  .stage-wrap{position:sticky; top:64px}
+  .stage{
+    position:relative; background:var(--panel); border:1px solid var(--line); border-radius:2px;
+    padding:38px; min-height:340px; display:flex; align-items:center; justify-content:center;
+  }
+  .stage::before,.stage::after,.stage>.cm{content:""; position:absolute; width:18px; height:18px; pointer-events:none}
+  .cmtl{top:12px;left:12px;border-top:2px solid var(--accent);border-left:2px solid var(--accent)}
+  .cmtr{top:12px;right:12px;border-top:2px solid var(--accent);border-right:2px solid var(--accent)}
+  .cmbl{bottom:12px;left:12px;border-bottom:2px solid var(--accent);border-left:2px solid var(--accent)}
+  .cmbr{bottom:12px;right:12px;border-bottom:2px solid var(--accent);border-right:2px solid var(--accent)}
+  .stage canvas,.stage img,.stage svg{max-width:100%; height:auto; display:block}
+  #qrHost{display:flex;align-items:center;justify-content:center}
+  .stage-empty{color:var(--muted); font:400 12px/1.5 "Space Mono",monospace; text-align:center}
+  .stage-meta{font:700 10px/1 "Space Mono",monospace; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); padding:10px 4px 0; display:flex; justify-content:space-between}
+
+  /* scan */
+  .drop{border:1.5px dashed var(--line); border-radius:2px; padding:34px 20px; text-align:center; background:var(--paper); transition:.15s; cursor:pointer}
+  .drop:hover,.drop.over{border-color:var(--accent); background:#fff}
+  .drop strong{display:block; font-size:15px; margin-bottom:4px}
+  .drop span{font:400 12px/1.4 "Space Mono",monospace; color:var(--muted)}
+  #video{width:100%; border-radius:2px; background:#000; display:none}
+  .result{margin-top:16px; border:1px solid var(--ink); border-radius:2px; overflow:hidden; display:none}
+  .result.show{display:block}
+  .result-h{background:var(--ink); color:var(--paper); padding:10px 14px; font:700 11px/1 "Space Mono",monospace; letter-spacing:.1em; text-transform:uppercase; display:flex; justify-content:space-between; align-items:center}
+  .result-h .fmt{color:var(--paper)}
+  .result-b{padding:14px}
+  .result-val{font-family:"Space Mono",monospace; font-size:13px; word-break:break-all; white-space:pre-wrap; background:var(--paper); border:1px solid var(--line); padding:10px; border-radius:2px; margin-bottom:12px; max-height:220px; overflow:auto}
+  .scan-hist{margin-top:8px}
+  .scan-hist .item{font:400 11px/1.4 "Space Mono",monospace; color:var(--muted); padding:6px 0; border-top:1px dashed var(--line); word-break:break-all}
+  .scan-hist .item b{color:var(--ink)}
+
+  .toast{position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--ink); color:var(--paper); font:600 13px "Space Grotesk"; padding:11px 18px; border-radius:2px; opacity:0; transition:.2s; z-index:100; pointer-events:none}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  .err{color:var(--accent-ink); font:400 12px/1.4 "Space Mono",monospace; margin-top:10px}
+  .hidden{display:none !important}
+  .divider{height:1px; background:var(--line); margin:16px 0}
+  fieldset{border:1px solid var(--line); border-radius:2px; padding:12px; margin:0 0 14px}
+  legend{font:700 10px/1 "Space Mono",monospace; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); padding:0 6px}
+  .toggle{display:flex; align-items:center; gap:8px; font:600 12px "Space Grotesk"; margin-bottom:12px; cursor:pointer}
+  .toggle input{width:auto}
+  footer{padding:24px clamp(16px,4vw,40px); border-top:1px solid var(--line); font:400 11px/1.5 "Space Mono",monospace; color:var(--muted); text-align:center}
+  /* ---- print / modal ---- */
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .modal{position:fixed;inset:0;background:rgba(22,21,15,.55);display:none;align-items:center;justify-content:center;z-index:200;padding:20px}
+  .modal.show{display:flex}
+  .modal-card{background:var(--paper);border:1px solid var(--ink);border-radius:2px;width:min(780px,100%);max-height:92vh;display:flex;flex-direction:column}
+  .modal-h{background:var(--ink);color:var(--paper);padding:12px 16px;font:700 11px/1 "Space Mono",monospace;letter-spacing:.14em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center}
+  .modal-h button{background:none;border:0;color:var(--paper);font-size:20px;cursor:pointer;line-height:1}
+  .modal-body{padding:16px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;overflow:auto}
+  @media(max-width:640px){.modal-body{grid-template-columns:1fr}}
+  .print-preview{background:var(--panel-2);border:1px solid var(--line);border-radius:2px;display:flex;align-items:center;justify-content:center;min-height:320px;overflow:hidden;padding:10px}
+  .print-scale{transform-origin:center center}
+  .modal-foot{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+  .sheet{position:relative;background:#fff;box-sizing:border-box;box-shadow:0 1px 8px rgba(0,0,0,.18)}
+  .sheet .code{display:block}
+  #printRoot{position:fixed;inset:0;background:#fff;z-index:9999;display:none;overflow:auto}
+  body.printing #printRoot{display:block}
+  @media print{
+    @page{margin:0}
+    body.printing>*{display:none!important}
+    body.printing #printRoot{display:block!important;position:static;overflow:visible}
+    #printRoot .sheet{box-shadow:none!important;margin:0!important}
+  }
+  #qrFramed{width:100%}
+  #qrFramed>svg{display:block;max-width:100%;height:auto;margin:0 auto}
+  #qrFramed>svg svg{max-width:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg class="glyph" viewBox="0 0 30 30" aria-hidden="true">
+      <rect x="0" y="0" width="11" height="11"/><rect x="3" y="3" width="5" height="5" class="a"/>
+      <rect x="19" y="0" width="11" height="11"/><rect x="22" y="3" width="5" height="5" class="a"/>
+      <rect x="0" y="19" width="11" height="11"/><rect x="3" y="22" width="5" height="5" class="a"/>
+      <rect x="15" y="15" width="4" height="4"/><rect x="23" y="15" width="4" height="4"/>
+      <rect x="19" y="19" width="4" height="4"/><rect x="15" y="23" width="4" height="4"/><rect x="23" y="23" width="4" height="4"/>
+    </svg>
+    <h1>Code Bench<small>QR · Barcode · Studio</small></h1>
+  </div>
+  <p class="privacy">Everything runs in <b>your browser</b>. Nothing you scan or generate is uploaded.</p>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true" data-tab="scan"><span class="n">01</span> Scan &amp; Read</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="qr"><span class="n">02</span> QR Code</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="bar"><span class="n">03</span> Barcode &amp; 2D</button>
+</nav>
+
+<main>
+  <!-- ============ SCAN ============ -->
+  <section id="tab-scan" class="workspace" role="tabpanel">
+    <div>
+      <div class="panel">
+        <div class="panel-h">Read from image</div>
+        <div class="panel-b">
+          <div class="drop" id="drop" tabindex="0" role="button" aria-label="Upload image to decode">
+            <strong>Drop an image, or click to browse</strong>
+            <span>PNG · JPG · WebP · GIF — QR, DataMatrix, Aztec, PDF417, and 1D barcodes</span>
+          </div>
+          <input type="file" id="fileInput" accept="image/*" class="hidden">
+          <div id="fileErr" class="err hidden"></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:16px">
+        <div class="panel-h">Live camera</div>
+        <div class="panel-b">
+          <div class="btn-row">
+            <button class="btn accent" id="camStart">Start camera</button>
+            <button class="btn ghost" id="camSwitch" disabled>Switch camera</button>
+            <button class="btn ghost" id="camStop" disabled>Stop</button>
+          </div>
+          <video id="video" playsinline muted></video>
+          <div id="camErr" class="err hidden"></div>
+          <p class="hint" style="margin-top:12px">Camera needs an https or localhost page — it won't start from a file opened directly off disk.</p>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="result" id="result">
+        <div class="result-h"><span>Decoded</span><span class="fmt" id="resFmt">—</span></div>
+        <div class="result-b">
+          <div class="result-val mono" id="resVal"></div>
+          <div class="btn-row">
+            <button class="btn" id="copyRes">Copy value</button>
+            <button class="btn ghost" id="openRes">Open link</button>
+            <button class="btn ghost" id="toQr">Make a QR from this</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <div class="panel-h">Session log</div>
+        <div class="panel-b">
+          <div id="scanHist" class="scan-hist"><p class="stage-empty">No scans yet. Decoded results collect here for the session.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ QR ============ -->
+  <section id="tab-qr" class="workspace hidden" role="tabpanel">
+    <div>
+      <div class="panel">
+        <div class="panel-h">Content template</div>
+        <div class="panel-b">
+          <div class="chips" id="qrChips">
+            <button class="chip" aria-pressed="true" data-t="url">URL</button>
+            <button class="chip" aria-pressed="false" data-t="text">Text</button>
+            <button class="chip" aria-pressed="false" data-t="wifi">Wi-Fi</button>
+            <button class="chip" aria-pressed="false" data-t="vcard">Contact</button>
+            <button class="chip" aria-pressed="false" data-t="email">Email</button>
+            <button class="chip" aria-pressed="false" data-t="sms">SMS</button>
+            <button class="chip" aria-pressed="false" data-t="tel">Phone</button>
+            <button class="chip" aria-pressed="false" data-t="geo">Location</button>
+            <button class="chip" aria-pressed="false" data-t="event">Event</button>
+          </div>
+          <div id="qrFields"></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:16px">
+        <div class="panel-h">Style</div>
+        <div class="panel-b">
+          <div class="row">
+            <label class="f"><span>Dot shape</span>
+              <select id="qDot"><option value="square">Square</option><option value="dots">Dots</option><option value="rounded">Rounded</option><option value="extra-rounded">Extra rounded</option><option value="classy">Classy</option><option value="classy-rounded">Classy rounded</option></select>
+            </label>
+            <label class="f"><span>Corner frame</span>
+              <select id="qCornerSq"><option value="">Match dots</option><option value="square">Square</option><option value="dot">Dot</option><option value="extra-rounded">Rounded</option></select>
+            </label>
+          </div>
+          <div class="row">
+            <label class="f"><span>Corner center</span>
+              <select id="qCornerDot"><option value="">Match dots</option><option value="square">Square</option><option value="dot">Dot</option></select>
+            </label>
+            <label class="f"><span>Error correction <small>(higher = more robust)</small></span>
+              <select id="qEc"><option value="L">L — 7%</option><option value="M">M — 15%</option><option value="Q" selected>Q — 25%</option><option value="H">H — 30%</option></select>
+            </label>
+          </div>
+          <div class="divider"></div>
+          <label class="toggle"><input type="checkbox" id="qGrad"> Gradient fill</label>
+          <div class="row-3">
+            <label class="f"><span id="qFgLabel">Dots</span><input type="color" id="qFg" value="#16150f"></label>
+            <label class="f" id="qFg2Wrap" style="display:none"><span>Dots 2</span><input type="color" id="qFg2" value="#da2b1f"></label>
+            <label class="f"><span>Background</span><input type="color" id="qBg" value="#ffffff"></label>
+          </div>
+          <label class="toggle"><input type="checkbox" id="qTransparent"> Transparent background</label>
+          <div class="divider"></div>
+          <div class="row">
+            <label class="f"><span>Size <small>(px)</small></span><input type="number" id="qSize" value="600" min="120" max="2000" step="20"></label>
+            <label class="f"><span>Quiet zone <small>(margin)</small></span><input type="number" id="qMargin" value="16" min="0" max="80"></label>
+          </div>
+          <fieldset>
+            <legend>Center logo</legend>
+            <input type="file" id="qLogo" accept="image/*">
+            <div class="row" style="margin-top:12px">
+              <label class="f"><span>Logo size</span><input type="range" id="qLogoSize" min="0.1" max="0.5" step="0.02" value="0.3"></label>
+              <label class="toggle" style="align-self:end;margin-bottom:14px"><input type="checkbox" id="qLogoClear" checked> Clear dots behind</label>
+            </div>
+            <button class="btn ghost" id="qLogoRemove" style="display:none">Remove logo</button>
+          </fieldset>
+          <fieldset>
+            <legend>Frame &amp; caption</legend>
+            <label class="toggle"><input type="checkbox" id="qFrame"> Add frame around the QR</label>
+            <div id="qFrameOpts" style="display:none">
+              <label class="f"><span>Caption text</span><input type="text" id="qFrameText" value="SCAN ME"></label>
+              <label class="f"><span>Caption side</span><select id="qFrameSide"><option value="bottom" selected>Bottom</option><option value="top">Top</option><option value="both">Both</option><option value="none">None (border only)</option></select></label>
+              <div class="row">
+                <label class="f"><span>Thickness</span><input type="range" id="qFrameThick" min="1" max="12" step="1" value="5"></label>
+                <label class="f"><span>Corner round</span><input type="range" id="qFrameRound" min="0" max="24" step="1" value="8"></label>
+              </div>
+              <div class="row">
+                <label class="f"><span>Frame color</span><input type="color" id="qFrameColor" value="#16150f"></label>
+                <label class="f"><span>Caption color</span><input type="color" id="qFrameTextColor" value="#ffffff"></label>
+              </div>
+            </div>
+          </fieldset>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage-wrap">
+      <div class="stage">
+        <span class="cm cmtl"></span><span class="cm cmtr"></span><span class="cm cmbl"></span><span class="cm cmbr"></span>
+        <div id="qrHost"></div>
+      </div>
+      <div class="stage-meta"><span id="qrStat">QR · error corr Q</span><span>Code Bench</span></div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn accent" id="qrPng">Download PNG</button>
+        <button class="btn" id="qrSvg">Download SVG</button>
+        <button class="btn ghost" id="qrCopy">Copy PNG</button>
+        <button class="btn ghost" id="qrPrint">Print…</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BARCODE / 2D ============ -->
+  <section id="tab-bar" class="workspace hidden" role="tabpanel">
+    <div>
+      <div class="panel">
+        <div class="panel-h">Symbology</div>
+        <div class="panel-b">
+          <label class="f"><span>Type</span>
+            <select id="bType">
+              <optgroup label="2D matrix">
+                <option value="datamatrix">Data Matrix</option>
+                <option value="azteccode">Aztec</option>
+                <option value="pdf417">PDF417</option>
+                <option value="qrcode">QR Code (plain)</option>
+                <option value="microqrcode">Micro QR</option>
+                <option value="gs1datamatrix">GS1 DataMatrix</option>
+                <option value="maxicode">MaxiCode</option>
+              </optgroup>
+              <optgroup label="1D linear">
+                <option value="code128" selected>Code 128</option>
+                <option value="ean13">EAN-13</option>
+                <option value="ean8">EAN-8</option>
+                <option value="upca">UPC-A</option>
+                <option value="upce">UPC-E</option>
+                <option value="code39">Code 39</option>
+                <option value="itf14">ITF-14</option>
+                <option value="interleaved2of5">Interleaved 2 of 5</option>
+                <option value="codabar">Codabar</option>
+                <option value="code93">Code 93</option>
+                <option value="msi">MSI</option>
+                <option value="pharmacode">Pharmacode</option>
+                <option value="gs1-128">GS1-128</option>
+                <option value="code11">Code 11</option>
+                <option value="isbn">ISBN</option>
+                <option value="pzn">PZN (pharma)</option>
+                <option value="telepen">Telepen</option>
+              </optgroup>
+              <optgroup label="Postal">
+                <option value="postnet">POSTNET (US)</option>
+                <option value="onecode">USPS Intelligent Mail</option>
+                <option value="royalmail">Royal Mail (UK)</option>
+                <option value="kix">Dutch KIX</option>
+                <option value="auspost">Australia Post</option>
+                <option value="japanpost">Japan Post</option>
+              </optgroup>
+            </select>
+          </label>
+          <label class="f"><span>Data</span><textarea id="bData" placeholder="Value to encode">CODE-BENCH-128</textarea></label>
+          <p class="hint" id="bHint"></p>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:16px">
+        <div class="panel-h">Options</div>
+        <div class="panel-b">
+          <label class="toggle"><input type="checkbox" id="bText" checked> Show human-readable text</label>
+          <div class="row">
+            <label class="f"><span>Scale <small>(density)</small></span><input type="range" id="bScale" min="1" max="8" step="1" value="4"></label>
+            <label class="f" id="bHeightWrap"><span>Bar height <small>(mm)</small></span><input type="range" id="bHeight" min="5" max="40" step="1" value="12"></label>
+          </div>
+          <div class="row">
+            <label class="f"><span>Bars / dots</span><input type="color" id="bFg" value="#16150f"></label>
+            <label class="f"><span>Background</span><input type="color" id="bBg" value="#ffffff"></label>
+          </div>
+          <label class="toggle"><input type="checkbox" id="bTransparent"> Transparent background</label>
+          <div id="bErr" class="err hidden"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage-wrap">
+      <div class="stage">
+        <span class="cm cmtl"></span><span class="cm cmtr"></span><span class="cm cmbl"></span><span class="cm cmbr"></span>
+        <canvas id="bCanvas"></canvas>
+      </div>
+      <div class="stage-meta"><span id="bStat">Code 128</span><span>Code Bench</span></div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn accent" id="bPng">Download PNG</button>
+        <button class="btn" id="bSvg">Download SVG</button>
+        <button class="btn ghost" id="bCopy">Copy PNG</button>
+        <button class="btn ghost" id="bPrint">Print…</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>Code Bench — a local, offline-capable studio. Built with qr-code-styling, bwip-js &amp; ZXing.</footer>
+<div class="modal" id="printModal" role="dialog" aria-modal="true" aria-label="Print">
+  <div class="modal-card">
+    <div class="modal-h"><span>Print — size &amp; position</span><button id="printClose" aria-label="Close">×</button></div>
+    <div class="modal-body">
+      <div class="print-controls">
+        <label class="f"><span>Paper</span>
+          <select id="pPage"><option>A4</option><option>Letter</option><option>Label 100×150</option><option value="custom">Custom…</option></select></label>
+        <div class="g2 hidden" id="pCustomWrap">
+          <label class="f"><span>Page W <small>(mm)</small></span><input type="number" id="pPw" value="100" min="10" max="1000"></label>
+          <label class="f"><span>Page H <small>(mm)</small></span><input type="number" id="pPh" value="150" min="10" max="1000"></label>
+        </div>
+        <label class="f"><span>Orientation</span>
+          <select id="pOrient"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>
+        <label class="f"><span>Layout</span>
+          <select id="pLayout"><option value="single">Single code</option><option value="tile">Tile / label sheet</option></select></label>
+        <label class="f"><span>Code width <small>(mm)</small></span><input type="number" id="pW" value="40" min="5" max="500" step="1"></label>
+        <div id="pSingleWrap">
+          <label class="f"><span>Position</span>
+            <select id="pAlign">
+              <option value="tl">Top left</option><option value="tc">Top center</option><option value="tr">Top right</option>
+              <option value="cl">Middle left</option><option value="cc" selected>Center</option><option value="cr">Middle right</option>
+              <option value="bl">Bottom left</option><option value="bc">Bottom center</option><option value="br">Bottom right</option>
+            </select></label>
+          <label class="f"><span>Page margin <small>(mm)</small></span><input type="number" id="pMargin" value="10" min="0" max="100"></label>
+        </div>
+        <div id="pTileWrap" class="hidden">
+          <label class="f"><span>Gap <small>(mm)</small></span><input type="number" id="pGap" value="4" min="0" max="50"></label>
+          <label class="f"><span>Sheet margin <small>(mm)</small></span><input type="number" id="pTileMargin" value="8" min="0" max="100"></label>
+          <p class="hint" id="pTileInfo"></p>
+        </div>
+      </div>
+      <div class="print-preview"><div class="print-scale"><div class="sheet" id="printSheet"></div></div></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" id="printCancel">Cancel</button>
+      <button class="btn accent" id="printGo">Print</button>
+    </div>
+  </div>
+</div>
+<div id="printRoot" aria-hidden="true"></div>
+<style id="printPageStyle"></style>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const toast=(m)=>{const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),1900);};
+const esc=s=>String(s).replace(/([\\;,":])/g,"\\$1");
+function download(blob,name){const u=URL.createObjectURL(blob);const a=document.createElement("a");a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);}
+async function copyCanvasPng(canvas){
+  try{const blob=await new Promise(r=>canvas.toBlob(r,"image/png"));
+    await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]);toast("PNG copied to clipboard");}
+  catch(e){toast("Copy image not supported here — use Download");}
+}
+
+/* ---------- tabs ---------- */
+$$(".tab").forEach(t=>t.addEventListener("click",()=>{
+  $$(".tab").forEach(x=>x.setAttribute("aria-selected",x===t));
+  const id=t.dataset.tab;
+  $("#tab-scan").classList.toggle("hidden",id!=="scan");
+  $("#tab-qr").classList.toggle("hidden",id!=="qr");
+  $("#tab-bar").classList.toggle("hidden",id!=="bar");
+}));
+function goTab(id){$$(".tab").forEach(t=>t.dataset.tab===id&&t.click());}
+
+/* ======================================================
+   SCAN / READ  (ZXing-C++ WASM — zxing-wasm)
+====================================================== */
+const ZXW=window.ZXingWASM;
+const SCAN_OPTS={tryHarder:true,tryRotate:true,tryInvert:true,tryDownscale:true,maxNumberOfSymbols:1};
+if(ZXW&&ZXW.setZXingModuleOverrides)ZXW.setZXingModuleOverrides({locateFile:(p,pre)=>p.endsWith(".wasm")?"vendor/zxing_reader.wasm":(pre||"")+p});
+let _zxReady=null;
+function zxReady(){if(!_zxReady&&ZXW&&ZXW.prepareZXingModule)_zxReady=ZXW.prepareZXingModule({fireImmediately:true}).catch(()=>{});return _zxReady;}
+const scanCanvas=document.createElement("canvas");
+const sctx=scanCanvas.getContext("2d",{willReadFrequently:true});
+
+function showResult(text,format){
+  $("#resVal").textContent=text;
+  $("#resFmt").textContent=format;
+  $("#result").classList.add("show");
+  const isUrl=/^(https?:\/\/|www\.)/i.test(text.trim());
+  $("#openRes").style.display=isUrl?"":"none";
+  $("#openRes").onclick=()=>window.open(text.trim().replace(/^www\./,"https://www."),"_blank","noopener");
+  const host=$("#scanHist");
+  if(host.querySelector(".stage-empty"))host.innerHTML="";
+  const d=document.createElement("div");d.className="item";
+  d.innerHTML=`<b>[${format}]</b> ${text.replace(/</g,"&lt;").slice(0,160)}`;
+  host.prepend(d);
+}
+$("#copyRes").onclick=()=>{navigator.clipboard.writeText($("#resVal").textContent).then(()=>toast("Copied"));};
+$("#toQr").onclick=()=>{goTab("qr");setTimeout(()=>{pickTemplate("text");$("#f_text")&&($("#f_text").value=$("#resVal").textContent,renderQR());},60);};
+
+/* file / drop */
+const drop=$("#drop"),fileInput=$("#fileInput");
+drop.onclick=()=>fileInput.click();
+drop.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();fileInput.click();}};
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over");}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over");}));
+drop.addEventListener("drop",e=>{const f=e.dataTransfer.files[0];if(f)decodeFile(f);});
+fileInput.onchange=e=>{const f=e.target.files[0];if(f)decodeFile(f);};
+
+/* rasterize SVG files client-side before handing to zxing-wasm — createImageBitmap()
+   support for SVG blobs is inconsistent across browsers (esp. without explicit
+   width/height on the root <svg>), so we always draw it to a canvas ourselves */
+async function svgToPngBlob(file){
+  const text=await file.text();
+  let w=0,h=0;
+  const wm=/<svg[^>]*\bwidth="([\d.]+)/i.exec(text), hm=/<svg[^>]*\bheight="([\d.]+)/i.exec(text);
+  if(wm)w=+wm[1]; if(hm)h=+hm[1];
+  if(!w||!h){
+    const vb=/<svg[^>]*\bviewBox="[\s]*[\d.\-]+[\s,]+[\d.\-]+[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(text);
+    if(vb){w=w||+vb[1];h=h||+vb[2];}
+  }
+  if(!w||!h){w=1000;h=1000;}
+  const scale=Math.min(4,Math.max(1,1200/Math.max(w,h)));
+  const cw=Math.max(1,Math.round(w*scale)),ch=Math.max(1,Math.round(h*scale));
+  const url=URL.createObjectURL(new Blob([text],{type:"image/svg+xml"}));
+  try{
+    const img=new Image();
+    await new Promise((res,rej)=>{img.onload=res;img.onerror=()=>rej(new Error("Couldn't rasterize that SVG."));img.src=url;});
+    const canvas=document.createElement("canvas");
+    canvas.width=cw;canvas.height=ch;
+    const ctx=canvas.getContext("2d");
+    ctx.fillStyle="#fff";ctx.fillRect(0,0,cw,ch);
+    ctx.drawImage(img,0,0,cw,ch);
+    const blob=await new Promise(r=>canvas.toBlob(r,"image/png"));
+    if(!blob)throw new Error("Couldn't rasterize that SVG.");
+    return blob;
+  }finally{URL.revokeObjectURL(url);}
+}
+
+async function decodeFile(file){
+  $("#fileErr").classList.add("hidden");
+  if(!file.type.startsWith("image/")){$("#fileErr").textContent="That's not an image file.";$("#fileErr").classList.remove("hidden");return;}
+  if(!ZXW){$("#fileErr").textContent="Scanner failed to load — try reloading.";$("#fileErr").classList.remove("hidden");return;}
+  let results;
+  try{
+    const input=file.type==="image/svg+xml"?await svgToPngBlob(file):file;
+    results=await ZXW.readBarcodes(input,SCAN_OPTS);
+  }
+  catch(e){$("#fileErr").textContent="Couldn't decode that image: "+(e.message||e);$("#fileErr").classList.remove("hidden");return;}
+  const r=results&&results.find(x=>x.isValid&&x.text);
+  if(r){showResult(r.text,r.format);toast("Decoded");}
+  else{$("#fileErr").textContent="No code found in that image. Try a sharper, better-lit, or more tightly cropped shot.";$("#fileErr").classList.remove("hidden");}
+}
+
+/* camera (manual frame loop -> zxing-wasm readBarcodes) */
+let camStream=null,camDevices=[],camIdx=0,scanTimer=null,scanBusy=false,lastHit="";
+async function refreshCamList(){try{const ds=await navigator.mediaDevices.enumerateDevices();camDevices=ds.filter(d=>d.kind==="videoinput");}catch(e){camDevices=[];}}
+async function openStream(){
+  const dev=camDevices[camIdx];
+  const constraints=dev&&dev.deviceId?{video:{deviceId:{exact:dev.deviceId}}}:{video:{facingMode:{ideal:"environment"}}};
+  camStream=await navigator.mediaDevices.getUserMedia(constraints);
+  const v=$("#video");v.srcObject=camStream;await v.play();
+}
+async function startCam(){
+  $("#camErr").classList.add("hidden");
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){camErr("This browser has no camera access. A page served over https or localhost is required.");return;}
+  if(!ZXW){camErr("Scanner failed to load — try reloading.");return;}
+  try{
+    zxReady();
+    await refreshCamList();
+    const i=camDevices.findIndex(d=>/back|rear|environment/i.test(d.label));
+    camIdx=i>=0?i:0;
+    await openStream();
+    await refreshCamList();
+    $("#video").style.display="block";
+    $("#camStart").disabled=true;$("#camStop").disabled=false;
+    $("#camSwitch").disabled=camDevices.length<2;
+    lastHit="";startLoop();
+  }catch(e){camErr("Couldn't open the camera: "+(e.message||e.name||e));}
+}
+function startLoop(){stopLoop();scanTimer=setInterval(scanFrame,220);}
+function stopLoop(){if(scanTimer){clearInterval(scanTimer);scanTimer=null;}scanBusy=false;}
+async function scanFrame(){
+  if(scanBusy||!ZXW)return;
+  const v=$("#video");if(!v.videoWidth)return;
+  const scale=Math.min(1,640/v.videoWidth);
+  const w=Math.max(1,Math.round(v.videoWidth*scale)),h=Math.max(1,Math.round(v.videoHeight*scale));
+  if(scanCanvas.width!==w||scanCanvas.height!==h){scanCanvas.width=w;scanCanvas.height=h;}
+  sctx.drawImage(v,0,0,w,h);
+  let img;try{img=sctx.getImageData(0,0,w,h);}catch(e){return;}
+  scanBusy=true;
+  try{
+    const results=await ZXW.readBarcodes(img,SCAN_OPTS);
+    const r=results&&results.find(x=>x.isValid&&x.text);
+    if(r&&r.text!==lastHit){lastHit=r.text;showResult(r.text,r.format);toast("Decoded");}
+  }catch(e){}finally{scanBusy=false;}
+}
+function stopStream(){if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}}
+function stopCam(){stopLoop();stopStream();$("#video").style.display="none";
+  $("#camStart").disabled=false;$("#camStop").disabled=true;$("#camSwitch").disabled=true;}
+function camErr(m){$("#camErr").textContent=m;$("#camErr").classList.remove("hidden");}
+$("#camStart").onclick=startCam;
+$("#camStop").onclick=stopCam;
+$("#camSwitch").onclick=async()=>{
+  if(!camDevices.length)return;
+  stopLoop();stopStream();
+  camIdx=(camIdx+1)%camDevices.length;
+  try{await openStream();lastHit="";startLoop();}
+  catch(e){camErr("Couldn't switch camera: "+(e.message||e.name||e));}
+};
+
+/* ======================================================
+   QR GENERATOR  (qr-code-styling)
+====================================================== */
+let qr=null,qrLogoData=null,qrType="url";
+
+const templates={
+  url:[{k:"url",l:"URL",t:"url",ph:"https://example.com",v:"https://"}],
+  text:[{k:"text",l:"Text",t:"area",ph:"Any text to encode"}],
+  wifi:[
+    {k:"ssid",l:"Network name (SSID)",t:"text",ph:"MyNetwork"},
+    {k:"pass",l:"Password",t:"text",ph:"••••••••"},
+    {k:"enc",l:"Security",t:"select",opts:[["WPA","WPA/WPA2/WPA3"],["WEP","WEP"],["nopass","No password"]]},
+    {k:"hidden",l:"Hidden network",t:"check"}
+  ],
+  vcard:[
+    {k:"fn",l:"Full name",t:"text",ph:"Jane Doe"},
+    {k:"org",l:"Organization",t:"text",ph:"Acme Inc."},
+    {k:"title",l:"Title",t:"text",ph:"Engineer"},
+    {k:"phone",l:"Phone",t:"tel",ph:"+1 555 0100"},
+    {k:"email",l:"Email",t:"email",ph:"jane@acme.com"},
+    {k:"url",l:"Website",t:"url",ph:"https://"},
+    {k:"adr",l:"Address",t:"text",ph:"123 Main St, City"}
+  ],
+  email:[
+    {k:"to",l:"To",t:"email",ph:"someone@example.com"},
+    {k:"subject",l:"Subject",t:"text",ph:"Hello"},
+    {k:"body",l:"Body",t:"area",ph:"Message…"}
+  ],
+  sms:[{k:"num",l:"Number",t:"tel",ph:"+1 555 0100"},{k:"msg",l:"Message",t:"area",ph:"Text…"}],
+  tel:[{k:"num",l:"Phone number",t:"tel",ph:"+1 555 0100"}],
+  geo:[{k:"lat",l:"Latitude",t:"text",ph:"52.2297"},{k:"lng",l:"Longitude",t:"text",ph:"21.0122"}],
+  event:[
+    {k:"title",l:"Title",t:"text",ph:"Launch party"},
+    {k:"loc",l:"Location",t:"text",ph:"HQ"},
+    {k:"start",l:"Starts",t:"dt"},{k:"end",l:"Ends",t:"dt"}
+  ]
+};
+
+function pickTemplate(t){
+  qrType=t;
+  $$("#qrChips .chip").forEach(c=>c.setAttribute("aria-pressed",c.dataset.t===t));
+  const host=$("#qrFields");host.innerHTML="";
+  templates[t].forEach(f=>{
+    const id="f_"+f.k;let el;
+    if(f.t==="area"){el=`<label class="f"><span>${f.l}</span><textarea id="${id}" placeholder="${f.ph||""}"></textarea></label>`;}
+    else if(f.t==="select"){el=`<label class="f"><span>${f.l}</span><select id="${id}">${f.opts.map(o=>`<option value="${o[0]}">${o[1]}</option>`).join("")}</select></label>`;}
+    else if(f.t==="check"){el=`<label class="toggle"><input type="checkbox" id="${id}"> ${f.l}</label>`;}
+    else if(f.t==="dt"){el=`<label class="f"><span>${f.l}</span><input type="datetime-local" id="${id}"></label>`;}
+    else{el=`<label class="f"><span>${f.l}</span><input type="${f.t}" id="${id}" placeholder="${f.ph||""}" value="${f.v||""}"></label>`;}
+    host.insertAdjacentHTML("beforeend",el);
+  });
+  host.querySelectorAll("input,textarea,select").forEach(i=>i.addEventListener("input",renderQR));
+  renderQR();
+}
+$$("#qrChips .chip").forEach(c=>c.addEventListener("click",()=>pickTemplate(c.dataset.t)));
+
+function dt(v){if(!v)return"";return v.replace(/[-:]/g,"").replace("T","T")+"00";}
+function buildContent(){
+  const g=k=>{const e=$("#f_"+k);return e?(e.type==="checkbox"?e.checked:e.value):"";};
+  switch(qrType){
+    case"url":return g("url").trim();
+    case"text":return g("text");
+    case"wifi":{const p=g("enc")==="nopass"?"":`P:${esc(g("pass"))};`;
+      return `WIFI:T:${g("enc")};S:${esc(g("ssid"))};${p}${g("hidden")?"H:true;":""};`;}
+    case"vcard":return ["BEGIN:VCARD","VERSION:3.0",`FN:${g("fn")}`,g("org")&&`ORG:${g("org")}`,g("title")&&`TITLE:${g("title")}`,g("phone")&&`TEL:${g("phone")}`,g("email")&&`EMAIL:${g("email")}`,g("url")&&`URL:${g("url")}`,g("adr")&&`ADR:;;${g("adr")};;;;`,"END:VCARD"].filter(Boolean).join("\n");
+    case"email":{const q=[];if(g("subject"))q.push("subject="+encodeURIComponent(g("subject")));if(g("body"))q.push("body="+encodeURIComponent(g("body")));return `mailto:${g("to")}${q.length?"?"+q.join("&"):""}`;}
+    case"sms":return `SMSTO:${g("num")}:${g("msg")}`;
+    case"tel":return `tel:${g("num")}`;
+    case"geo":return `geo:${g("lat")},${g("lng")}`;
+    case"event":return ["BEGIN:VEVENT",`SUMMARY:${g("title")}`,g("loc")&&`LOCATION:${g("loc")}`,g("start")&&`DTSTART:${dt(g("start"))}`,g("end")&&`DTEND:${dt(g("end"))}`,"END:VEVENT"].filter(Boolean).join("\n");
+  }
+  return"";
+}
+
+function qrOptions(){
+  const data=buildContent()||" ";
+  const size=+$("#qSize").value||600;
+  const grad=$("#qGrad").checked;
+  const fg=$("#qFg").value,fg2=$("#qFg2").value;
+  const transparent=$("#qTransparent").checked;
+  const dotsOptions={type:$("#qDot").value};
+  if(grad)dotsOptions.gradient={type:"linear",rotation:0.79,colorStops:[{offset:0,color:fg},{offset:1,color:fg2}]};
+  else dotsOptions.color=fg;
+  const o={
+    width:size,height:size,type:"canvas",data,
+    margin:+$("#qMargin").value||0,
+    qrOptions:{errorCorrectionLevel:$("#qEc").value},
+    dotsOptions,
+    backgroundOptions:{color:transparent?"transparent":$("#qBg").value},
+    cornersSquareOptions:{type:$("#qCornerSq").value||undefined,color:grad?fg:fg},
+    cornersDotOptions:{type:$("#qCornerDot").value||undefined,color:grad?fg2:fg},
+  };
+  if(qrLogoData){o.image=qrLogoData;o.imageOptions={crossOrigin:"anonymous",margin:4,imageSize:+$("#qLogoSize").value,hideBackgroundDots:$("#qLogoClear").checked};}
+  return o;
+}
+function renderQR(){
+  if(typeof QRCodeStyling==="undefined")return;
+  const o=qrOptions();
+  if(!qr){qr=new QRCodeStyling(o);qr.append($("#qrHost"));}
+  else qr.update(o);
+  $("#qrStat").textContent=`QR · ${qrType} · EC ${$("#qEc").value}`;
+  updateFramed();
+}
+// gradient toggle UI
+$("#qGrad").onchange=e=>{$("#qFg2Wrap").style.display=e.target.checked?"":"none";$("#qFgLabel").textContent=e.target.checked?"Dots 1":"Dots";renderQR();};
+$("#qTransparent").onchange=e=>{$("#qBg").disabled=e.target.checked;renderQR();};
+["qDot","qCornerSq","qCornerDot","qEc","qFg","qFg2","qBg","qSize","qMargin","qLogoSize","qLogoClear"].forEach(id=>{$("#"+id).addEventListener("input",renderQR);});
+$("#qLogo").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{qrLogoData=r.result;$("#qLogoRemove").style.display="";renderQR();};r.readAsDataURL(f);};
+$("#qLogoRemove").onclick=()=>{qrLogoData=null;$("#qLogo").value="";$("#qLogoRemove").style.display="none";renderQR();};
+$("#qrPng").onclick=async()=>{if(!qr)return;if($("#qFrame").checked){const b=await framedPngBlob();if(b)download(b,"qr-"+qrType+".png");}else qr.download({name:"qr-"+qrType,extension:"png"});};
+$("#qrSvg").onclick=async()=>{if(!qr)return;if($("#qFrame").checked){const bare=await qrBareSVG();if(bare)download(new Blob([frameSVG(bare,frameOpts())],{type:"image/svg+xml"}),"qr-"+qrType+".svg");}else qr.download({name:"qr-"+qrType,extension:"svg"});};
+$("#qrCopy").onclick=async()=>{if($("#qFrame").checked){const b=await framedPngBlob();if(b){try{await navigator.clipboard.write([new ClipboardItem({"image/png":b})]);toast("PNG copied to clipboard");}catch(e){toast("Copy not supported here — use Download");}}else toast("Render first");return;}const c=$("#qrHost").querySelector("canvas");if(c)copyCanvasPng(c);else toast("Render first");};
+
+/* ---- QR frame & caption (custom, zero-dep) ---- */
+function escXml(x){return String(x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function qrSvgSize(svg){let m=/viewBox="[\d.]+ [\d.]+ ([\d.]+) [\d.]+"/i.exec(svg);if(m)return +m[1];let w=/\bwidth="([\d.]+)/i.exec(svg);return w?+w[1]:600;}
+function frameOpts(){return{text:$("#qFrameText").value,side:$("#qFrameSide").value,thick:+$("#qFrameThick").value||5,round:+$("#qFrameRound").value||0,color:$("#qFrameColor").value,textColor:$("#qFrameTextColor").value};}
+function frameSVG(bare,o){
+  const S=qrSvgSize(bare);
+  const B=Math.max(2,Math.round(S*o.thick/100));
+  const band=Math.round(S*0.15);
+  const hasTop=(o.side==="top"||o.side==="both")&&o.text.trim()!=="";
+  const hasBot=(o.side==="bottom"||o.side==="both")&&o.text.trim()!=="";
+  const topPad=hasTop?Math.max(B,band):B, botPad=hasBot?Math.max(B,band):B;
+  const W=S+2*B, H=topPad+S+botPad, rnd=Math.round(S*o.round/100), t=escXml(o.text);
+  const font="font-family=\"'Space Grotesk',system-ui,sans-serif\" font-weight=\"700\"";
+  const availW=Math.round(W*0.9), tlen=o.text.trim().length;
+  const fit=fs=>tlen*fs*0.6>availW?` textLength="${availW}" lengthAdjust="spacingAndGlyphs"`:"";
+  let caps="";
+  if(hasTop){const fs=Math.max(10,Math.round(topPad*0.42));caps+=`<text x="${W/2}" y="${topPad/2}" text-anchor="middle" dominant-baseline="central" ${font} font-size="${fs}"${fit(fs)} fill="${o.textColor}">${t}</text>`;}
+  if(hasBot){const fs=Math.max(10,Math.round(botPad*0.42));caps+=`<text x="${W/2}" y="${topPad+S+botPad/2}" text-anchor="middle" dominant-baseline="central" ${font} font-size="${fs}"${fit(fs)} fill="${o.textColor}">${t}</text>`;}
+  const inner=bare.replace(/^\s*(?:<\?xml[^>]*>\s*)?<svg\b[^>]*>/i,`<svg x="${B}" y="${topPad}" width="${S}" height="${S}" viewBox="0 0 ${S} ${S}" preserveAspectRatio="xMidYMid meet">`);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect x="0" y="0" width="${W}" height="${H}" rx="${rnd}" ry="${rnd}" fill="${o.color}"/>${caps}${inner}</svg>`;
+}
+async function qrBareSVG(){if(!qr)return null;try{const b=await qr.getRawData("svg");return typeof b==="string"?b:await b.text();}catch(e){return null;}}
+async function updateFramed(){
+  const on=$("#qFrame")&&$("#qFrame").checked;
+  const canvas=$("#qrHost").querySelector("canvas");
+  let host=$("#qrFramed");
+  if(!on){if(host)host.style.display="none";if(canvas)canvas.style.display="";return;}
+  if(canvas)canvas.style.display="none";
+  if(!host){host=document.createElement("div");host.id="qrFramed";$("#qrHost").appendChild(host);}
+  host.style.display="";
+  const bare=await qrBareSVG();
+  host.innerHTML=bare?frameSVG(bare,frameOpts()):"";
+}
+async function framedPngBlob(){
+  const bare=await qrBareSVG();if(!bare)return null;
+  const svg=frameSVG(bare,frameOpts());
+  const wM=/width="([\d.]+)"/.exec(svg),hM=/height="([\d.]+)"/.exec(svg);
+  const W=wM?+wM[1]:600,H=hM?+hM[1]:600,scale=2;
+  const img=new Image();
+  await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=svgURL(svg);});
+  const c=document.createElement("canvas");c.width=Math.round(W*scale);c.height=Math.round(H*scale);
+  const ctx=c.getContext("2d");ctx.setTransform(scale,0,0,scale,0,0);ctx.drawImage(img,0,0,W,H);
+  return await new Promise(r=>c.toBlob(r,"image/png"));
+}
+$("#qFrame").onchange=e=>{$("#qFrameOpts").style.display=e.target.checked?"":"none";updateFramed();};
+["qFrameText","qFrameSide","qFrameThick","qFrameRound","qFrameColor","qFrameTextColor"].forEach(id=>{const el=$("#"+id);if(el)el.addEventListener("input",updateFramed);});
+
+/* ======================================================
+   BARCODE / 2D  (bwip-js)
+====================================================== */
+const twoD=new Set(["datamatrix","azteccode","pdf417","qrcode","microqrcode","gs1datamatrix","maxicode","postnet","onecode","royalmail","kix","auspost","japanpost"]);
+const bHints={code128:"Any ASCII text or numbers.",ean13:"Exactly 12 digits (13th is auto check digit).",ean8:"Exactly 7 digits.",upca:"Exactly 11 digits.",upce:"6 digits.",code39:"Uppercase A–Z, 0–9, and - . $ / + % space.",itf14:"14 digits (13 + check).",interleaved2of5:"Even number of digits.",codabar:"Digits and - $ : / . +, wrapped in A–D start/stop.",code93:"Uppercase alphanumeric.",msi:"Digits only.",pharmacode:"Number 3–131070.",datamatrix:"Any text — compact 2D matrix.",azteccode:"Any text — no quiet zone needed.",pdf417:"Any text — stacked 2D, holds a lot.",qrcode:"Any text (plain QR — use tab 02 for styled QR).",microqrcode:"Small QR — short payloads only.",gs1datamatrix:"GS1 AI syntax, e.g. (01)09521234543213.",maxicode:"UPS structured carrier data.","gs1-128":"GS1-128 — AI syntax, e.g. (01)0952...(3103)000123.",code11:"Digits and dashes.",isbn:"ISBN-13, e.g. 978-1-56581-231-4.",pzn:"German pharma number — up to 7 digits.",telepen:"Any ASCII (Telepen).",postnet:"US ZIP digits.",onecode:"USPS Intelligent Mail — 20/25/29/31 digits.",royalmail:"UK postal alphanumeric (RM4SCC).",kix:"Dutch KIX alphanumeric.",auspost:"Australia Post routing code.",japanpost:"Japan Post alphanumeric."};
+function updBHint(){const t=$("#bType").value;$("#bHint").textContent=bHints[t]||"";$("#bHeightWrap").style.display=twoD.has(t)?"none":"";}
+
+function renderBar(){
+  if(typeof bwipjs==="undefined")return;
+  const t=$("#bType").value,is2d=twoD.has(t);
+  $("#bErr").classList.add("hidden");
+  const canvas=$("#bCanvas");
+  const opts={bcid:t,text:$("#bData").value||" ",scale:+$("#bScale").value,
+    includetext:$("#bText").checked,textxalign:"center",
+    barcolor:$("#bFg").value.slice(1),
+    backgroundcolor:$("#bTransparent").checked?undefined:$("#bBg").value.slice(1),
+    paddingwidth:2,paddingheight:2};
+  if(!is2d)opts.height=+$("#bHeight").value;
+  try{
+    bwipjs.toCanvas(canvas,opts);
+    $("#bStat").textContent=$("#bType").selectedOptions[0].textContent;
+  }catch(e){
+    $("#bErr").textContent="Can't encode that: "+(e.message||e)+". Check the format hint above.";
+    $("#bErr").classList.remove("hidden");
+  }
+}
+["bType","bData","bText","bScale","bHeight","bFg","bBg","bTransparent"].forEach(id=>$("#"+id).addEventListener("input",renderBar));
+$("#bType").addEventListener("change",()=>{updBHint();renderBar();});
+$("#bPng").onclick=()=>{$("#bCanvas").toBlob(b=>download(b,"barcode-"+$("#bType").value+".png"),"image/png");};
+$("#bCopy").onclick=()=>copyCanvasPng($("#bCanvas"));
+$("#bSvg").onclick=()=>{
+  const t=$("#bType").value,is2d=twoD.has(t);
+  const opts={bcid:t,text:$("#bData").value||" ",scale:+$("#bScale").value,includetext:$("#bText").checked,textxalign:"center",barcolor:$("#bFg").value.slice(1)};
+  if(!$("#bTransparent").checked)opts.backgroundcolor=$("#bBg").value.slice(1);
+  if(!is2d)opts.height=+$("#bHeight").value;
+  try{const svg=bwipjs.toSVG(opts);download(new Blob([svg],{type:"image/svg+xml"}),"barcode-"+t+".svg");}
+  catch(e){toast("Fix the data first");}
+};
+
+/* ======================================================
+   PRINT  (vector; window.print with real mm @page)
+====================================================== */
+const P_PAGES={A4:[210,297],Letter:[215.9,279.4],"Label 100\u00d7150":[100,150]};
+const MMPX=96/25.4;
+let printSrc="qr",_printSVG=null;
+
+function currentBarcodeSVG(){
+  const t=$("#bType").value,is2d=twoD.has(t);
+  const opts={bcid:t,text:$("#bData").value||" ",scale:+$("#bScale").value,includetext:$("#bText").checked,textxalign:"center",barcolor:$("#bFg").value.slice(1)};
+  if(!$("#bTransparent").checked)opts.backgroundcolor=$("#bBg").value.slice(1);
+  if(!is2d)opts.height=+$("#bHeight").value;
+  try{return bwipjs.toSVG(opts);}catch(e){return null;}
+}
+function svgAspect(svg){
+  let m=/viewBox="[\d.]+ [\d.]+ ([\d.]+) ([\d.]+)"/i.exec(svg);
+  if(m){const a=(+m[1])/(+m[2]);if(a>0)return a;}
+  const w=/\bwidth="([\d.]+)/i.exec(svg),h=/\bheight="([\d.]+)/i.exec(svg);
+  if(w&&h){const a=(+w[1])/(+h[1]);if(a>0)return a;}
+  return 1;
+}
+async function currentSVG(){
+  if(printSrc==="qr"){
+    if(!qr)return null;
+    try{const b=await qr.getRawData("svg");let sv=typeof b==="string"?b:await b.text();return ($("#qFrame")&&$("#qFrame").checked)?frameSVG(sv,frameOpts()):sv;}
+    catch(e){
+      const c=$("#qrHost").querySelector("canvas");
+      if(!c)return null;
+      return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><image href="'+c.toDataURL("image/png")+'" width="100" height="100"/></svg>';
+    }
+  }
+  return currentBarcodeSVG();
+}
+function svgURL(svg){return "data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);}
+function pageDims(){
+  let w,h;const sel=$("#pPage").value;
+  if(sel==="custom"){w=+$("#pPw").value||100;h=+$("#pPh").value||150;}
+  else{const p=P_PAGES[sel]||P_PAGES.A4;w=p[0];h=p[1];}
+  if($("#pOrient").value==="landscape"){const t=w;w=h;h=t;}
+  return [w,h];
+}
+function buildSheet(svg){
+  const d=pageDims(),pw=d[0],ph=d[1];
+  const aspect=svgAspect(svg);
+  const cw=Math.max(1,Math.min(+$("#pW").value||40,pw,ph*aspect));
+  const ch=cw/aspect;
+  const url=svgURL(svg);
+  const img='<img class="code" src="'+url+'" style="width:'+cw+'mm;height:'+ch+'mm">';
+  const sheet=document.createElement("div");
+  sheet.className="sheet";
+  sheet.style.width=pw+"mm";sheet.style.height=ph+"mm";
+  if($("#pLayout").value==="tile"){
+    const gap=+$("#pGap").value||0,m=+$("#pTileMargin").value||0;
+    const cols=Math.max(1,Math.floor((pw-2*m+gap)/(cw+gap)));
+    const rows=Math.max(1,Math.floor((ph-2*m+gap)/(ch+gap)));
+    const n=Math.min(cols*rows,600);
+    sheet.style.cssText+=";display:flex;flex-wrap:wrap;align-content:center;justify-content:center;gap:"+gap+"mm;padding:"+m+"mm";
+    sheet.innerHTML=img.repeat(n);
+    const info=$("#pTileInfo");if(info)info.textContent=cols+" \u00d7 "+rows+" = "+(cols*rows)+" per sheet";
+  }else{
+    const m=+$("#pMargin").value||0,a=$("#pAlign").value;
+    const jV={t:"flex-start",c:"center",b:"flex-end"}[a[0]]||"center";
+    const jH={l:"flex-start",c:"center",r:"flex-end"}[a[1]]||"center";
+    sheet.style.cssText+=";display:flex;align-items:"+jV+";justify-content:"+jH+";padding:"+m+"mm";
+    sheet.innerHTML=img;
+  }
+  return sheet;
+}
+async function refreshPrint(){
+  $("#pCustomWrap").classList.toggle("hidden",$("#pPage").value!=="custom");
+  const tile=$("#pLayout").value==="tile";
+  $("#pTileWrap").classList.toggle("hidden",!tile);
+  $("#pSingleWrap").classList.toggle("hidden",tile);
+  _printSVG=await currentSVG();
+  const host=$(".print-scale");
+  if(!_printSVG){host.style.transform="none";host.innerHTML='<p class="stage-empty">Nothing to print yet \u2014 render a code first.</p>';return;}
+  const sheet=buildSheet(_printSVG);sheet.id="printSheet";
+  const box=$(".print-preview").getBoundingClientRect();
+  const d=pageDims();
+  const scale=Math.min((box.width-24)/(d[0]*MMPX),(box.height-24)/(d[1]*MMPX),1);
+  host.innerHTML="";host.appendChild(sheet);
+  host.style.transform="scale("+(scale>0?scale:0.2)+")";
+}
+function openPrint(src){printSrc=src;$("#printModal").classList.add("show");refreshPrint();}
+function closePrint(){$("#printModal").classList.remove("show");}
+function doPrint(){
+  if(!_printSVG){toast("Render a code first");return;}
+  const sheet=buildSheet(_printSVG);
+  const d=pageDims();
+  $("#printPageStyle").textContent="@page{size:"+d[0]+"mm "+d[1]+"mm;margin:0}";
+  const root=$("#printRoot");root.innerHTML="";root.appendChild(sheet);
+  document.body.classList.add("printing");
+  const done=()=>{document.body.classList.remove("printing");root.innerHTML="";window.removeEventListener("afterprint",done);};
+  window.addEventListener("afterprint",done);
+  setTimeout(()=>window.print(),80);
+}
+$("#qrPrint").onclick=()=>openPrint("qr");
+$("#bPrint").onclick=()=>openPrint("bar");
+$("#printClose").onclick=closePrint;$("#printCancel").onclick=closePrint;
+$("#printGo").onclick=doPrint;
+$("#printModal").addEventListener("click",e=>{if(e.target.id==="printModal")closePrint();});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#printModal").classList.contains("show"))closePrint();});
+["pPage","pPw","pPh","pOrient","pLayout","pW","pAlign","pMargin","pGap","pTileMargin"].forEach(id=>{const el=$("#"+id);if(el)el.addEventListener("input",refreshPrint);});
+
+/* ---------- boot ---------- */
+window.addEventListener("DOMContentLoaded",()=>{
+  pickTemplate("url");
+  updBHint();renderBar();
+  zxReady();
+});
+window.addEventListener("beforeunload",stopCam);
+</script>
+</body>
+</html>
