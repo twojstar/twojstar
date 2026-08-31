@@ -21,6 +21,7 @@
     "client/app.ts",
     "client/playlist-import.ts",
     "client/playlist-workspace.ts",
-    "client/source-workspace.ts"
+    "client/source-workspace.ts",
+    "client/webmcp.ts"
   ]
 }

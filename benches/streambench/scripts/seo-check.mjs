@@ -21,6 +21,7 @@ const [
   notFound,
   staticHeaders,
   wranglerSource,
+  webmcp,
 ] = await Promise.all([
   text("index.html"),
   text("robots.txt"),
@@ -31,6 +32,7 @@ const [
   text("404.html"),
   text("_headers"),
   readFile(new URL("wrangler.jsonc", projectUrl), "utf8"),
+  text("webmcp.js"),
 ]);
 
 const origin = "https://streambench.trfny.com";
@@ -47,6 +49,10 @@ assert(robots.includes("Disallow: /api/"), "API crawler rule is missing");
 assert(sitemap.includes(`<loc>${origin}/</loc>`), "sitemap application URL is missing");
 assert(llms.includes("# Streambench"), "llms.txt title is missing");
 assert(llms.includes("https://trfny.com/"), "TRAVNY hub is missing from llms.txt");
+assert(index.includes('<script type="module" src="/webmcp.js"></script>'), "WebMCP page module is missing");
+for (const toolName of ["read_stream_state", "search_streams", "start_stream_playback", "stop_stream_playback"]) {
+  assert(webmcp.includes(`name: "${toolName}"`), `WebMCP module is missing tool: ${toolName}`);
+}
 
 const manifest = JSON.parse(manifestSource);
 assert(manifest.id === "/", "manifest id is missing");

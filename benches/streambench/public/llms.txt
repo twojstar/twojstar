@@ -14,6 +14,10 @@ Streambench runs at https://streambench.trfny.com/. Local playlist files, XMLTV 
 - Search, edit, hide, favorite and export playlist entries locally.
 - Inspect stream protocol, playback type and media diagnostics.
 
+## Agent access
+
+On browser hosts that implement WebMCP, Streambench exposes `read_stream_state`, `search_streams`, `start_stream_playback` and `stop_stream_playback`. These tools operate only on the currently loaded playlist and existing player state; they do not expose a general fetch, signing or relay interface.
+
 ## Public pages
 
 - [Application](https://streambench.trfny.com/): Streambench interface.

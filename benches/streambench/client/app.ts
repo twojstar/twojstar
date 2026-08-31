@@ -1,5 +1,16 @@
 import { classifyChannel } from "./channel-meta.js";
 import { describeHls, describeMedia, describeSource } from "./diagnostics.js";
+import { shouldWaitForHlsRecovery } from "./playback-recovery-policy.js";
+import {
+  beginPlaybackAttemptForTarget,
+  completePlaybackAttemptIfTerminal,
+  createPlaybackAttemptCoordinator,
+} from "./playback-attempt.js";
+import {
+  playbackSubmissionContext,
+  setActivePlaylistIndex as persistActivePlaylistIndex,
+} from "./playback-submission.js";
+import "./stream-bridge.js";
 
 const ui = {
   form: document.querySelector("#streamForm"),
@@ -39,6 +50,22 @@ const providerCatalogs = new Map();
 let providerRequest = null;
 let hls = null;
 let activeEntry = null;
+let activeItemIndex = -1;
+const playbackAttempts = createPlaybackAttemptCoordinator();
+let webmcpActivationAttempt = null;
+
+function effectivePlaylistEntries() {
+  const entries = globalThis.StreambenchWorkspace?.entries?.();
+  if (Array.isArray(entries) && entries.length) return entries;
+  return playlist.map((item, index) => ({ index, item, hidden: false }));
+}
+
+function effectivePlaylistEntry(index) {
+  const entry = effectivePlaylistEntries().find((candidate) => candidate.index === index);
+  if (entry) return entry;
+  const item = playlist[index];
+  return item ? { index, item, hidden: false } : null;
+}
 
 function setStatus(label, state = "idle") {
   ui.status.textContent = label;
@@ -130,6 +157,7 @@ function selectExternalSource(rawUrl, title = "") {
     return null;
   }
 
+  if (!webmcpActivationAttempt) playbackAttempts.cancel("superseded");
   stopPlayback();
   delete ui.shell.dataset.mode;
   ui.url.value = parsed.href;
@@ -147,6 +175,11 @@ function playStream(rawUrl, options = {}) {
     return;
   }
 
+  const preservedAttempt = options.preserveAttempt ? playbackAttempts.current() : null;
+  const ownedAttempt = webmcpActivationAttempt || preservedAttempt;
+  const attemptSignal = ownedAttempt?.signal || null;
+  if (!ownedAttempt) playbackAttempts.cancel("superseded");
+  const attemptActive = () => !attemptSignal?.aborted;
   const url = parsed.href;
   const mode = inferMode(url, options.mode || ui.mode.value, options.radio);
   const media = mode === "audio" ? ui.audio : ui.video;
@@ -164,26 +197,34 @@ function playStream(rawUrl, options = {}) {
   setStatus("Łączenie", "loading");
 
   if (isHls && window.Hls?.isSupported()) {
-    hls = new window.Hls({ enableWorker: true, lowLatencyMode: true });
-    hls.attachMedia(media);
-    hls.on(window.Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(url));
-    hls.on(window.Hls.Events.MANIFEST_PARSED, (_event, data) => {
-      ui.diagnosticHls.textContent = describeHls(data.levels || hls.levels || []);
-      media.play().catch(() => setStatus("Naciśnij play"));
+    const instance = new window.Hls({ enableWorker: true, lowLatencyMode: true });
+    hls = instance;
+    instance.attachMedia(media);
+    instance.on(window.Hls.Events.MEDIA_ATTACHED, () => {
+      if (attemptActive()) instance.loadSource(url);
     });
-    hls.on(window.Hls.Events.LEVEL_LOADED, (_event, data) => {
-      ui.diagnosticHls.textContent = describeHls(hls.levels || [], {
+    instance.on(window.Hls.Events.MANIFEST_PARSED, (_event, data) => {
+      if (!attemptActive()) return;
+      ui.diagnosticHls.textContent = describeHls(data.levels || instance.levels || []);
+      media.play().catch(() => {
+        if (attemptActive()) setStatus("Naciśnij play");
+      });
+    });
+    instance.on(window.Hls.Events.LEVEL_LOADED, (_event, data) => {
+      if (!attemptActive()) return;
+      ui.diagnosticHls.textContent = describeHls(instance.levels || [], {
         live: data.details?.live ?? null,
         duration: data.details?.totalduration ?? null,
       });
     });
-    hls.on(window.Hls.Events.ERROR, (_event, data) => {
+    instance.on(window.Hls.Events.ERROR, (_event, data) => {
+      if (!attemptActive()) return;
       const message = `HLS: ${data.details || data.type || "nieznany błąd"}`;
       setDiagnosticError(message);
       if (!data.fatal) return;
       playbackError(message);
-      hls?.destroy();
-      hls = null;
+      instance.destroy();
+      if (hls === instance) hls = null;
     });
     return;
   }
@@ -197,7 +238,9 @@ function playStream(rawUrl, options = {}) {
   }
 
   media.src = url;
-  media.play().catch(() => setStatus("Naciśnij play"));
+  media.play().catch(() => {
+    if (attemptActive()) setStatus("Naciśnij play");
+  });
 }
 
 for (const media of [ui.video, ui.audio]) {
@@ -227,9 +270,21 @@ for (const media of [ui.video, ui.audio]) {
 
 ui.form.addEventListener("submit", (event) => {
   event.preventDefault();
-  activeEntry?.removeAttribute("aria-current");
-  activeEntry = null;
-  announceChannel();
+  const context = playbackSubmissionContext(ui.form);
+  const selected = ui.entries.querySelector('.entry-action[aria-current="true"]');
+  const selectedIndex = Number(selected?.dataset.playlistIndex);
+  const nextIndex = context.playlistIndex >= 0
+    ? context.playlistIndex
+    : context.preserveSelection && selected && Number.isInteger(selectedIndex) ? selectedIndex : -1;
+  const nextEntry = nextIndex >= 0
+    ? ui.entries.querySelector(`[data-playlist-index="${nextIndex}"]`)
+    : null;
+  if (selected && selected !== nextEntry) selected.removeAttribute("aria-current");
+  nextEntry?.setAttribute("aria-current", "true");
+  activeEntry = nextEntry;
+  activeItemIndex = nextIndex;
+  persistActivePlaylistIndex(ui.form, activeItemIndex);
+  announceChannel(effectivePlaylistEntry(activeItemIndex)?.item || {});
 
   const parsed = validRemoteUrl(ui.url.value.trim());
   if (!parsed) {
@@ -242,7 +297,7 @@ ui.form.addEventListener("submit", (event) => {
     if (selected) window.open(selected.href, "_blank", "noopener,noreferrer");
     return;
   }
-  playStream(parsed.href);
+  playStream(parsed.href, { preserveAttempt: context.preserveAttempt });
 });
 
 function parseAttributes(line) {
@@ -374,10 +429,11 @@ function activateEntry(action) {
   action.setAttribute("aria-current", "true");
 }
 
-function entryAction(item) {
+function entryAction(item, index) {
   const action = document.createElement(item.external ? "a" : "button");
   action.className = "entry-action";
   action.dataset.search = itemSearch(item);
+  action.dataset.playlistIndex = String(index);
 
   if (item.external) {
     action.href = item.url;
@@ -385,6 +441,7 @@ function entryAction(item) {
     action.rel = "noopener noreferrer";
     action.addEventListener("click", () => {
       activateEntry(action);
+      activeItemIndex = index;
       announceChannel(item);
       selectExternalSource(item.url, item.title);
     });
@@ -392,6 +449,7 @@ function entryAction(item) {
     action.type = "button";
     action.addEventListener("click", () => {
       activateEntry(action);
+      activeItemIndex = index;
       announceChannel(item);
       playStream(item.url, {
         title: item.title,
@@ -414,20 +472,25 @@ function entryAction(item) {
   return action;
 }
 
-function entryRow(item) {
+function entryRow(item, index) {
   const row = document.createElement("li");
   row.className = "playlist-entry";
-  row.append(entryAction(item));
+  row.append(entryAction(item, index));
   return row;
 }
 
 function renderPlaylist() {
   const query = ui.search.value.trim().toLocaleLowerCase("pl");
+  const indexed = playlist.map((item, index) => ({ item, index }));
   const visible = query
-    ? playlist.filter((item) => itemSearch(item).includes(query))
-    : playlist;
+    ? indexed.filter(({ item }) => itemSearch(item).includes(query))
+    : indexed;
 
-  ui.entries.replaceChildren(...visible.map(entryRow));
+  ui.entries.replaceChildren(...visible.map(({ item, index }) => entryRow(item, index)));
+  activeEntry = activeItemIndex >= 0
+    ? ui.entries.querySelector(`[data-playlist-index="${activeItemIndex}"]`)
+    : null;
+  activeEntry?.setAttribute("aria-current", "true");
   ui.empty.hidden = playlist.length > 0;
   ui.search.disabled = playlist.length === 0;
   ui.count.textContent = query ? `${visible.length}/${playlist.length}` : String(playlist.length);
@@ -444,6 +507,8 @@ function loadPlaylist(source, label, {
   playlist = parseM3u(source, { allowArtwork, providerId, providerLabel });
   activeEntry?.removeAttribute("aria-current");
   activeEntry = null;
+  activeItemIndex = -1;
+  persistActivePlaylistIndex(ui.form, -1);
   announceChannel();
   ui.search.value = "";
   renderPlaylist();
@@ -626,6 +691,194 @@ async function loadProviderPlaylist() {
     }
   }
 }
+
+function publicPlaylistItem(item, index) {
+  const host = validRemoteUrl(item.url)?.hostname || "";
+  return {
+    index,
+    id: item.id || "",
+    title: item.title || "",
+    group: item.group || "",
+    country: item.country || "",
+    language: item.language || "",
+    provider: item.providerLabel || "",
+    protocol: item.protocol || "",
+    playback: item.playback || "",
+    quality: item.quality || "",
+    radio: Boolean(item.radio),
+    external: Boolean(item.external),
+    host,
+  };
+}
+
+function streamState() {
+  const active = activeItemIndex >= 0 ? effectivePlaylistEntry(activeItemIndex)?.item || null : null;
+  return {
+    status: ui.status.textContent || "",
+    statusState: ui.status.dataset.state || "idle",
+    nowPlaying: ui.title.textContent || "",
+    mode: ui.shell.dataset.mode || ui.mode.value || "auto",
+    playlist: {
+      count: playlist.length,
+      query: ui.search.value || "",
+      active: active ? publicPlaylistItem(active, activeItemIndex) : null,
+    },
+    provider: {
+      id: ui.providerName.value || "",
+      scope: ui.providerScope.value || "",
+      value: ui.providerValue.value || "",
+      status: ui.providerStatus.textContent || "",
+    },
+    diagnostics: {
+      address: ui.diagnosticAddress.textContent || "",
+      type: ui.diagnosticType.textContent || "",
+      security: ui.diagnosticSecurity.textContent || "",
+      hls: ui.diagnosticHls.textContent || "",
+      media: ui.diagnosticMedia.textContent || "",
+      error: ui.diagnosticError.textContent || "",
+    },
+    epg: {
+      status: document.querySelector("#epgStatus")?.textContent || "",
+      now: document.querySelector("#epgNow")?.textContent || "",
+      next: document.querySelector("#epgNext")?.textContent || "",
+    },
+  };
+}
+
+function searchPlaylistEntries(query = "", limit = 20) {
+  const needle = String(query).trim().toLocaleLowerCase("pl");
+  const matches = effectivePlaylistEntries()
+    .filter(({ hidden }) => !hidden)
+    .filter(({ item }) => !needle || itemSearch(item).includes(needle));
+  return {
+    total: matches.length,
+    items: matches.slice(0, limit).map(({ item, index }) => publicPlaylistItem(item, index)),
+    truncated: matches.length > limit,
+  };
+}
+
+function playbackOutcome(entry) {
+  const state = streamState();
+  if (state.statusState === "playing") return { ok: true, started: true, pending: false, entry, state };
+  if (state.statusState === "error") {
+    if (shouldWaitForHlsRecovery(
+      state.diagnostics.error,
+      state.statusState,
+      ui.status.dataset.streambenchRecovery,
+    )) return null;
+    return { ok: false, started: false, error: state.diagnostics.error || state.status || "Playback failed.", entry, state };
+  }
+  if (state.status === "Naciśnij play") {
+    return {
+      ok: false,
+      started: false,
+      requiresInteraction: true,
+      error: "Browser requires user interaction before playback can start.",
+      entry,
+      state,
+    };
+  }
+  return null;
+}
+
+async function waitForPlaybackOutcome(entry, signal, timeoutMs: number | null = 1500) {
+  const cancelled = () => ({
+    ok: false,
+    started: false,
+    cancelled: true,
+    reason: signal.reason || "cancelled",
+    entry,
+    state: streamState(),
+  });
+  if (signal.aborted) return cancelled();
+  const immediate = playbackOutcome(entry);
+  if (immediate) return immediate;
+  return new Promise((resolve) => {
+    let timer = null;
+    const observer = new MutationObserver(() => {
+      if (signal.aborted) return finish(cancelled());
+      const outcome = playbackOutcome(entry);
+      if (outcome) finish(outcome);
+    });
+    const onAbort = () => finish(cancelled());
+    const finish = (result) => {
+      if (timer !== null) clearTimeout(timer);
+      observer.disconnect();
+      signal.removeEventListener("abort", onAbort);
+      resolve(result);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    observer.observe(ui.status, { attributes: true, childList: true, subtree: true });
+    if (timeoutMs !== null) {
+      timer = setTimeout(() => finish(signal.aborted
+        ? cancelled()
+        : { ok: true, started: false, pending: true, entry, state: streamState() }), timeoutMs);
+    }
+  });
+}
+
+async function settlePendingPlaybackAttempt(attempt, entry) {
+  const terminal = await waitForPlaybackOutcome(entry, attempt.signal, null);
+  if (!terminal.cancelled) playbackAttempts.complete(attempt);
+}
+
+async function startPlaylistPlayback(index) {
+  const effective = effectivePlaylistEntry(index);
+  const entry = effective ? publicPlaylistItem(effective.item, index) : null;
+  if (!effective) return { ok: false, error: "Playlist entry does not exist." };
+  if (effective.hidden) return { ok: false, error: "Playlist entry is hidden.", entry };
+  if (effective.item.external) {
+    return { ok: false, error: "This entry is an external page and cannot play inside Streambench.", entry };
+  }
+  const item = effective.item;
+
+  const workspace = globalThis.StreambenchWorkspace;
+  const action = workspace?.playIndex
+    ? null
+    : ui.entries.querySelector(`[data-playlist-index="${index}"]`);
+  if (!workspace?.playIndex && !action) {
+    return { ok: false, error: "Playlist entry is not available in the current UI.", entry };
+  }
+  const prepared = beginPlaybackAttemptForTarget(playbackAttempts, effective);
+  if (!prepared.ok) return { ok: false, error: prepared.error, entry };
+  const attempt = prepared.attempt;
+  webmcpActivationAttempt = attempt;
+  try {
+    if (workspace?.playIndex) {
+      const result = workspace.playIndex(index);
+      if (!result?.ok) {
+        playbackAttempts.complete(attempt);
+        return { ok: false, error: result?.error || "Streambench could not activate the entry.", entry };
+      }
+    } else {
+      action.click();
+    }
+  } finally {
+    webmcpActivationAttempt = null;
+  }
+
+  await Promise.resolve();
+  const effectiveEntry = publicPlaylistItem(effectivePlaylistEntry(index)?.item || item, index);
+  const outcome = await waitForPlaybackOutcome(effectiveEntry, attempt.signal);
+  if (outcome.pending) void settlePendingPlaybackAttempt(attempt, effectiveEntry);
+  completePlaybackAttemptIfTerminal(playbackAttempts, attempt, outcome);
+  return outcome;
+}
+
+function stopStreamPlayback() {
+  window.dispatchEvent(new Event("streambench:playback-stop"));
+  playbackAttempts.cancel("stopped");
+  stopPlayback();
+  setStatus("Zatrzymano");
+  return { ok: true, state: streamState() };
+}
+
+globalThis.StreambenchUi = Object.freeze({
+  readState: streamState,
+  searchEntries: searchPlaylistEntries,
+  startPlayback: startPlaylistPlayback,
+  stopPlayback: stopStreamPlayback,
+});
 
 ui.providerName.addEventListener("change", selectProvider);
 ui.providerScope.addEventListener("change", renderProviderValues);

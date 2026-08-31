@@ -1,3 +1,5 @@
+import { activePlaylistIndex, submitPlaybackForm } from "./playback-submission.js";
+
 "use strict";
 
 (() => {
@@ -113,6 +115,12 @@
     sourceGeneration += 1;
   });
 
+  window.addEventListener("streambench:playback-stop", () => {
+    sourceGeneration += 1;
+    passThrough = false;
+    userEditedInput = false;
+  });
+
   form.addEventListener("submit", async (event) => {
     const generation = ++sourceGeneration;
     const topLevelSubmission = event.submitter === submit || userEditedInput;
@@ -153,6 +161,7 @@
     if (!event.detail?.title) return;
 
     setTimeout(async () => {
+      if (generation !== sourceGeneration) return;
       const nestedUrl = remoteUrl(input.value);
       if (!nestedUrl || !M3U_PATTERN.test(nestedUrl.href)) return;
 
@@ -167,7 +176,11 @@
         if (generation !== sourceGeneration) return;
         input.value = resolved;
         passThrough = true;
-        form.requestSubmit();
+        submitPlaybackForm(form, {
+          playlistIndex: activePlaylistIndex(form),
+          preserveSelection: true,
+          preserveAttempt: true,
+        });
         queueMicrotask(() => {
           if (nowPlaying) nowPlaying.textContent = originalTitle;
           activeEntry?.setAttribute("aria-current", "true");

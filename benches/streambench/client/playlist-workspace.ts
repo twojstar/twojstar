@@ -1,6 +1,7 @@
 import { classifyChannel } from "./channel-meta.js";
 import { createLocalState, itemKey } from "./local-state.js";
 import { parseM3uWorkspace, serializeM3u } from "./playlist-format.js";
+import { submitPlaybackForm } from "./playback-submission.js";
 
 const originalFetch = window.fetch.bind(window);
 let sourceGeneration = 0;
@@ -242,11 +243,17 @@ function scheduleEnhance() {
   requestAnimationFrame(() => requestAnimationFrame(enhanceRows));
 }
 
-function playItem(item) {
+function sourceIndexFor(item) {
+  return sourceItems.findIndex((entry) => itemKey(effectiveItem(entry)) === itemKey(item));
+}
+
+function playItem(item, sourceIndex = sourceIndexFor(item), { preserveAttempt = false } = {}) {
   const active = ui.entries.querySelector('[aria-current="true"]');
   active?.removeAttribute("aria-current");
-  const row = [...ui.entries.querySelectorAll(".playlist-entry")]
-    .find((entry) => entry.dataset.workspaceKey === itemKey(item));
+  const row = sourceIndex >= 0
+    ? ui.entries.querySelector(`[data-playlist-index="${sourceIndex}"]`)?.closest(".playlist-entry")
+    : [...ui.entries.querySelectorAll(".playlist-entry")]
+      .find((entry) => entry.dataset.workspaceKey === itemKey(item));
   row?.querySelector(".entry-action")?.setAttribute("aria-current", "true");
 
   let targetUrl = item.url;
@@ -259,8 +266,15 @@ function playItem(item) {
   if (item.radio) ui.mode.value = "audio";
   ui.url.value = targetUrl;
   submittingWorkspaceItem = true;
-  ui.form.requestSubmit();
-  submittingWorkspaceItem = false;
+  try {
+    submitPlaybackForm(ui.form, {
+      playlistIndex: sourceIndex,
+      preserveSelection: sourceIndex >= 0,
+      preserveAttempt,
+    });
+  } finally {
+    submittingWorkspaceItem = false;
+  }
   ui.mode.value = previousMode;
   ui.title.textContent = item.title;
   window.dispatchEvent(new CustomEvent("streambench:channel", {
@@ -422,6 +436,28 @@ async function copyExport() {
   }
 }
 
+function workspaceEntries() {
+  return sourceItems.map((entry, index) => {
+    const item = effectiveItem(entry);
+    return { index, item, hidden: library.isHidden(item) };
+  });
+}
+
+function playSourceIndex(index) {
+  const entry = sourceItems[index];
+  if (!entry) return { ok: false, error: "Playlist entry does not exist." };
+  const item = effectiveItem(entry);
+  if (library.isHidden(item)) return { ok: false, error: "Playlist entry is hidden.", item };
+  if (item.external) return { ok: false, error: "External entries cannot play inside Streambench.", item };
+  playItem(item, index, { preserveAttempt: true });
+  return { ok: true, item };
+}
+
+globalThis.StreambenchWorkspace = Object.freeze({
+  entries: workspaceEntries,
+  playIndex: playSourceIndex,
+});
+
 ui.entries.addEventListener("click", (event) => {
   const row = event.target.closest(".playlist-entry");
   if (!row) return;
@@ -440,9 +476,11 @@ ui.entries.addEventListener("click", (event) => {
   }
 
   if (event.target.closest(".entry-action")) {
+    if (item.external) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    playItem(item);
+    const sourceIndex = Number(row.querySelector(".entry-action")?.dataset.playlistIndex);
+    playItem(item, Number.isInteger(sourceIndex) ? sourceIndex : -1);
   }
 }, true);
 

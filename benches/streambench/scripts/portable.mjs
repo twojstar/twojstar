@@ -79,6 +79,7 @@ html = html.replace(hlsTag, `<script data-portable-source="vendor/hls.min.js">\n
 const entryModules = [...html.matchAll(/<script\b[^>]*type=["']module["'][^>]*src=["']\/?([^"']+)["'][^>]*><\/script>\s*/gi)]
   .map((match) => match[1]);
 if (entryModules.length === 0) throw new Error("module entry points not found");
+if (!entryModules.includes("webmcp.js")) throw new Error("WebMCP module entry point not found");
 html = html.replace(/<script\b[^>]*type=["']module["'][^>]*src=["'][^"']+["'][^>]*><\/script>\s*/gi, "");
 
 const moduleFiles = (await readdir(publicDir, { withFileTypes: true }))

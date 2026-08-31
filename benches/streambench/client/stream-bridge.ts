@@ -1,3 +1,4 @@
+import { activePlaylistIndex, submitPlaybackForm } from "./playback-submission.js";
 import { relayForSource, type ProviderRelayMap } from "./provider-relay.ts";
 
 type RelayTargetOptions = {
@@ -88,7 +89,12 @@ if (typeof document !== "undefined") {
       const previousMode = mode?.value;
       input.value = relay.href;
       if (mode && selectedMode) mode.value = selectedMode;
-      form.requestSubmit();
+      const actionIndex = Number(action.dataset.playlistIndex);
+      submitPlaybackForm(form, {
+        playlistIndex: Number.isInteger(actionIndex) && actionIndex >= 0 ? actionIndex : activePlaylistIndex(form),
+        preserveSelection: true,
+        preserveAttempt: true,
+      });
       input.value = original;
       if (mode && previousMode) mode.value = previousMode;
 
