@@ -25,6 +25,10 @@ Doc Bench runs at https://docbench.travny.workers.dev/. It is part of the TRAVNY
 
 User documents and PDFs are processed locally in the browser. The application has no telemetry and ships a portable single-file build in the Benches rolling release.
 
+## Agent access
+
+On browser hosts that implement WebMCP, Doc Bench exposes the current local editor through `read_document`, `set_document_text`, `validate_document`, `format_document` and `inspect_document`. These tools reuse the visible application state. Doc Bench itself does not upload documents, but WebMCP tool results can contain editor text; once returned to a host or model, that data is governed by the host/model data-handling policy.
+
 ## Public pages
 
 - [Application](https://docbench.travny.workers.dev/): Doc Bench interface.
