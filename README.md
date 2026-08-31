@@ -2,6 +2,12 @@
 
 Dependency-free `.ico` file type plugin for Paint.NET 5.1 and 5.2+.
 
+## Download
+
+[**Download the latest release (`paintdotnet-ico.zip`)**](https://github.com/trvny/trvny/releases/download/paintdotnet-ico-latest/paintdotnet-ico.zip)
+
+The ZIP contains separate folders for Paint.NET 5.2+ and Paint.NET 5.1.x. Versioned releases use tags such as `paintdotnet-ico-v0.2.0`; `paintdotnet-ico-latest` is a rolling release that keeps the download URL stable.
+
 ## What it does
 
 - adds **Windows Icon (`.ico`)** to Open and Save As,
