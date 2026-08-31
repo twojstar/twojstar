@@ -634,7 +634,8 @@ $("#camSwitch").onclick=async()=>{
 /* ======================================================
    QR GENERATOR  (qr-code-styling)
 ====================================================== */
-let qr=null,qrLogoData=null,qrType="url";
+let qr=null,qrLogoData=null,qrType="url",lastQrContent="",qrRenderGeneration=0,qrRenderPromise=Promise.resolve(false);
+function invalidateQrRenderState(){qrRenderGeneration+=1;lastQrContent="";qrRenderPromise=Promise.resolve(false);}
 
 const templates={
   url:[{k:"url",l:"URL",t:"url",ph:"https://example.com",v:"https://"}],
@@ -669,7 +670,7 @@ const templates={
   ]
 };
 
-function pickTemplate(t){
+function pickTemplate(t,shouldRender=true){
   qrType=t;
   $$("#qrChips .chip").forEach(c=>c.setAttribute("aria-pressed",c.dataset.t===t));
   const host=$("#qrFields");host.innerHTML="";
@@ -683,7 +684,7 @@ function pickTemplate(t){
     host.insertAdjacentHTML("beforeend",el);
   });
   host.querySelectorAll("input,textarea,select").forEach(i=>i.addEventListener("input",renderQR));
-  renderQR();
+  if(shouldRender)renderQR();
 }
 $$("#qrChips .chip").forEach(c=>c.addEventListener("click",()=>pickTemplate(c.dataset.t)));
 
@@ -705,8 +706,8 @@ function buildContent(){
   return"";
 }
 
-function qrOptions(){
-  const data=buildContent()||" ";
+function qrOptions(data){
+  data=typeof data==="string"?data:(buildContent()||" ");
   const size=+$("#qSize").value||600;
   const grad=$("#qGrad").checked;
   const fg=$("#qFg").value,fg2=$("#qFg2").value;
@@ -726,11 +727,21 @@ function qrOptions(){
   if(qrLogoData){o.image=qrLogoData;o.imageOptions={crossOrigin:"anonymous",margin:4,imageSize:+$("#qLogoSize").value,hideBackgroundDots:$("#qLogoClear").checked};}
   return o;
 }
-function renderQR(){
+function renderQR(content){
   if(typeof QRCodeStyling==="undefined")return;
-  const o=qrOptions();
-  if(!qr){qr=new QRCodeStyling(o);qr.append($("#qrHost"));}
+  const data=typeof content==="string"?content:(buildContent()||" ");
+  const o=qrOptions(data),generation=++qrRenderGeneration;
+  if(!qr){const next=new QRCodeStyling(o);next.append($("#qrHost"));qr=next;}
   else qr.update(o);
+  const renderer=qr;
+  qrRenderPromise=(async()=>{
+    const blob=await renderer.getRawData("png");
+    if(!blob)throw new Error("QR renderer produced no PNG data");
+    if(generation!==qrRenderGeneration||renderer!==qr)return false;
+    lastQrContent=data;
+    return true;
+  })();
+  qrRenderPromise.catch(()=>{});
   $("#qrStat").textContent=`QR · ${qrType} · EC ${$("#qEc").value}`;
   updateFramed();
 }
@@ -818,7 +829,7 @@ function renderBar(){
   }
 }
 ["bType","bData","bText","bScale","bHeight","bFg","bBg","bTransparent"].forEach(id=>$("#"+id).addEventListener("input",renderBar));
-$("#bType").addEventListener("change",()=>{updBHint();renderBar();});
+$("#bType").addEventListener("change",()=>{updBHint();if($("#bType").dataset.codebenchToolWrite!=="true")renderBar();});
 $("#bPng").onclick=()=>{$("#bCanvas").toBlob(b=>download(b,"barcode-"+$("#bType").value+".png"),"image/png");};
 $("#bCopy").onclick=()=>copyCanvasPng($("#bCanvas"));
 $("#bSvg").onclick=()=>{
@@ -934,6 +945,25 @@ $("#printModal").addEventListener("click",e=>{if(e.target.id==="printModal")clos
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#printModal").classList.contains("show"))closePrint();});
 ["pPage","pPw","pPh","pOrient","pLayout","pW","pAlign","pMargin","pGap","pTileMargin"].forEach(id=>{const el=$("#"+id);if(el)el.addEventListener("input",refreshPrint);});
 
+globalThis.CodeBenchUi=Object.freeze({
+  goTab,
+  pickTemplate,
+  renderQR:(content)=>typeof globalThis.renderQR==="function"?globalThis.renderQR(content):renderQR(content),
+  renderBar,
+  buildContent:()=>typeof globalThis.buildContent==="function"?globalThis.buildContent():buildContent(),
+  getContent:()=>lastQrContent,
+  getQrTemplate:()=>qrType,
+  hasQr:()=>Boolean(qr),
+  invalidateQrRenderState,
+  ensureQrRendered:async()=>{
+    if(!qr)throw new Error("QR renderer is not ready");
+    const generation=qrRenderGeneration;
+    const ready=await qrRenderPromise;
+    if(!ready||generation!==qrRenderGeneration)throw new Error("QR render was superseded");
+    return true;
+  },
+});
+
 /* ---------- boot ---------- */
 window.addEventListener("DOMContentLoaded",()=>{
   pickTemplate("url");
@@ -942,5 +972,6 @@ window.addEventListener("DOMContentLoaded",()=>{
 });
 window.addEventListener("beforeunload",stopCam);
 </script>
+<script src="webmcp.js"></script>
 </body>
 </html>

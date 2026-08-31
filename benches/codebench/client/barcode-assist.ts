@@ -261,7 +261,7 @@
   }
 
   payloadType.addEventListener("change", rebuildPayloadFields);
-  type.addEventListener("change", () => updateRequirement({ seed: true }));
+  type.addEventListener("change", () => updateRequirement({ seed: type.dataset.codebenchToolWrite !== "true" }));
   data.addEventListener("input", () => updateRequirement());
 
   if (error) {

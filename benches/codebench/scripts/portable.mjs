@@ -27,6 +27,8 @@ const helperScripts = [
   "scanner-details.js",
 ];
 
+const pageScripts = ["webmcp.js"];
+
 const vendorScripts = [
   "vendor/qr-code-styling.js",
   "vendor/bwip-js-min.js",
@@ -58,6 +60,16 @@ for (const match of fontRefs) {
   fonts = fonts.replace(match[0], `url("${await dataUri(`fonts/${match[1]}`)}")`);
 }
 html = html.replace("</head>", `<style data-portable-fonts>\n${fonts}\n</style>\n</head>`);
+
+for (const relativePath of pageScripts) {
+  const source = inlineScript(await readFile(join(publicDir, relativePath), "utf8"));
+  const tag = `<script src="${relativePath}"></script>`;
+  if (!html.includes(tag)) throw new Error(`missing script tag: ${relativePath}`);
+  html = html.replace(
+    tag,
+    () => `<script data-portable-source="${relativePath}">\n${source}\n</script>`,
+  );
+}
 
 for (const relativePath of vendorScripts) {
   const source = inlineScript(await readFile(join(publicDir, relativePath), "utf8"));

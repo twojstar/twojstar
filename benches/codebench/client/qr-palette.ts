@@ -132,8 +132,8 @@
   dotSelect.addEventListener("change", syncRadius);
   syncRadius();
 
-  window.qrOptions = function paletteQrOptions() {
-    const options = previousOptions();
+  window.qrOptions = function paletteQrOptions(...args) {
+    const options = previousOptions(...args);
     if ($("#qShape")?.value) options.shape = $("#qShape").value;
     if (options.dotsOptions?.gradient) {
       options.dotsOptions.gradient.type = $("#qGradType")?.value || "linear";

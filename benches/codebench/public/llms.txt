@@ -11,6 +11,10 @@ Code Bench runs at https://codebench.trfny.com/. User content is processed in th
 - Scan QR codes and barcodes with local files or the browser camera where supported.
 - Export generated codes in common image and vector formats.
 
+## Agent access
+
+On browser hosts that implement WebMCP, Code Bench exposes `read_code_state`, `set_qr_code`, `set_barcode` and `export_code`. The tools reuse the visible browser UI; payloads are only returned to the calling agent when requested by a tool call.
+
 ## Public pages
 
 - [Application](https://codebench.trfny.com/): Code Bench interface.

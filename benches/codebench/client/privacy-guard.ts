@@ -75,6 +75,7 @@
 
     password.value = "";
     password.type = "password";
+    globalThis.CodeBenchUi?.invalidateQrRenderState?.();
     if (typeof qr !== "undefined") qr = null;
     if (typeof _printSVG !== "undefined") _printSVG = null;
 

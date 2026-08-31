@@ -119,8 +119,8 @@
     return new XMLSerializer().serializeToString(documentNode.documentElement);
   }
 
-  window.qrOptions = function decorativeModuleQrOptions() {
-    const options = originalQrOptions();
+  window.qrOptions = function decorativeModuleQrOptions(...args) {
+    const options = originalQrOptions(...args);
     if (isCustomShape()) options.dotsOptions.type = "square";
     return options;
   };

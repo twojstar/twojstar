@@ -266,8 +266,8 @@
     }
   }
 
-  window.qrOptions = function logoQrOptions() {
-    const options = originalQrOptions();
+  window.qrOptions = function logoQrOptions(...args) {
+    const options = originalQrOptions(...args);
     const preset = activePreset();
     if (preset) {
       options.image = iconDataUrl(preset);
