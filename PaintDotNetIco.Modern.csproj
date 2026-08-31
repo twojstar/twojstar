@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>Travny.PaintDotNet.IcoFileType.Modern</AssemblyName>
+    <RootNamespace>Travny.PaintDotNetIco</RootNamespace>
+    <Version>0.2.0</Version>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <NoWarn>MSB3277</NoWarn>
+    <PaintDotNetDir Condition="'$(PaintDotNetDir)' == ''">C:\Program Files\Paint.NET</PaintDotNetDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src\IcoDecoder.cs" />
+    <Compile Include="src\IcoEncoder.cs" />
+    <Compile Include="src\IcoExportOptions.cs" />
+    <Compile Include="src\FrameSelectionDialog.cs" />
+    <Compile Include="src\PluginSupportInfo.cs" />
+    <Compile Include="modern\IcoFileTypeModern.cs" />
+    <Compile Include="modern\IcoFileTypeFactoryModern.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="PaintDotNet.Base" HintPath="$(PaintDotNetDir)\PaintDotNet.Base.dll" Private="false" />
+    <Reference Include="PaintDotNet.ComponentModel" HintPath="$(PaintDotNetDir)\PaintDotNet.ComponentModel.dll" Private="false" />
+    <Reference Include="PaintDotNet.Core" HintPath="$(PaintDotNetDir)\PaintDotNet.Core.dll" Private="false" />
+    <Reference Include="PaintDotNet.Primitives" HintPath="$(PaintDotNetDir)\PaintDotNet.Primitives.dll" Private="false" />
+    <Reference Include="PaintDotNet.FileTypes" HintPath="$(PaintDotNetDir)\PaintDotNet.FileTypes.dll" Private="false" />
+    <Reference Include="PaintDotNet.Fundamentals" HintPath="$(PaintDotNetDir)\PaintDotNet.Fundamentals.dll" Private="false" />
+    <Reference Include="PaintDotNet.PropertySystem" HintPath="$(PaintDotNetDir)\PaintDotNet.PropertySystem.dll" Private="false" />
+    <Reference Include="PaintDotNet.Windows" HintPath="$(PaintDotNetDir)\PaintDotNet.Windows.dll" Private="false" />
+  </ItemGroup>
+</Project>
