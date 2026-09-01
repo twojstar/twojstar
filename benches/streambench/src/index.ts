@@ -266,6 +266,20 @@ export default {
       return withSecurityHeaders(json({ error: "method_not_allowed" }, 405));
     }
 
-    return withSecurityHeaders(await env.ASSETS.fetch(request));
+    const asset = await env.ASSETS.fetch(request);
+    const response = withSecurityHeaders(asset);
+    if (url.pathname === "/" && response.headers.get("content-type")?.includes("text/html")) {
+      const headers = new Headers(response.headers);
+      headers.set(
+        "link",
+        '</index.md>; rel="alternate"; type="text/markdown", </llms.txt>; rel="describedby"',
+      );
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    }
+    return response;
   },
 } satisfies ExportedHandler<Env>;

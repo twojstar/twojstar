@@ -31,6 +31,8 @@ const source = readFileSync(join(root, "src", "index.ts"), "utf8");
 const wrangler = JSON.parse(readFileSync(join(root, "wrangler.jsonc"), "utf8"));
 const notFound = readFileSync(join(root, "public", "404.html"), "utf8");
 const llms = readFileSync(join(root, "public", "llms.txt"), "utf8");
+const llmsFull = readFileSync(join(root, "public", "llms-full.txt"), "utf8");
+const indexMarkdown = readFileSync(join(root, "public", "index.md"), "utf8");
 const index = readFileSync(join(root, "public", "index.html"), "utf8");
 const portable = readFileSync(join(root, "public", "portable.html"), "utf8");
 const webmcp = readFileSync(join(root, "public", "webmcp.js"), "utf8");
@@ -38,10 +40,15 @@ const webmcp = readFileSync(join(root, "public", "webmcp.js"), "utf8");
 if (!source.includes('const SITE_URL = "https://codebench.trfny.com/";')) {
   throw new Error("Codebench canonical origin is not the custom domain");
 }
-if (!source.includes('href="/llms.txt"')) throw new Error("llms.txt discovery link is missing");
+if (!source.includes('rel="alternate" type="text/markdown" href="/index.md"')) throw new Error("Markdown alternate is missing");
+if (!source.includes('rel="describedby" href="/llms.txt"')) throw new Error("llms.txt describedby link is missing");
+if (!source.includes('rel="alternate"; type="text/markdown"') || !source.includes('rel="describedby"')) throw new Error("HTTP Link discovery header is missing");
 if (wrangler.assets?.not_found_handling !== "404-page") throw new Error("404 asset handling is missing");
 if (!notFound.includes('name="robots" content="noindex,follow"')) throw new Error("404 page can be indexed");
-if (!llms.includes("https://codebench.trfny.com/")) throw new Error("llms.txt canonical application URL is missing");
+if (!llms.includes("https://codebench.trfny.com/index.md")) throw new Error("llms.txt Markdown application URL is missing");
+if (!llms.includes("https://codebench.trfny.com/llms-full.txt")) throw new Error("llms.txt full guide URL is missing");
+if (!indexMarkdown.startsWith("# Code Bench")) throw new Error("index.md is missing its H1");
+if (!llmsFull.startsWith("# Code Bench full documentation")) throw new Error("llms-full.txt is missing its H1");
 if (!index.includes('<script src="webmcp.js"></script>')) throw new Error("WebMCP page script is missing");
 if (!index.includes("generation!==qrRenderGeneration") || !index.includes("lastQrContent=data")) throw new Error("QR payload cache is not gated by successful current-generation rendering");
 if (!webmcp.includes("QR render failed")) throw new Error("WebMCP QR guarded-render error handling is missing");

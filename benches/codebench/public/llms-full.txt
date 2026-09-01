@@ -1,0 +1,37 @@
+# Code Bench full documentation
+
+Source: https://codebench.trfny.com/
+
+Description: Complete LLM-oriented description of the Code Bench browser application.
+
+## Code Bench
+
+Code Bench is a local-first QR code and barcode studio. User-entered payloads are processed in the browser rather than uploaded to a Code Bench backend.
+
+### QR codes
+
+- Create plain and styled QR codes.
+- Build structured Wi-Fi, contact and calendar/event payloads.
+- Customize modules, corners, palettes, frames and logos.
+- Export raster and vector variants, including PNG and SVG.
+
+### Barcodes
+
+- Generate common one-dimensional and two-dimensional barcode formats.
+- Supported families include Code 128, EAN, Data Matrix, Aztec and PDF417.
+- Scan supported codes from images or a browser camera where HTTPS and permissions allow it.
+
+### Privacy and portability
+
+The normal application keeps user payloads in browser state. A portable build is available for local/offline use. Camera scanning requires explicit browser permission.
+
+### Agent access
+
+On browser hosts that implement WebMCP, the application exposes `read_code_state`, `set_qr_code`, `set_barcode` and `export_code`. Tool calls operate on the visible UI state.
+
+### Public resources
+
+- [Markdown application page](https://codebench.trfny.com/index.md)
+- [Application](https://codebench.trfny.com/)
+- [Source](https://github.com/trvny/trvny/tree/main/benches/codebench)
+- [TRAVNY hub](https://trfny.com/)

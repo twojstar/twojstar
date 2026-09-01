@@ -73,7 +73,8 @@ class InjectHead {
       + '<meta name="apple-mobile-web-app-capable" content="yes">'
       + '<meta name="apple-mobile-web-app-title" content="Code Bench">'
       + `<link rel="canonical" href="${SITE_URL}">`
-      + '<link rel="alternate" type="text/plain" href="/llms.txt" title="Code Bench llms.txt">'
+      + '<link rel="alternate" type="text/markdown" href="/index.md" title="Code Bench Markdown">'
+      + '<link rel="describedby" href="/llms.txt" title="Code Bench llms.txt">'
       + '<link rel="icon" type="image/svg+xml" href="/favicon.svg">'
       + '<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">'
       + '<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">'
@@ -158,12 +159,18 @@ export default {
       if (!portable || name !== "content-security-policy") headers.set(name, value);
     }
 
+    const type = headers.get("content-type") ?? "";
+    if (asset.ok && type.includes("text/html") && !portable) {
+      headers.set(
+        "link",
+        '</index.md>; rel="alternate"; type="text/markdown", </llms.txt>; rel="describedby"',
+      );
+    }
     const response = new Response(asset.body, {
       status: asset.status,
       statusText: asset.statusText,
       headers,
     });
-    const type = headers.get("content-type") ?? "";
     if (!asset.ok || !type.includes("text/html") || portable) return response;
 
     return new HTMLRewriter()

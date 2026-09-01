@@ -16,6 +16,8 @@ const [
   robots,
   sitemap,
   llms,
+  llmsFull,
+  indexMarkdown,
   manifestSource,
   socialImage,
   notFound,
@@ -27,6 +29,8 @@ const [
   text("robots.txt"),
   text("sitemap.xml"),
   text("llms.txt"),
+  text("llms-full.txt"),
+  text("index.md"),
   text("site.webmanifest"),
   text("og.svg"),
   text("404.html"),
@@ -38,16 +42,21 @@ const [
 const origin = "https://streambench.trfny.com";
 assert(index.includes(`<link rel="canonical" href="${origin}/">`), "canonical URL is missing");
 assert(index.includes(`<meta property="og:url" content="${origin}/">`), "Open Graph URL is missing");
-assert(index.includes(`<meta name="twitter:card" content="summary_large_image">`), "Twitter card is missing");
+assert(index.includes('<meta name="twitter:card" content="summary_large_image">'), "Twitter card is missing");
 assert(index.includes("max-image-preview:large"), "crawler preview directives are missing");
-assert(index.includes(`<link rel="sitemap" type="application/xml" href="/sitemap.xml">`), "sitemap link is missing");
-assert(index.includes(`<link rel="alternate" type="text/plain" href="/llms.txt"`), "llms.txt link is missing");
+assert(index.includes('<link rel="sitemap" type="application/xml" href="/sitemap.xml">'), "sitemap link is missing");
+assert(index.includes('<link rel="alternate" type="text/markdown" href="/index.md"'), "Markdown alternate is missing");
+assert(index.includes('<link rel="describedby" href="/llms.txt"'), "llms.txt describedby link is missing");
 assert(index.includes('application/ld+json'), "JSON-LD is missing");
 
 assert(robots.includes(`Sitemap: ${origin}/sitemap.xml`), "robots sitemap URL is missing");
 assert(robots.includes("Disallow: /api/"), "API crawler rule is missing");
 assert(sitemap.includes(`<loc>${origin}/</loc>`), "sitemap application URL is missing");
 assert(llms.includes("# Streambench"), "llms.txt title is missing");
+assert(llms.includes(`${origin}/index.md`), "llms.txt Markdown application URL is missing");
+assert(llms.includes(`${origin}/llms-full.txt`), "llms.txt full guide URL is missing");
+assert(llmsFull.startsWith("# Streambench full documentation"), "llms-full.txt title is missing");
+assert(indexMarkdown.startsWith("# Streambench"), "index.md title is missing");
 assert(llms.includes("https://trfny.com/"), "TRAVNY hub is missing from llms.txt");
 assert(index.includes('<script type="module" src="/webmcp.js"></script>'), "WebMCP page module is missing");
 for (const toolName of ["read_stream_state", "search_streams", "start_stream_playback", "stop_stream_playback"]) {

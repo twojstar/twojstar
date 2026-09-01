@@ -1,0 +1,35 @@
+# Streambench full documentation
+
+Source: https://streambench.trfny.com/
+
+Description: Complete LLM-oriented description of Streambench and its public discovery surfaces.
+
+## Application
+
+Streambench is a browser-based workshop for IPTV, internet radio, HLS, M3U/M3U8 playlists and XMLTV EPG. Local playlist files, pasted playlists, XMLTV data, edits, favorites, hidden items and history stay in the browser.
+
+### Playback and playlists
+
+- Open local or pasted M3U/M3U8 playlists.
+- Play supported video and audio streams.
+- Use native HLS or the bundled HLS implementation where needed.
+- Inspect playlist metadata, logos, tags and stream diagnostics.
+- Search, edit, hide, favorite and export entries locally.
+- Import XMLTV for programme metadata.
+
+### Public provider APIs
+
+The Worker exposes constrained provider catalog/playlist APIs used by the UI. `/api/providers` describes available providers. These routes intentionally do not expose a general fetch proxy or arbitrary signing surface.
+
+### Agent access
+
+On browser hosts implementing WebMCP, Streambench exposes `read_stream_state`, `search_streams`, `start_stream_playback` and `stop_stream_playback`. Tools operate on the existing UI state and loaded playlist.
+
+## Public resources
+
+- [Markdown application page](https://streambench.trfny.com/index.md)
+- [Application](https://streambench.trfny.com/)
+- [Provider manifest](https://streambench.trfny.com/api/providers)
+- [Health](https://streambench.trfny.com/health)
+- [Source](https://github.com/trvny/trvny/tree/main/benches/streambench)
+- [TRAVNY hub](https://trfny.com/)

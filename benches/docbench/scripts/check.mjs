@@ -2,6 +2,9 @@ import { access, readFile, stat } from "node:fs/promises";
 
 for (const path of [
   "public/index.html",
+  "public/index.md",
+  "public/llms.txt",
+  "public/llms-full.txt",
   "public/app.js",
   "public/document-enhancements.mjs",
   "public/document-enhancements.css",
@@ -151,6 +154,11 @@ for (const exportGuard of [
   }
 }
 
+const workerSource = await readFile("src/index.ts", "utf8");
+if (!workerSource.includes('if (asset.ok && headers.get("content-type")?.includes("text/html"))')) {
+  throw new Error("Discovery headers must be limited to successful HTML assets.");
+}
+
 const html = await readFile("public/index.html", "utf8");
 for (const metadataUiGuard of [
   "pdf-metadata-panel",
@@ -171,6 +179,21 @@ for (const metadataUiGuard of [
   if (!html.includes(metadataUiGuard)) {
     throw new Error(`PDF metadata UI is missing guard: ${metadataUiGuard}`);
   }
+}
+
+if (!html.includes('rel="alternate" type="text/markdown" href="/index.md"')) {
+  throw new Error("Doc Bench Markdown alternate is missing.");
+}
+if (!html.includes('rel="describedby" href="/llms.txt"')) {
+  throw new Error("Doc Bench llms.txt describedby link is missing.");
+}
+const llms = await readFile("public/llms.txt", "utf8");
+const llmsFull = await readFile("public/llms-full.txt", "utf8");
+if (!llms.includes("https://docbench.travny.workers.dev/index.md") || !llms.includes("/llms-full.txt")) {
+  throw new Error("Doc Bench llms.txt v2 resources are incomplete.");
+}
+if (!llmsFull.startsWith("# Doc Bench full documentation")) {
+  throw new Error("Doc Bench llms-full.txt is missing its H1.");
 }
 
 const portable = await readFile("public/portable.html", "utf8");

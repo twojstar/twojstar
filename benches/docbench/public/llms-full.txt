@@ -1,0 +1,29 @@
+# Doc Bench full documentation
+
+Source: https://docbench.travny.workers.dev/
+
+Description: Complete LLM-oriented description of the local-first Doc Bench document and PDF studio.
+
+## Document workspace
+
+Doc Bench edits TXT, Markdown, JSON, YAML/YML and XML. It validates and formats structured formats, renders Markdown safely, inspects structured data in tree views, preserves or deliberately changes UTF-8 BOM state, and preserves LF, CRLF or CR line endings. Supported browsers can save directly back to a selected local file; download is the portable fallback.
+
+## PDF workspace
+
+PDF operations run locally in the browser. The application can preview and merge PDFs, reorder or delete pages, inspect and edit nested bookmark trees, preserve or remap bookmark destinations after page operations, optimize PDFs losslessly, optionally recompress images, enable Fast Web View and verify rebuilt output before download.
+
+## Privacy and portability
+
+User files are not uploaded to a Doc Bench backend. The application has no telemetry. A portable single-file build is published in the Benches rolling release for offline/local use.
+
+## Agent access
+
+On browser hosts implementing WebMCP, Doc Bench exposes `read_document`, `set_document_text`, `validate_document`, `format_document` and `inspect_document`. Tools act on the currently visible editor. Tool results can include document content, so returned content is governed by the receiving host/model's data policy.
+
+## Public resources
+
+- [Markdown application page](https://docbench.travny.workers.dev/index.md)
+- [Application](https://docbench.travny.workers.dev/)
+- [Source](https://github.com/trvny/trvny/tree/main/benches/docbench)
+- [Portable builds](https://github.com/trvny/trvny/releases/tag/benches-portable-latest)
+- [TRAVNY hub](https://trfny.com/)

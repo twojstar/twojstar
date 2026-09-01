@@ -20,7 +20,8 @@ On browser hosts that implement WebMCP, Streambench exposes `read_stream_state`,
 
 ## Public pages
 
-- [Application](https://streambench.trfny.com/): Streambench interface.
+- [Application](https://streambench.trfny.com/index.md): Markdown version of the Streambench application page.
+- [Full LLM guide](https://streambench.trfny.com/llms-full.txt): complete Streambench documentation in one file.
 - [Health](https://streambench.trfny.com/health): service health JSON.
 - [Provider manifest](https://streambench.trfny.com/api/providers): available public provider definitions.
 - [Source](https://github.com/trvny/trvny/tree/main/benches/streambench): application source.

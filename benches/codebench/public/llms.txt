@@ -17,7 +17,8 @@ On browser hosts that implement WebMCP, Code Bench exposes `read_code_state`, `s
 
 ## Public pages
 
-- [Application](https://codebench.trfny.com/): Code Bench interface.
+- [Application](https://codebench.trfny.com/index.md): Markdown version of the Code Bench application page.
+- [Full LLM guide](https://codebench.trfny.com/llms-full.txt): complete Code Bench documentation in one file.
 - [Source](https://github.com/trvny/trvny/tree/main/benches/codebench): application source.
 
 ## Related TRAVNY tools
