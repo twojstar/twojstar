@@ -1,5 +1,6 @@
 using Feedboard.Models;
 using Feedboard.Services;
+using Microsoft.Windows.Widgets;
 using Microsoft.Windows.Widgets.Providers;
 using System.Diagnostics;
 using System.Text.Json;
@@ -19,14 +20,16 @@ public sealed class FeedWidget : IDisposable
 
     private IReadOnlyList<FeedArticle> _articles = Array.Empty<FeedArticle>();
     private WidgetState _state;
+    private WidgetSize _size;
     private Timer? _timer;
     private DateTimeOffset _updatedAt = DateTimeOffset.Now;
     private bool _disposed;
 
-    public FeedWidget(string id, string customState)
+    public FeedWidget(string id, string customState, WidgetSize size)
     {
         _id = id;
         _state = ParseState(customState);
+        _size = size;
     }
 
     public void Activate()
@@ -87,6 +90,19 @@ public sealed class FeedWidget : IDisposable
         }
     }
 
+    public void UpdateContext(WidgetSize size)
+    {
+        var previousSize = _size;
+        _size = size;
+
+        if ((int)size < (int)previousSize && _state.ExpandedArticleId is not null)
+        {
+            _state = new WidgetState();
+        }
+
+        PushCurrentCard();
+    }
+
     public void OnActionInvoked(WidgetActionInvokedArgs args)
     {
         const string expandPrefix = "expand:";
@@ -124,7 +140,7 @@ public sealed class FeedWidget : IDisposable
 
         var options = new WidgetUpdateRequestOptions(_id)
         {
-            Template = WidgetCardRenderer.Render(_articles, _state, _updatedAt),
+            Template = WidgetCardRenderer.Render(_articles, _state, _updatedAt, _size),
             Data = "{}",
             CustomState = JsonSerializer.Serialize(_state)
         };

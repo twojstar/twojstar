@@ -7,8 +7,10 @@ namespace Feedboard;
 
 public static class Program
 {
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr GetConsoleWindow();
+    private const uint AttachParentProcess = 0xFFFFFFFF;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool AttachConsole(uint processId);
 
     [MTAThread]
     public static void Main(string[] args)
@@ -18,6 +20,8 @@ public static class Program
             RunWidgetProvider();
             return;
         }
+
+        AttachParentConsole();
 
         if (args.Length > 0 && args[0].Equals("feeds", StringComparison.OrdinalIgnoreCase))
         {
@@ -38,15 +42,26 @@ public static class Program
         using var manager = RegistrationManager<WidgetProvider>.RegisterProvider();
 
         _ = WidgetManager.GetDefault().GetWidgetIds();
+        manager.ExitWaitHandle.WaitOne();
+    }
 
-        if (GetConsoleWindow() != IntPtr.Zero)
+    private static void AttachParentConsole()
+    {
+        if (!AttachConsole(AttachParentProcess))
         {
-            Console.WriteLine("Feedboard widget provider registered. Press ENTER to exit.");
-            Console.ReadLine();
+            return;
         }
-        else
+
+        var stdout = Console.OpenStandardOutput();
+        if (stdout != Stream.Null)
         {
-            manager.ExitWaitHandle.WaitOne();
+            Console.SetOut(new StreamWriter(stdout) { AutoFlush = true });
+        }
+
+        var stderr = Console.OpenStandardError();
+        if (stderr != Stream.Null)
+        {
+            Console.SetError(new StreamWriter(stderr) { AutoFlush = true });
         }
     }
 

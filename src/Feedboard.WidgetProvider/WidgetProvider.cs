@@ -27,7 +27,7 @@ public sealed class WidgetProvider : IWidgetProvider
         FeedWidget widget;
         lock (LifecycleGate)
         {
-            widget = new FeedWidget(widgetContext.Id, string.Empty);
+            widget = new FeedWidget(widgetContext.Id, string.Empty, widgetContext.Size);
             Widgets[widgetContext.Id] = widget;
         }
 
@@ -48,7 +48,7 @@ public sealed class WidgetProvider : IWidgetProvider
     {
         if (Widgets.TryGetValue(contextChangedArgs.WidgetContext.Id, out var widget))
         {
-            widget.PushCurrentCard();
+            widget.UpdateContext(contextChangedArgs.WidgetContext.Size);
         }
     }
 
@@ -89,7 +89,7 @@ public sealed class WidgetProvider : IWidgetProvider
                         continue;
                     }
 
-                    Widgets.TryAdd(context.Id, new FeedWidget(context.Id, info.CustomState));
+                    Widgets.TryAdd(context.Id, new FeedWidget(context.Id, info.CustomState, context.Size));
                 }
             }
         }

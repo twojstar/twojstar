@@ -7,12 +7,12 @@
   xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
   IgnorableNamespaces="uap uap3 rescap">
 
-  <Identity Name="trvny.Feedboard" Publisher="CN=PLACEHOLDER" Version="0.1.0.0" />
+  <Identity Name="trvny.Feedboard" Publisher="CN=Feedboard Development" Version="0.2.0.0" />
 
   <Properties>
     <DisplayName>Feedboard</DisplayName>
     <PublisherDisplayName>trvny</PublisherDisplayName>
-    <Logo>Assets\Feedboard.png</Logo>
+    <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
   <Dependencies>
@@ -30,8 +30,8 @@
         DisplayName="Feedboard"
         Description="RSS and Atom headlines for the Windows 11 Widgets Board"
         BackgroundColor="transparent"
-        Square150x150Logo="Assets\Feedboard.png"
-        Square44x44Logo="Assets\Feedboard.png" />
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" />
 
       <Extensions>
         <com:Extension Category="windows.comServer">
@@ -47,7 +47,7 @@
             <uap3:Properties>
               <WidgetProvider>
                 <ProviderIcons>
-                  <Icon Path="Assets\Feedboard.png" />
+                  <Icon Path="Assets\Square44x44Logo.png" />
                 </ProviderIcons>
                 <Activation>
                   <CreateInstance ClassId="6890AE95-9824-4DD2-BF3B-B0E3724639F2" />
@@ -64,9 +64,12 @@
                       <Capability><Size Name="large" /></Capability>
                     </Capabilities>
                     <ThemeResources>
-                      <Icons><Icon Path="Assets\Feedboard.png" /></Icons>
-                      <DarkMode />
-                      <LightMode />
+                      <Icons>
+                        <Icon Path="Assets\Square44x44Logo.png" />
+                      </Icons>
+                      <Screenshots>
+                        <Screenshot Path="Assets\WidgetPreview.png" DisplayAltText="Feedboard headlines widget preview" />
+                      </Screenshots>
                     </ThemeResources>
                   </Definition>
                 </Definitions>

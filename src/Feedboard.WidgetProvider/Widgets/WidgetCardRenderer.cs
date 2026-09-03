@@ -1,4 +1,5 @@
 using Feedboard.Models;
+using Microsoft.Windows.Widgets;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -11,14 +12,54 @@ public static class WidgetCardRenderer
         WriteIndented = false
     };
 
-    public static string Render(IReadOnlyList<FeedArticle> articles, WidgetState state, DateTimeOffset updatedAt)
+    public static string Render(
+        IReadOnlyList<FeedArticle> articles,
+        WidgetState state,
+        DateTimeOffset updatedAt,
+        WidgetSize size)
     {
+        var profile = LayoutProfile.For(size);
+        var visibleArticles = articles.Take(profile.ArticleLimit).ToList();
         var body = new JsonArray
         {
-            Section("small", articles.Take(2), state, updatedAt, showThumbnails: false),
-            Section("medium", articles.Take(4), state, updatedAt, showThumbnails: true),
-            Section("large", articles.Take(6), state, updatedAt, showThumbnails: true)
+            Header(updatedAt)
         };
+
+        if (visibleArticles.Count == 0)
+        {
+            body.Add(new JsonObject
+            {
+                ["type"] = "TextBlock",
+                ["text"] = "No feeds yet. Add one with the Feedboard app/CLI.",
+                ["wrap"] = true,
+                ["isSubtle"] = true
+            });
+        }
+        else
+        {
+            foreach (var article in visibleArticles)
+            {
+                body.Add(ArticleRow(
+                    article,
+                    state.ExpandedArticleId == article.Id,
+                    profile.ShowThumbnails,
+                    profile.TitleLines,
+                    profile.SummaryLines));
+            }
+
+            if (size != WidgetSize.Small)
+            {
+                body.Add(new JsonObject
+                {
+                    ["type"] = "TextBlock",
+                    ["text"] = "Tap once for details · tap the expanded item to open",
+                    ["size"] = "Small",
+                    ["isSubtle"] = true,
+                    ["wrap"] = true,
+                    ["spacing"] = "Small"
+                });
+            }
+        }
 
         var card = new JsonObject
         {
@@ -31,90 +72,53 @@ public static class WidgetCardRenderer
         return card.ToJsonString(JsonOptions);
     }
 
-    private static JsonObject Section(string size, IEnumerable<FeedArticle> articles, WidgetState state, DateTimeOffset updatedAt, bool showThumbnails)
+    private static JsonObject Header(DateTimeOffset updatedAt) => new()
     {
-        var items = articles.ToList();
-        var body = new JsonArray
+        ["type"] = "ColumnSet",
+        ["spacing"] = "None",
+        ["columns"] = new JsonArray
         {
             new JsonObject
             {
-                ["type"] = "ColumnSet",
-                ["columns"] = new JsonArray
+                ["type"] = "Column",
+                ["width"] = "stretch",
+                ["items"] = new JsonArray
                 {
                     new JsonObject
                     {
-                        ["type"] = "Column",
-                        ["width"] = "stretch",
-                        ["items"] = new JsonArray
-                        {
-                            new JsonObject
-                            {
-                                ["type"] = "TextBlock",
-                                ["text"] = "Feedboard",
-                                ["weight"] = "Bolder",
-                                ["size"] = "Medium",
-                                ["wrap"] = true
-                            }
-                        }
-                    },
+                        ["type"] = "TextBlock",
+                        ["text"] = "Feedboard",
+                        ["weight"] = "Bolder",
+                        ["size"] = "Medium",
+                        ["wrap"] = true
+                    }
+                }
+            },
+            new JsonObject
+            {
+                ["type"] = "Column",
+                ["width"] = "auto",
+                ["verticalContentAlignment"] = "Center",
+                ["items"] = new JsonArray
+                {
                     new JsonObject
                     {
-                        ["type"] = "Column",
-                        ["width"] = "auto",
-                        ["verticalContentAlignment"] = "Center",
-                        ["items"] = new JsonArray
-                        {
-                            new JsonObject
-                            {
-                                ["type"] = "TextBlock",
-                                ["text"] = updatedAt.LocalDateTime.ToString("HH:mm"),
-                                ["isSubtle"] = true,
-                                ["size"] = "Small"
-                            }
-                        }
+                        ["type"] = "TextBlock",
+                        ["text"] = updatedAt.LocalDateTime.ToString("HH:mm"),
+                        ["isSubtle"] = true,
+                        ["size"] = "Small"
                     }
                 }
             }
-        };
-
-        if (items.Count == 0)
-        {
-            body.Add(new JsonObject
-            {
-                ["type"] = "TextBlock",
-                ["text"] = "No feeds yet. Add one with the Feedboard app/CLI.",
-                ["wrap"] = true,
-                ["isSubtle"] = true
-            });
         }
-        else
-        {
-            foreach (var article in items)
-            {
-                body.Add(ArticleRow(article, state.ExpandedArticleId == article.Id, showThumbnails));
-            }
+    };
 
-            body.Add(new JsonObject
-            {
-                ["type"] = "TextBlock",
-                ["text"] = "Tap once for details · tap the expanded item to open",
-                ["size"] = "Small",
-                ["isSubtle"] = true,
-                ["wrap"] = true,
-                ["spacing"] = "Small"
-            });
-        }
-
-        return new JsonObject
-        {
-            ["type"] = "Container",
-            ["$when"] = $"${{$host.widgetSize==\"{size}\"}}",
-            ["items"] = body,
-            ["spacing"] = "None"
-        };
-    }
-
-    private static JsonObject ArticleRow(FeedArticle article, bool expanded, bool showThumbnail)
+    private static JsonObject ArticleRow(
+        FeedArticle article,
+        bool expanded,
+        bool showThumbnail,
+        int titleLines,
+        int summaryLines)
     {
         var imageUrl = showThumbnail && !string.IsNullOrWhiteSpace(article.ThumbnailUrl)
             ? article.ThumbnailUrl
@@ -158,7 +162,7 @@ public static class WidgetCardRenderer
                                 ["text"] = article.Title,
                                 ["weight"] = "Bolder",
                                 ["wrap"] = true,
-                                ["maxLines"] = expanded ? 4 : 2
+                                ["maxLines"] = expanded ? titleLines + 1 : titleLines
                             },
                             new JsonObject
                             {
@@ -167,7 +171,8 @@ public static class WidgetCardRenderer
                                 ["isSubtle"] = true,
                                 ["size"] = "Small",
                                 ["spacing"] = "None",
-                                ["wrap"] = true
+                                ["wrap"] = true,
+                                ["maxLines"] = 1
                             }
                         }
                     }
@@ -175,14 +180,14 @@ public static class WidgetCardRenderer
             }
         };
 
-        if (expanded && !string.IsNullOrWhiteSpace(article.Summary))
+        if (expanded && summaryLines > 0 && !string.IsNullOrWhiteSpace(article.Summary))
         {
             rowItems.Add(new JsonObject
             {
                 ["type"] = "TextBlock",
                 ["text"] = article.Summary,
                 ["wrap"] = true,
-                ["maxLines"] = 5,
+                ["maxLines"] = summaryLines,
                 ["spacing"] = "Small"
             });
         }
@@ -206,5 +211,16 @@ public static class WidgetCardRenderer
     {
         var date = article.Published?.LocalDateTime.ToString("dd MMM HH:mm");
         return string.IsNullOrWhiteSpace(date) ? article.FeedTitle : $"{article.FeedTitle} · {date}";
+    }
+
+    private sealed record LayoutProfile(int ArticleLimit, bool ShowThumbnails, int TitleLines, int SummaryLines)
+    {
+        public static LayoutProfile For(WidgetSize size) => size switch
+        {
+            WidgetSize.Small => new LayoutProfile(1, false, 2, 2),
+            WidgetSize.Medium => new LayoutProfile(2, true, 2, 3),
+            WidgetSize.Large => new LayoutProfile(4, true, 2, 5),
+            _ => new LayoutProfile(2, true, 2, 3)
+        };
     }
 }

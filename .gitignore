@@ -1,6 +1,7 @@
 src/**/bin/
 src/**/obj/
-assets/generated/
-packaging/Assets/
+src/**/AppPackages/
+artifacts/
+*.pfx
 *.user
 *.suo
