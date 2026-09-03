@@ -3,9 +3,10 @@
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
-  IgnorableNamespaces="uap uap3 rescap">
+  IgnorableNamespaces="uap uap3 uap10 rescap">
 
   <Identity Name="trvny.Feedboard" Publisher="CN=Feedboard Development" Version="0.2.0.0" />
 
@@ -26,13 +27,7 @@
 
   <Applications>
     <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
-      <uap:VisualElements
-        DisplayName="Feedboard"
-        Description="RSS and Atom headlines for the Windows 11 Widgets Board"
-        BackgroundColor="transparent"
-        Square150x150Logo="Assets\Square150x150Logo.png"
-        Square44x44Logo="Assets\Square44x44Logo.png" />
-
+      <uap:VisualElements DisplayName="Feedboard" Description="RSS and Atom headlines for the Windows 11 Widgets Board" BackgroundColor="transparent" Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png" AppListEntry="none" />
       <Extensions>
         <com:Extension Category="windows.comServer">
           <com:ComServer>
@@ -41,35 +36,22 @@
             </com:ExeServer>
           </com:ComServer>
         </com:Extension>
-
         <uap3:Extension Category="windows.appExtension">
           <uap3:AppExtension Name="com.microsoft.windows.widgets" DisplayName="Feedboard" Id="trvny.feedboard" PublicFolder="Public">
             <uap3:Properties>
               <WidgetProvider>
-                <ProviderIcons>
-                  <Icon Path="Assets\Square44x44Logo.png" />
-                </ProviderIcons>
-                <Activation>
-                  <CreateInstance ClassId="6890AE95-9824-4DD2-BF3B-B0E3724639F2" />
-                </Activation>
+                <ProviderIcons><Icon Path="Assets\Square44x44Logo.png" /></ProviderIcons>
+                <Activation><CreateInstance ClassId="6890AE95-9824-4DD2-BF3B-B0E3724639F2" /></Activation>
                 <Definitions>
-                  <Definition
-                    Id="Feedboard_Headlines"
-                    DisplayName="Feedboard"
-                    Description="RSS and Atom headlines"
-                    AllowMultiple="true">
+                  <Definition Id="Feedboard_Headlines" DisplayName="Feedboard" Description="RSS and Atom headlines" AllowMultiple="true">
                     <Capabilities>
                       <Capability><Size Name="small" /></Capability>
                       <Capability><Size Name="medium" /></Capability>
                       <Capability><Size Name="large" /></Capability>
                     </Capabilities>
                     <ThemeResources>
-                      <Icons>
-                        <Icon Path="Assets\Square44x44Logo.png" />
-                      </Icons>
-                      <Screenshots>
-                        <Screenshot Path="Assets\WidgetPreview.png" DisplayAltText="Feedboard headlines widget preview" />
-                      </Screenshots>
+                      <Icons><Icon Path="Assets\Square44x44Logo.png" /></Icons>
+                      <Screenshots><Screenshot Path="Assets\WidgetPreview.png" DisplayAltText="Feedboard headlines widget preview" /></Screenshots>
                     </ThemeResources>
                   </Definition>
                 </Definitions>
@@ -78,6 +60,9 @@
           </uap3:AppExtension>
         </uap3:Extension>
       </Extensions>
+    </Application>
+    <Application Id="Settings" Executable="Settings\Feedboard.Settings.exe" EntryPoint="Windows.FullTrustApplication" uap10:RuntimeBehavior="packagedClassicApp" uap10:TrustLevel="mediumIL">
+      <uap:VisualElements DisplayName="Feedboard Settings" Description="Manage Feedboard feeds and OPML subscriptions" BackgroundColor="transparent" Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png" />
     </Application>
   </Applications>
 
