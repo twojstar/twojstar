@@ -5,11 +5,7 @@ namespace Feedboard.Services;
 
 public sealed class FeedStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true
-    };
-
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly string _path;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -25,84 +21,64 @@ public sealed class FeedStore
         try
         {
             await using var processLock = await AcquireProcessLockAsync(cancellationToken);
-            return NormalizeSources(await ReadSourcesAsync(cancellationToken)).Values
-                .OrderBy(x => x.Title ?? x.Url)
-                .ToList();
+            return Ordered(NormalizeSources(await ReadSourcesAsync(cancellationToken)));
         }
-        finally
-        {
-            _gate.Release();
-        }
+        finally { _gate.Release(); }
     }
 
     public async Task AddAsync(string url, CancellationToken cancellationToken = default)
     {
         if (!TryNormalizeUrl(url, out var normalizedUrl))
-        {
             throw new ArgumentException("Feed URL must be an absolute HTTP(S) URL.", nameof(url));
-        }
 
         await MergeAsync(new[] { new FeedSource(normalizedUrl) }, cancellationToken);
     }
 
     public async Task MergeAsync(IEnumerable<FeedSource> incoming, CancellationToken cancellationToken = default)
     {
+        await MutateAsync(byUrl =>
+        {
+            foreach (var source in incoming)
+            {
+                if (source is null || !TryNormalizeUrl(source.Url, out var normalizedUrl)) continue;
+                byUrl[normalizedUrl] = source with { Url = normalizedUrl };
+            }
+        }, cancellationToken);
+    }
+
+    public Task RemoveAsync(string url, CancellationToken cancellationToken = default) =>
+        MutateAsync(byUrl =>
+        {
+            if (TryNormalizeUrl(url, out var normalizedUrl)) byUrl.Remove(normalizedUrl);
+        }, cancellationToken);
+
+    public Task SetEnabledAsync(string url, bool enabled, CancellationToken cancellationToken = default) =>
+        MutateAsync(byUrl =>
+        {
+            if (TryNormalizeUrl(url, out var normalizedUrl) && byUrl.TryGetValue(normalizedUrl, out var source))
+                byUrl[normalizedUrl] = source with { Enabled = enabled };
+        }, cancellationToken);
+
+    private async Task MutateAsync(Action<Dictionary<string, FeedSource>> mutation, CancellationToken cancellationToken)
+    {
         await _gate.WaitAsync(cancellationToken);
         try
         {
             await using var processLock = await AcquireProcessLockAsync(cancellationToken);
             var byUrl = NormalizeSources(await ReadSourcesAsync(cancellationToken));
-
-            foreach (var source in incoming)
-            {
-                if (source is null || !TryNormalizeUrl(source.Url, out var normalizedUrl))
-                {
-                    continue;
-                }
-
-                byUrl[normalizedUrl] = source with { Url = normalizedUrl };
-            }
-
-            var directory = GetDirectory();
-            Directory.CreateDirectory(directory);
-            var tempPath = Path.Combine(directory, $".{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
-
-            try
-            {
-                await using (var write = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: true))
-                {
-                    await JsonSerializer.SerializeAsync(write, byUrl.Values.OrderBy(x => x.Title ?? x.Url).ToList(), JsonOptions, cancellationToken);
-                    await write.FlushAsync(cancellationToken);
-                }
-
-                File.Move(tempPath, _path, overwrite: true);
-            }
-            finally
-            {
-                if (File.Exists(tempPath))
-                {
-                    File.Delete(tempPath);
-                }
-            }
+            mutation(byUrl);
+            await WriteSourcesAsync(Ordered(byUrl), cancellationToken);
         }
-        finally
-        {
-            _gate.Release();
-        }
+        finally { _gate.Release(); }
     }
 
     private async Task<IReadOnlyList<FeedSource>> ReadSourcesAsync(CancellationToken cancellationToken)
     {
-        if (!File.Exists(_path))
-        {
-            return Array.Empty<FeedSource>();
-        }
-
+        if (!File.Exists(_path)) return Array.Empty<FeedSource>();
         try
         {
             await using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
-            return await JsonSerializer.DeserializeAsync<List<FeedSource>>(stream, JsonOptions, cancellationToken)
-                ?? new List<FeedSource>();
+            return await JsonSerializer.DeserializeAsync<List<FeedSource>>(stream, JsonOptions, cancellationToken) ?? new List<FeedSource>();
         }
         catch (JsonException)
         {
@@ -111,31 +87,42 @@ public sealed class FeedStore
         }
     }
 
+    private async Task WriteSourcesAsync(IReadOnlyList<FeedSource> sources, CancellationToken cancellationToken)
+    {
+        var directory = GetDirectory();
+        Directory.CreateDirectory(directory);
+        var tempPath = Path.Combine(directory, $".{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await using (var write = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: true))
+            {
+                await JsonSerializer.SerializeAsync(write, sources, JsonOptions, cancellationToken);
+                await write.FlushAsync(cancellationToken);
+            }
+            File.Move(tempPath, _path, overwrite: true);
+        }
+        finally { if (File.Exists(tempPath)) File.Delete(tempPath); }
+    }
+
     private static Dictionary<string, FeedSource> NormalizeSources(IEnumerable<FeedSource> sources)
     {
         var byUrl = new Dictionary<string, FeedSource>(StringComparer.OrdinalIgnoreCase);
         foreach (var source in sources)
         {
-            if (source is null || !TryNormalizeUrl(source.Url, out var normalizedUrl))
-            {
-                continue;
-            }
-
+            if (source is null || !TryNormalizeUrl(source.Url, out var normalizedUrl)) continue;
             byUrl[normalizedUrl] = source with { Url = normalizedUrl };
         }
-
         return byUrl;
     }
+
+    private static IReadOnlyList<FeedSource> Ordered(Dictionary<string, FeedSource> sources) =>
+        sources.Values.OrderBy(x => x.Title ?? x.Url).ToList();
 
     private static bool TryNormalizeUrl(string? url, out string normalizedUrl)
     {
         normalizedUrl = string.Empty;
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
-        {
-            return false;
-        }
-
+            (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)) return false;
         normalizedUrl = uri.ToString();
         return true;
     }
@@ -144,18 +131,10 @@ public sealed class FeedStore
     {
         try
         {
-            if (!File.Exists(_path))
-            {
-                return;
-            }
-
-            var corruptPath = $"{_path}.corrupt-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}";
-            File.Move(_path, corruptPath, overwrite: false);
+            if (!File.Exists(_path)) return;
+            File.Move(_path, $"{_path}.corrupt-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}", overwrite: false);
         }
-        catch (IOException)
-        {
-            // Best effort: a concurrent recovery may already have moved the file.
-        }
+        catch (IOException) { }
     }
 
     private async Task<FileStream> AcquireProcessLockAsync(CancellationToken cancellationToken)
@@ -163,18 +142,11 @@ public sealed class FeedStore
         var directory = GetDirectory();
         Directory.CreateDirectory(directory);
         var lockPath = _path + ".lock";
-
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            try
-            {
-                return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, useAsync: true);
-            }
-            catch (IOException)
-            {
-                await Task.Delay(50, cancellationToken);
-            }
+            try { return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, useAsync: true); }
+            catch (IOException) { await Task.Delay(50, cancellationToken); }
         }
     }
 
