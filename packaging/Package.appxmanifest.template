@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  IgnorableNamespaces="uap uap3 rescap">
+
+  <Identity Name="trvny.Feedboard" Publisher="CN=PLACEHOLDER" Version="0.1.0.0" />
+
+  <Properties>
+    <DisplayName>Feedboard</DisplayName>
+    <PublisherDisplayName>trvny</PublisherDisplayName>
+    <Logo>Assets\Feedboard.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="x-generate" />
+  </Resources>
+
+  <Applications>
+    <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
+      <uap:VisualElements
+        DisplayName="Feedboard"
+        Description="RSS and Atom headlines for the Windows 11 Widgets Board"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Feedboard.png"
+        Square44x44Logo="Assets\Feedboard.png" />
+
+      <Extensions>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="Feedboard.WidgetProvider.exe" Arguments="-RegisterProcessAsComServer" DisplayName="Feedboard widget provider">
+              <com:Class Id="6890AE95-9824-4DD2-BF3B-B0E3724639F2" DisplayName="Feedboard widget provider" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
+
+        <uap3:Extension Category="windows.appExtension">
+          <uap3:AppExtension Name="com.microsoft.windows.widgets" DisplayName="Feedboard" Id="trvny.feedboard" PublicFolder="Public">
+            <uap3:Properties>
+              <WidgetProvider>
+                <ProviderIcons>
+                  <Icon Path="Assets\Feedboard.png" />
+                </ProviderIcons>
+                <Activation>
+                  <CreateInstance ClassId="6890AE95-9824-4DD2-BF3B-B0E3724639F2" />
+                </Activation>
+                <Definitions>
+                  <Definition
+                    Id="Feedboard_Headlines"
+                    DisplayName="Feedboard"
+                    Description="RSS and Atom headlines"
+                    AllowMultiple="true">
+                    <Capabilities>
+                      <Capability><Size Name="small" /></Capability>
+                      <Capability><Size Name="medium" /></Capability>
+                      <Capability><Size Name="large" /></Capability>
+                    </Capabilities>
+                    <ThemeResources>
+                      <Icons><Icon Path="Assets\Feedboard.png" /></Icons>
+                      <DarkMode />
+                      <LightMode />
+                    </ThemeResources>
+                  </Definition>
+                </Definitions>
+              </WidgetProvider>
+            </uap3:Properties>
+          </uap3:AppExtension>
+        </uap3:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

@@ -1,0 +1,6 @@
+src/**/bin/
+src/**/obj/
+assets/generated/
+packaging/Assets/
+*.user
+*.suo
