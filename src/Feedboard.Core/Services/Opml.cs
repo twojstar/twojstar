@@ -14,11 +14,16 @@ public static class Opml
             .Select(x => new
             {
                 Url = (string?)x.Attribute("xmlUrl"),
-                Title = (string?)x.Attribute("title") ?? (string?)x.Attribute("text")
+                Title = (string?)x.Attribute("title") ?? (string?)x.Attribute("text"),
+                Enabled = ParseEnabled((string?)x.Attribute("enabled"))
             })
             .Where(x => Uri.TryCreate(x.Url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp))
             .GroupBy(x => x.Url!, StringComparer.OrdinalIgnoreCase)
-            .Select(g => new FeedSource(g.Key, g.First().Title))
+            .Select(g =>
+            {
+                var feed = g.First();
+                return new FeedSource(g.Key, feed.Title, feed.Enabled);
+            })
             .ToList();
     }
 
@@ -30,7 +35,8 @@ public static class Opml
                     new XAttribute("type", "rss"),
                     new XAttribute("text", feed.Title ?? feed.Url),
                     new XAttribute("title", feed.Title ?? feed.Url),
-                    new XAttribute("xmlUrl", feed.Url))));
+                    new XAttribute("xmlUrl", feed.Url),
+                    new XAttribute("enabled", feed.Enabled))));
 
         var document = new XDocument(
             new XDeclaration("1.0", "utf-8", null),
@@ -41,4 +47,7 @@ public static class Opml
 
         return document.ToString();
     }
+
+    private static bool ParseEnabled(string? value) =>
+        !bool.TryParse(value, out var enabled) || enabled;
 }

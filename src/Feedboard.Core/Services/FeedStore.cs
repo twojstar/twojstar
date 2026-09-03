@@ -25,7 +25,9 @@ public sealed class FeedStore
         try
         {
             await using var processLock = await AcquireProcessLockAsync(cancellationToken);
-            return await ReadSourcesAsync(cancellationToken);
+            return NormalizeSources(await ReadSourcesAsync(cancellationToken)).Values
+                .OrderBy(x => x.Title ?? x.Url)
+                .ToList();
         }
         finally
         {
@@ -35,12 +37,12 @@ public sealed class FeedStore
 
     public async Task AddAsync(string url, CancellationToken cancellationToken = default)
     {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+        if (!TryNormalizeUrl(url, out var normalizedUrl))
         {
             throw new ArgumentException("Feed URL must be an absolute HTTP(S) URL.", nameof(url));
         }
 
-        await MergeAsync(new[] { new FeedSource(uri.ToString()) }, cancellationToken);
+        await MergeAsync(new[] { new FeedSource(normalizedUrl) }, cancellationToken);
     }
 
     public async Task MergeAsync(IEnumerable<FeedSource> incoming, CancellationToken cancellationToken = default)
@@ -49,17 +51,16 @@ public sealed class FeedStore
         try
         {
             await using var processLock = await AcquireProcessLockAsync(cancellationToken);
-            var current = (await ReadSourcesAsync(cancellationToken)).ToList();
-            var byUrl = current.ToDictionary(x => x.Url, StringComparer.OrdinalIgnoreCase);
+            var byUrl = NormalizeSources(await ReadSourcesAsync(cancellationToken));
 
             foreach (var source in incoming)
             {
-                if (!Uri.TryCreate(source.Url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+                if (source is null || !TryNormalizeUrl(source.Url, out var normalizedUrl))
                 {
                     continue;
                 }
 
-                byUrl[source.Url] = source;
+                byUrl[normalizedUrl] = source with { Url = normalizedUrl };
             }
 
             var directory = GetDirectory();
@@ -108,6 +109,35 @@ public sealed class FeedStore
             QuarantineCorruptStore();
             return Array.Empty<FeedSource>();
         }
+    }
+
+    private static Dictionary<string, FeedSource> NormalizeSources(IEnumerable<FeedSource> sources)
+    {
+        var byUrl = new Dictionary<string, FeedSource>(StringComparer.OrdinalIgnoreCase);
+        foreach (var source in sources)
+        {
+            if (source is null || !TryNormalizeUrl(source.Url, out var normalizedUrl))
+            {
+                continue;
+            }
+
+            byUrl[normalizedUrl] = source with { Url = normalizedUrl };
+        }
+
+        return byUrl;
+    }
+
+    private static bool TryNormalizeUrl(string? url, out string normalizedUrl)
+    {
+        normalizedUrl = string.Empty;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+        {
+            return false;
+        }
+
+        normalizedUrl = uri.ToString();
+        return true;
     }
 
     private void QuarantineCorruptStore()
