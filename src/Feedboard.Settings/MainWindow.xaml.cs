@@ -14,6 +14,7 @@ public sealed partial class MainWindow : Window
     private readonly AppSettingsStore _settingsStore = new();
     private readonly FeedDiscovery _feedDiscovery = new();
     private bool _isReloading;
+    private readonly Dictionary<string, int> _urlEditGenerations = new(StringComparer.Ordinal);
     public ObservableCollection<FeedRow> Feeds { get; } = new();
 
     public MainWindow()
@@ -27,11 +28,11 @@ public sealed partial class MainWindow : Window
         _isReloading = true;
         try
         {
-            var existing = Feeds.ToDictionary(row => row.Url, StringComparer.OrdinalIgnoreCase);
+            var existing = Feeds.ToDictionary(row => row.Id, StringComparer.Ordinal);
             Feeds.Clear();
             foreach (var feed in await _store.LoadAsync())
             {
-                if (existing.TryGetValue(feed.Url, out var row))
+                if (existing.TryGetValue(feed.StableId, out var row))
                 {
                     row.UpdateSource(feed);
                     Feeds.Add(row);
@@ -155,7 +156,7 @@ public sealed partial class MainWindow : Window
             if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
 
             var savedName = input.Text.Trim();
-            await _store.SetTitleAsync(row.Url, savedName);
+            await _store.SetTitleAsync(row.Id, savedName);
             await ReloadAsync();
             StatusText.Text = string.IsNullOrWhiteSpace(savedName)
                 ? "Custom feed name cleared."
@@ -163,6 +164,43 @@ public sealed partial class MainWindow : Window
         });
     }
 
+    private async void EditFeedUrl_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not FeedRow row) return;
+        await RunUiOperationAsync(async () =>
+        {
+            var root = (Content as FrameworkElement)?.XamlRoot;
+            if (root is null) throw new InvalidOperationException("Settings window is not ready.");
+
+            var input = new TextBox
+            {
+                Text = row.Url,
+                PlaceholderText = "Website or feed URL",
+                MinWidth = 420
+            };
+            var dialog = new ContentDialog
+            {
+                Title = "Edit feed URL",
+                Content = input,
+                PrimaryButtonText = "Save",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = root
+            };
+
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+
+            var generation = _urlEditGenerations.TryGetValue(row.Id, out var current) ? current + 1 : 1;
+            _urlEditGenerations[row.Id] = generation;
+            StatusText.Text = "Looking for a feed…";
+            var feedUrl = await _feedDiscovery.ResolveFeedUrlAsync(input.Text.Trim());
+            if (!_urlEditGenerations.TryGetValue(row.Id, out var latest) || latest != generation) return;
+            await _store.SetUrlAsync(row.Id, feedUrl);
+            await ReloadAsync();
+            Feeds.FirstOrDefault(feed => feed.Id == row.Id)?.SetHealth("Healthy");
+            StatusText.Text = $"Feed URL updated to {new Uri(feedUrl).Host}.";
+        });
+    }
     private async Task<string?> ProbeFeedAsync(FeedRow row)
     {
         await row.ProbeGate.WaitAsync();
@@ -193,7 +231,7 @@ public sealed partial class MainWindow : Window
         if ((sender as FrameworkElement)?.DataContext is not FeedRow row) return;
         await RunUiOperationAsync(async () =>
         {
-            await _store.RemoveAsync(row.Url);
+            await _store.RemoveAsync(row.Id);
             await ReloadAsync();
         });
     }
@@ -203,7 +241,7 @@ public sealed partial class MainWindow : Window
         if (_isReloading || (sender as FrameworkElement)?.DataContext is not FeedRow row || sender is not ToggleSwitch toggle) return;
         await RunUiOperationAsync(async () =>
         {
-            await _store.SetEnabledAsync(row.Url, toggle.IsOn);
+            await _store.SetEnabledAsync(row.Id, toggle.IsOn);
             await ReloadAsync();
         });
     }
@@ -258,21 +296,31 @@ public sealed class FeedRow : INotifyPropertyChanged
 
     public FeedRow(FeedSource source)
     {
-        Url = source.Url;
+        Id = source.StableId;
         UpdateSource(source);
     }
 
     public void UpdateSource(FeedSource source)
     {
+        var urlChanged = !string.IsNullOrEmpty(Url) && !string.Equals(Url, source.Url, StringComparison.OrdinalIgnoreCase);
+        Url = source.Url;
         CustomTitle = source.Title;
         DisplayName = source.Title ?? source.Url;
         Enabled = source.Enabled;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Url)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CustomTitle)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DisplayName)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Enabled)));
+        if (urlChanged)
+        {
+            HealthText = "Not tested";
+            LastError = null;
+            LastCheckedAt = null;
+        }
     }
 
-    public string Url { get; }
+    public string Id { get; }
+    public string Url { get; private set; } = string.Empty;
     public string? CustomTitle { get; private set; }
     public string DisplayName { get; private set; } = string.Empty;
     public bool Enabled { get; private set; }

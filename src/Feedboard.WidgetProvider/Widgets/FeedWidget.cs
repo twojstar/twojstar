@@ -75,10 +75,11 @@ public sealed class FeedWidget : IDisposable
         {
             await UpdateRefreshIntervalAsync(cancellationToken);
             var sources = await _store.LoadAsync(cancellationToken);
-            if (_state.SelectedFeedUrls is not null)
+            MigrateLegacyFeedSelection();
+            if (_state.SelectedFeedIds is not null)
             {
-                var selected = new HashSet<string>(_state.SelectedFeedUrls, StringComparer.OrdinalIgnoreCase);
-                sources = sources.Where(source => selected.Contains(source.Url)).ToList();
+                var selected = new HashSet<string>(_state.SelectedFeedIds, StringComparer.Ordinal);
+                sources = sources.Where(source => selected.Contains(source.StableId)).ToList();
             }
 
             var visibleFeedCount = sources.Count(source => source.Enabled);
@@ -133,6 +134,7 @@ public sealed class FeedWidget : IDisposable
         _customizationSources = (await _store.LoadAsync(cancellationToken))
             .Where(source => source.Enabled)
             .ToList();
+        MigrateLegacyFeedSelection();
         _isCustomizing = true;
         PushCustomizationCard();
     }
@@ -173,7 +175,7 @@ public sealed class FeedWidget : IDisposable
 
             if (args.Verb == "customize:all")
             {
-                _state = _state with { SelectedFeedUrls = null };
+                _state = _state with { SelectedFeedUrls = null, SelectedFeedIds = null };
                 PushCustomizationCard();
                 return;
             }
@@ -182,7 +184,7 @@ public sealed class FeedWidget : IDisposable
                 int.TryParse(args.Verb[customizeTogglePrefix.Length..], out var index) &&
                 index >= 0 && index < _customizationSources.Count)
             {
-                ToggleCustomizationSource(_customizationSources[index].Url);
+                ToggleCustomizationSource(_customizationSources[index].StableId);
                 PushCustomizationCard();
             }
 
@@ -278,14 +280,33 @@ public sealed class FeedWidget : IDisposable
         _state = _state with { ReadArticleIds = readIds };
     }
 
-    private void ToggleCustomizationSource(string url)
+    private void ToggleCustomizationSource(string feedId)
     {
-        var selected = _state.SelectedFeedUrls is null
-            ? new HashSet<string>(_customizationSources.Select(source => source.Url), StringComparer.OrdinalIgnoreCase)
-            : new HashSet<string>(_state.SelectedFeedUrls, StringComparer.OrdinalIgnoreCase);
+        MigrateLegacyFeedSelection();
+        var selected = _state.SelectedFeedIds is null
+            ? new HashSet<string>(_customizationSources.Select(source => source.StableId), StringComparer.Ordinal)
+            : new HashSet<string>(_state.SelectedFeedIds, StringComparer.Ordinal);
 
-        if (!selected.Add(url)) selected.Remove(url);
-        _state = _state with { SelectedFeedUrls = selected.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList() };
+        if (!selected.Add(feedId)) selected.Remove(feedId);
+        _state = _state with
+        {
+            SelectedFeedUrls = null,
+            SelectedFeedIds = selected.OrderBy(value => value, StringComparer.Ordinal).ToList()
+        };
+    }
+
+    private void MigrateLegacyFeedSelection()
+    {
+        if (_state.SelectedFeedIds is not null || _state.SelectedFeedUrls is null) return;
+        _state = _state with
+        {
+            SelectedFeedIds = _state.SelectedFeedUrls
+                .Select(FeedIdentity.FromUrl)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(value => value, StringComparer.Ordinal)
+                .ToList(),
+            SelectedFeedUrls = null
+        };
     }
 
     private void PushCustomizationCard()

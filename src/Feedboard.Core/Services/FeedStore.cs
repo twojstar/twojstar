@@ -41,40 +41,69 @@ public sealed class FeedStore
             foreach (var source in incoming)
             {
                 if (source is null || !TryNormalizeUrl(source.Url, out var normalizedUrl)) continue;
-                byUrl[normalizedUrl] = source with { Url = normalizedUrl };
+                var id = byUrl.TryGetValue(normalizedUrl, out var existing)
+                    ? existing.StableId
+                    : source.StableId;
+                byUrl[normalizedUrl] = source with { Url = normalizedUrl, Id = id };
             }
         }, cancellationToken);
     }
 
-    public Task RemoveAsync(string url, CancellationToken cancellationToken = default) =>
+    public Task RemoveAsync(string id, CancellationToken cancellationToken = default) =>
         MutateAsync(byUrl =>
         {
-            if (TryNormalizeUrl(url, out var normalizedUrl)) byUrl.Remove(normalizedUrl);
+            var source = FindById(byUrl, id);
+            if (source is not null) byUrl.Remove(source.Url);
         }, cancellationToken);
 
-    public Task SetEnabledAsync(string url, bool enabled, CancellationToken cancellationToken = default) =>
+    public Task SetEnabledAsync(string id, bool enabled, CancellationToken cancellationToken = default) =>
         MutateAsync(byUrl =>
         {
-            if (TryNormalizeUrl(url, out var normalizedUrl) && byUrl.TryGetValue(normalizedUrl, out var source))
-                byUrl[normalizedUrl] = source with { Enabled = enabled };
+            var source = FindById(byUrl, id);
+            if (source is not null) byUrl[source.Url] = source with { Enabled = enabled, Id = source.StableId };
         }, cancellationToken);
 
-    public async Task SetTitleAsync(string url, string? title, CancellationToken cancellationToken = default)
+    public async Task SetTitleAsync(string id, string? title, CancellationToken cancellationToken = default)
     {
         var normalizedTitle = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
         if (normalizedTitle?.Length > 120)
             throw new ArgumentException("Feed name must be 120 characters or fewer.", nameof(title));
-        if (!TryNormalizeUrl(url, out var normalizedUrl)) return;
 
         await _gate.WaitAsync(cancellationToken);
         try
         {
             await using var processLock = await AcquireProcessLockAsync(cancellationToken);
             var byUrl = NormalizeSources(await ReadSourcesAsync(cancellationToken));
-            if (!byUrl.TryGetValue(normalizedUrl, out var source) || string.Equals(source.Title, normalizedTitle, StringComparison.Ordinal))
-                return;
+            var source = FindById(byUrl, id);
+            if (source is null || string.Equals(source.Title, normalizedTitle, StringComparison.Ordinal)) return;
 
-            byUrl[normalizedUrl] = source with { Title = normalizedTitle };
+            byUrl[source.Url] = source with { Title = normalizedTitle, Id = source.StableId };
+            await WriteSourcesAsync(Ordered(byUrl), cancellationToken);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task SetUrlAsync(string id, string url, CancellationToken cancellationToken = default)
+    {
+        if (!TryNormalizeUrl(url, out var normalizedUrl))
+            throw new ArgumentException("Feed URL must be an absolute HTTP(S) URL.", nameof(url));
+
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var processLock = await AcquireProcessLockAsync(cancellationToken);
+            var byUrl = NormalizeSources(await ReadSourcesAsync(cancellationToken));
+            var source = FindById(byUrl, id);
+            if (source is null || string.Equals(source.Url, normalizedUrl, StringComparison.OrdinalIgnoreCase)) return;
+
+            if (byUrl.TryGetValue(normalizedUrl, out var duplicate) &&
+                !string.Equals(duplicate.StableId, source.StableId, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("That feed URL is already saved.");
+            }
+
+            byUrl.Remove(source.Url);
+            byUrl[normalizedUrl] = source with { Url = normalizedUrl, Id = source.StableId };
             await WriteSourcesAsync(Ordered(byUrl), cancellationToken);
         }
         finally { _gate.Release(); }
@@ -131,10 +160,14 @@ public sealed class FeedStore
         foreach (var source in sources)
         {
             if (source is null || !TryNormalizeUrl(source.Url, out var normalizedUrl)) continue;
-            byUrl[normalizedUrl] = source with { Url = normalizedUrl };
+            var id = string.IsNullOrWhiteSpace(source.Id) ? FeedIdentity.FromUrl(normalizedUrl) : source.Id.Trim();
+            byUrl[normalizedUrl] = source with { Url = normalizedUrl, Id = id };
         }
         return byUrl;
     }
+
+    private static FeedSource? FindById(Dictionary<string, FeedSource> sources, string id) =>
+        sources.Values.FirstOrDefault(source => string.Equals(source.StableId, id, StringComparison.Ordinal));
 
     private static IReadOnlyList<FeedSource> Ordered(Dictionary<string, FeedSource> sources) =>
         sources.Values.OrderBy(x => x.Title ?? x.Url).ToList();

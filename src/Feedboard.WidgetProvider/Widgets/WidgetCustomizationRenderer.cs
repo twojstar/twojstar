@@ -10,9 +10,10 @@ public static class WidgetCustomizationRenderer
 
     public static string Render(IReadOnlyList<FeedSource> sources, WidgetState state)
     {
-        var selected = state.SelectedFeedUrls is null
+        var selectedValues = state.SelectedFeedIds ?? state.SelectedFeedUrls?.Select(FeedIdentity.FromUrl).ToList();
+        var selected = selectedValues is null
             ? null
-            : new HashSet<string>(state.SelectedFeedUrls, StringComparer.OrdinalIgnoreCase);
+            : new HashSet<string>(selectedValues, StringComparer.Ordinal);
         var body = new JsonArray
         {
             new JsonObject
@@ -34,7 +35,7 @@ public static class WidgetCustomizationRenderer
         for (var index = 0; index < sources.Count; index++)
         {
             var source = sources[index];
-            var isSelected = selected is null || selected.Contains(source.Url);
+            var isSelected = selected is null || selected.Contains(source.StableId);
             body.Add(new JsonObject
             {
                 ["type"] = "ColumnSet",

@@ -24,7 +24,7 @@
     <ListView x:Name="FeedsList" Grid.Row="3" ItemsSource="{x:Bind Feeds}">
       <ListView.ItemTemplate>
         <DataTemplate x:DataType="local:FeedRow" xmlns:local="using:Feedboard.Settings">
-          <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="12" Padding="4,8">
+          <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="12" Padding="4,8">
             <ToggleSwitch IsOn="{x:Bind Enabled, Mode=OneWay}" Toggled="Enabled_Toggled" />
             <StackPanel Grid.Column="1">
               <TextBlock Text="{x:Bind DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
@@ -36,8 +36,9 @@
               <TextBlock Text="{x:Bind LastError, Mode=OneWay}" Opacity="0.65" TextTrimming="CharacterEllipsis" />
             </StackPanel>
             <Button Grid.Column="2" Content="Test" Click="TestFeed_Click" />
-            <Button Grid.Column="3" Content="Rename" Click="RenameFeed_Click" />
-            <Button Grid.Column="4" Content="Remove" Click="RemoveFeed_Click" />
+            <Button Grid.Column="3" Content="Edit URL" Click="EditFeedUrl_Click" />
+            <Button Grid.Column="4" Content="Rename" Click="RenameFeed_Click" />
+            <Button Grid.Column="5" Content="Remove" Click="RemoveFeed_Click" />
           </Grid>
         </DataTemplate>
       </ListView.ItemTemplate>
