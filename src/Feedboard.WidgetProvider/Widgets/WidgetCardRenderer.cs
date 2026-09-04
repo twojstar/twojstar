@@ -20,6 +20,9 @@ public static class WidgetCardRenderer
     {
         var profile = LayoutProfile.For(size);
         var visibleArticles = articles.Take(profile.ArticleLimit).ToList();
+        var readIds = state.ReadArticleIds is null
+            ? null
+            : new HashSet<string>(state.ReadArticleIds, StringComparer.Ordinal);
         var body = new JsonArray
         {
             Header(updatedAt)
@@ -42,6 +45,7 @@ public static class WidgetCardRenderer
                 body.Add(ArticleRow(
                     article,
                     state.ExpandedArticleId == article.Id,
+                    readIds?.Contains(article.Id) == true,
                     profile.ShowThumbnails,
                     profile.TitleLines,
                     profile.SummaryLines));
@@ -116,6 +120,7 @@ public static class WidgetCardRenderer
     private static JsonObject ArticleRow(
         FeedArticle article,
         bool expanded,
+        bool isRead,
         bool showThumbnail,
         int titleLines,
         int summaryLines)
@@ -159,8 +164,9 @@ public static class WidgetCardRenderer
                             new JsonObject
                             {
                                 ["type"] = "TextBlock",
-                                ["text"] = article.Title,
-                                ["weight"] = "Bolder",
+                                ["text"] = isRead ? article.Title : $"● {article.Title}",
+                                ["weight"] = isRead ? "Default" : "Bolder",
+                                ["isSubtle"] = isRead,
                                 ["wrap"] = true,
                                 ["maxLines"] = expanded ? titleLines + 1 : titleLines
                             },

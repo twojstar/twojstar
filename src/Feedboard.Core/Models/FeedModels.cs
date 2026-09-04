@@ -17,4 +17,5 @@ public sealed record FeedArticle(
 
 public sealed record WidgetState(
     string? ExpandedArticleId = null,
-    IReadOnlyList<string>? SelectedFeedUrls = null);
+    IReadOnlyList<string>? SelectedFeedUrls = null,
+    IReadOnlyList<string>? ReadArticleIds = null);

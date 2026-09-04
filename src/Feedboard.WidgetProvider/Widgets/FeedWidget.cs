@@ -10,6 +10,7 @@ namespace Feedboard.Widgets;
 public sealed class FeedWidget : IDisposable
 {
     public const string DefinitionId = "Feedboard_Headlines";
+    private const int MaxRememberedReadArticles = 200;
 
     private readonly string _id;
     private readonly FeedStore _store = new();
@@ -183,6 +184,7 @@ public sealed class FeedWidget : IDisposable
             var articleId = args.Verb[expandPrefix.Length..];
             if (_articles.Any(x => x.Id == articleId))
             {
+                MarkArticleRead(articleId);
                 _state = _state with { ExpandedArticleId = articleId };
                 PushCurrentCard();
             }
@@ -196,7 +198,16 @@ public sealed class FeedWidget : IDisposable
             var article = _articles.FirstOrDefault(x => x.Id == articleId);
             if (article is not null && Uri.TryCreate(article.Url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
             {
-                Process.Start(new ProcessStartInfo(uri.ToString()) { UseShellExecute = true });
+                try
+                {
+                    Process.Start(new ProcessStartInfo(uri.ToString()) { UseShellExecute = true });
+                    MarkArticleRead(articleId);
+                    PushCurrentCard();
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or PlatformNotSupportedException)
+                {
+                    Trace.TraceError($"Feedboard failed to open article: {ex}");
+                }
             }
         }
     }
@@ -251,6 +262,21 @@ public sealed class FeedWidget : IDisposable
         _refreshGate.Wait();
         _refreshGate.Release();
         _refreshGate.Dispose();
+    }
+
+    private void MarkArticleRead(string articleId)
+    {
+        var readIds = _state.ReadArticleIds is not { Count: > 0 }
+            ? new List<string>()
+            : _state.ReadArticleIds.Where(id => !string.Equals(id, articleId, StringComparison.Ordinal)).ToList();
+
+        readIds.Insert(0, articleId);
+        if (readIds.Count > MaxRememberedReadArticles)
+        {
+            readIds.RemoveRange(MaxRememberedReadArticles, readIds.Count - MaxRememberedReadArticles);
+        }
+
+        _state = _state with { ReadArticleIds = readIds };
     }
 
     private void ToggleCustomizationSource(string url)
