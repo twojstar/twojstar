@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Feedboard settings">
-  <Grid Padding="24" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
+  <Grid Padding="24" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="12">
     <StackPanel>
       <TextBlock Text="Feedboard" FontSize="28" FontWeight="SemiBold" />
       <TextBlock Text="Feeds, OPML and local widget settings" Opacity="0.7" />
@@ -12,7 +12,16 @@
       <TextBox x:Name="FeedUrlBox" PlaceholderText="https://example.com/feed.xml" />
       <Button Grid.Column="1" Content="Add feed" Click="AddFeed_Click" />
     </Grid>
-    <ListView x:Name="FeedsList" Grid.Row="2" ItemsSource="{x:Bind Feeds}">
+    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+      <TextBlock Text="Refresh every" VerticalAlignment="Center" />
+      <ComboBox x:Name="RefreshIntervalBox" Width="150" SelectionChanged="RefreshInterval_SelectionChanged">
+        <ComboBoxItem Content="5 minutes" Tag="5" />
+        <ComboBoxItem Content="15 minutes" Tag="15" />
+        <ComboBoxItem Content="30 minutes" Tag="30" />
+        <ComboBoxItem Content="60 minutes" Tag="60" />
+      </ComboBox>
+    </StackPanel>
+    <ListView x:Name="FeedsList" Grid.Row="3" ItemsSource="{x:Bind Feeds}">
       <ListView.ItemTemplate>
         <DataTemplate x:DataType="local:FeedRow" xmlns:local="using:Feedboard.Settings">
           <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12" Padding="4,8">
@@ -26,7 +35,7 @@
         </DataTemplate>
       </ListView.ItemTemplate>
     </ListView>
-    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8">
+    <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="8">
       <Button Content="Import OPML" Click="ImportOpml_Click" />
       <Button Content="Export OPML" Click="ExportOpml_Click" />
       <TextBlock x:Name="StatusText" VerticalAlignment="Center" Margin="8,0,0,0" />

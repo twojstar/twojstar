@@ -10,6 +10,7 @@ namespace Feedboard.Settings;
 public sealed partial class MainWindow : Window
 {
     private readonly FeedStore _store = new();
+    private readonly AppSettingsStore _settingsStore = new();
     private bool _isReloading;
     public ObservableCollection<FeedRow> Feeds { get; } = new();
 
@@ -26,6 +27,12 @@ public sealed partial class MainWindow : Window
         {
             Feeds.Clear();
             foreach (var feed in await _store.LoadAsync()) Feeds.Add(new FeedRow(feed));
+
+            var settings = await _settingsStore.LoadAsync();
+            RefreshIntervalBox.SelectedItem = RefreshIntervalBox.Items
+                .OfType<ComboBoxItem>()
+                .FirstOrDefault(item => string.Equals(item.Tag?.ToString(), settings.RefreshIntervalMinutes.ToString(), StringComparison.Ordinal));
+
             StatusText.Text = $"{Feeds.Count} feed(s)";
         }
         finally
@@ -81,6 +88,17 @@ public sealed partial class MainWindow : Window
         {
             await _store.SetEnabledAsync(row.Url, toggle.IsOn);
             await ReloadAsync();
+        });
+    }
+
+    private async void RefreshInterval_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isReloading || RefreshIntervalBox.SelectedItem is not ComboBoxItem item || !int.TryParse(item.Tag?.ToString(), out var minutes)) return;
+
+        await RunUiOperationAsync(async () =>
+        {
+            await _settingsStore.SetRefreshIntervalAsync(minutes);
+            StatusText.Text = $"Refresh interval set to {minutes} minutes.";
         });
     }
 

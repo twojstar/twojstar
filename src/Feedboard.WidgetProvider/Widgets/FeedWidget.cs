@@ -11,9 +11,9 @@ public sealed class FeedWidget : IDisposable
 {
     public const string DefinitionId = "Feedboard_Headlines";
 
-    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(15);
     private readonly string _id;
     private readonly FeedStore _store = new();
+    private readonly AppSettingsStore _settingsStore = new();
     private readonly FeedClient _client = new();
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private readonly object _lifecycleGate = new();
@@ -22,6 +22,7 @@ public sealed class FeedWidget : IDisposable
     private WidgetState _state;
     private WidgetSize _size;
     private Timer? _timer;
+    private TimeSpan _refreshInterval = TimeSpan.FromMinutes(AppSettingsStore.DefaultRefreshIntervalMinutes);
     private DateTimeOffset _updatedAt = DateTimeOffset.Now;
     private bool _disposed;
 
@@ -41,7 +42,7 @@ public sealed class FeedWidget : IDisposable
                 return;
             }
 
-            _timer ??= new Timer(_ => RefreshTimerCallback(), null, TimeSpan.Zero, RefreshInterval);
+            _timer ??= new Timer(_ => RefreshTimerCallback(), null, TimeSpan.Zero, _refreshInterval);
         }
     }
 
@@ -66,6 +67,7 @@ public sealed class FeedWidget : IDisposable
 
         try
         {
+            await UpdateRefreshIntervalAsync(cancellationToken);
             var sources = await _store.LoadAsync(cancellationToken);
             _articles = await _client.LoadAsync(sources, cancellationToken);
             _updatedAt = DateTimeOffset.Now;
@@ -175,6 +177,22 @@ public sealed class FeedWidget : IDisposable
         _refreshGate.Wait();
         _refreshGate.Release();
         _refreshGate.Dispose();
+    }
+
+    private async Task UpdateRefreshIntervalAsync(CancellationToken cancellationToken)
+    {
+        var settings = await _settingsStore.LoadAsync(cancellationToken);
+        var nextInterval = TimeSpan.FromMinutes(settings.RefreshIntervalMinutes);
+        if (nextInterval == _refreshInterval)
+        {
+            return;
+        }
+
+        _refreshInterval = nextInterval;
+        lock (_lifecycleGate)
+        {
+            _timer?.Change(_refreshInterval, _refreshInterval);
+        }
     }
 
     private void RefreshTimerCallback()
