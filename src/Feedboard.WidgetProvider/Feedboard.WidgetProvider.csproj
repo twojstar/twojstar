@@ -19,7 +19,13 @@
     <Content Include="Assets\Square150x150Logo.png" />
     <Content Include="Assets\StoreLogo.png" />
     <Content Include="Assets\WidgetPreview.png" />
-    <Content Include="$(SettingsPackageDir)\**\*" Link="Settings\%(RecursiveDir)%(Filename)%(Extension)" Condition="'$(SettingsPackageDir)' != ''" />
+    <Content Include="$(SettingsPackageDir)\**\*"
+             Exclude="$(SettingsPackageDir)\_xaml\**\*"
+             Link="Settings\%(RecursiveDir)%(Filename)%(Extension)"
+             Condition="'$(SettingsPackageDir)' != ''" />
+    <Content Include="$(SettingsPackageDir)\_xaml\*.xbf"
+             Link="%(Filename)%(Extension)"
+             Condition="'$(SettingsPackageDir)' != ''" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,6 +40,8 @@
   <Target Name="ValidateSettingsPackagePayload" BeforeTargets="_ComputeAppxPackagePayload" Condition="'$(GenerateAppxPackageOnBuild)' == 'true'">
     <Error Condition="'$(SettingsPackageDir)' == ''" Text="SettingsPackageDir must point to the published Feedboard.Settings payload when generating the Feedboard MSIX." />
     <Error Condition="!Exists('$(SettingsPackageDir)\Feedboard.Settings.exe')" Text="SettingsPackageDir does not contain Feedboard.Settings.exe. Publish Feedboard.Settings before generating the Feedboard MSIX." />
+    <Error Condition="!Exists('$(SettingsPackageDir)\_xaml\App.xbf')" Text="SettingsPackageDir does not contain App.xbf. Stage compiled Settings XAML before generating the Feedboard MSIX." />
+    <Error Condition="!Exists('$(SettingsPackageDir)\_xaml\MainWindow.xbf')" Text="SettingsPackageDir does not contain MainWindow.xbf. Stage compiled Settings XAML before generating the Feedboard MSIX." />
   </Target>
 
   <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
