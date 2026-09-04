@@ -18,6 +18,7 @@ public sealed partial class FeedClient
     private static readonly TimeSpan BodyTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan SiteIconCacheTtl = TimeSpan.FromHours(24);
     private static readonly HttpClient Http = CreateHttpClient();
+    private static readonly ConcurrentDictionary<string, FeedCacheEntry> FeedCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly ConcurrentDictionary<string, SiteIconCacheEntry> SiteIconCache = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<IReadOnlyList<FeedArticle>> LoadAsync(IEnumerable<FeedSource> sources, CancellationToken cancellationToken = default)
@@ -33,11 +34,27 @@ public sealed partial class FeedClient
 
     private static async Task<IReadOnlyList<FeedArticle>> LoadSingleSafeAsync(FeedSource source, CancellationToken cancellationToken)
     {
+        FeedCache.TryGetValue(source.Url, out var cached);
+        if (cached?.RetryAfter is { } retryAfter && retryAfter > DateTimeOffset.UtcNow)
+        {
+            return cached.Articles;
+        }
+
         try
         {
-            using var response = await Http.GetAsync(source.Url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var request = new HttpRequestMessage(HttpMethod.Get, source.Url);
+            if (!string.IsNullOrWhiteSpace(cached?.ETag)) request.Headers.IfNoneMatch.ParseAdd(cached.ETag);
+            if (cached?.LastModified is { } lastModified) request.Headers.IfModifiedSince = lastModified;
+
+            using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NotModified && cached is not null)
+            {
+                FeedCache[source.Url] = cached with { FailureCount = 0, RetryAfter = null };
+                return cached.Articles;
+            }
+
             response.EnsureSuccessStatusCode();
-            if (response.Content.Headers.ContentLength is > MaxFeedBytes) return Array.Empty<FeedArticle>();
+            if (response.Content.Headers.ContentLength is > MaxFeedBytes) return RegisterFeedFailure(source.Url, cached);
 
             using var bodyCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             bodyCts.CancelAfter(BodyTimeout);
@@ -48,7 +65,7 @@ public sealed partial class FeedClient
             {
                 var read = await stream.ReadAsync(chunk.AsMemory(0, chunk.Length), bodyCts.Token);
                 if (read == 0) break;
-                if (buffer.Length + read > MaxFeedBytes) return Array.Empty<FeedArticle>();
+                if (buffer.Length + read > MaxFeedBytes) return RegisterFeedFailure(source.Url, cached);
                 await buffer.WriteAsync(chunk.AsMemory(0, read), bodyCts.Token);
             }
 
@@ -88,10 +105,33 @@ public sealed partial class FeedClient
                 }
             }
 
+            FeedCache[source.Url] = new FeedCacheEntry(
+                articles,
+                response.Headers.ETag?.ToString(),
+                response.Content.Headers.LastModified,
+                FailureCount: 0,
+                RetryAfter: null);
             return articles;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch { return Array.Empty<FeedArticle>(); }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException or JsonException or FormatException)
+        {
+            Trace.TraceWarning($"Feedboard feed refresh failed for {source.Url}: {ex.Message}");
+            return RegisterFeedFailure(source.Url, cached);
+        }
+    }
+
+    private static IReadOnlyList<FeedArticle> RegisterFeedFailure(string feedUrl, FeedCacheEntry? cached)
+    {
+        if (cached is null) return Array.Empty<FeedArticle>();
+        var failures = Math.Min(cached.FailureCount + 1, 5);
+        var delayMinutes = Math.Min(5 * (1 << (failures - 1)), 60);
+        FeedCache[feedUrl] = cached with
+        {
+            FailureCount = failures,
+            RetryAfter = DateTimeOffset.UtcNow.AddMinutes(delayMinutes)
+        };
+        return cached.Articles;
     }
 
     private static async Task<string?> GetSiteIconAsync(string feedUrl, CancellationToken cancellationToken)
@@ -285,6 +325,12 @@ public sealed partial class FeedClient
         return client;
     }
 
+    private sealed record FeedCacheEntry(
+        IReadOnlyList<FeedArticle> Articles,
+        string? ETag,
+        DateTimeOffset? LastModified,
+        int FailureCount,
+        DateTimeOffset? RetryAfter);
     private sealed record SiteIconCacheEntry(Lazy<Task<string?>> Value, DateTimeOffset ExpiresAt);
 
     [GeneratedRegex("<link\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex LinkTagRegex();
