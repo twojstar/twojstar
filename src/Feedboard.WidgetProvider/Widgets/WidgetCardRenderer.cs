@@ -206,9 +206,8 @@ public static class WidgetCardRenderer
         int titleLines,
         int summaryLines)
     {
-        var imageUrl = showThumbnail && !string.IsNullOrWhiteSpace(article.ThumbnailUrl)
-            ? article.ThumbnailUrl
-            : article.FaviconUrl;
+        var hasThumbnail = showThumbnail && !string.IsNullOrWhiteSpace(article.ThumbnailUrl);
+        var imageUrl = hasThumbnail ? article.ThumbnailUrl : article.FaviconUrl;
         var markerItems = isRead
             ? new JsonArray()
             : new JsonArray
@@ -247,7 +246,9 @@ public static class WidgetCardRenderer
                         ["url"] = imageUrl,
                         ["size"] = "Small",
                         ["style"] = "Default",
-                        ["altText"] = article.FeedTitle
+                        ["altText"] = hasThumbnail
+                            ? $"Thumbnail for {article.Title}"
+                            : $"{article.FeedTitle} feed icon"
                     }
                 }
             });
@@ -313,7 +314,9 @@ public static class WidgetCardRenderer
             {
                 ["type"] = "Action.Execute",
                 ["verb"] = expanded ? $"open:{article.Id}" : $"expand:{article.Id}",
-                ["title"] = expanded ? "Open article" : "Show details"
+                ["title"] = expanded
+                    ? $"Open {article.Title}"
+                    : $"Show details for {article.Title}"
             }
         };
     }
