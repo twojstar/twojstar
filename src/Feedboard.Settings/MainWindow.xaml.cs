@@ -87,6 +87,42 @@ public sealed partial class MainWindow : Window
         });
     }
 
+    private async void RenameFeed_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not FeedRow row) return;
+        await RunUiOperationAsync(async () =>
+        {
+            var root = (Content as FrameworkElement)?.XamlRoot;
+            if (root is null) throw new InvalidOperationException("Settings window is not ready.");
+
+            var input = new TextBox
+            {
+                Text = row.CustomTitle ?? string.Empty,
+                PlaceholderText = "Custom feed name (optional)",
+                MaxLength = 120,
+                MinWidth = 320
+            };
+            var dialog = new ContentDialog
+            {
+                Title = "Rename feed",
+                Content = input,
+                PrimaryButtonText = "Save",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = root
+            };
+
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+
+            var savedName = input.Text.Trim();
+            await _store.SetTitleAsync(row.Url, savedName);
+            await ReloadAsync();
+            StatusText.Text = string.IsNullOrWhiteSpace(savedName)
+                ? "Custom feed name cleared."
+                : $"Renamed feed to {savedName}.";
+        });
+    }
+
     private async void RemoveFeed_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not FeedRow row) return;
@@ -153,11 +189,13 @@ public sealed class FeedRow
     public FeedRow(FeedSource source)
     {
         Url = source.Url;
+        CustomTitle = source.Title;
         DisplayName = source.Title ?? source.Url;
         Enabled = source.Enabled;
     }
 
     public string Url { get; }
+    public string? CustomTitle { get; }
     public string DisplayName { get; }
     public bool Enabled { get; }
 }

@@ -14,7 +14,7 @@ Feedboard should feel like the missing free feed widget in Windows 11:
 - first click expands an article in-place; clicking the expanded article opens the source
 - per-widget feed selection
 - unread/read state with unread-first ordering
-- WinUI settings for adding, removing, enabling and disabling feeds, refresh interval and OPML import/export
+- WinUI settings for adding, renaming, removing, enabling and disabling feeds, refresh interval and OPML import/export
 - conditional HTTP cache, transient-error backoff and duplicate suppression
 - compact feed retry/error status while cached headlines remain usable
 - local storage, no account and no backend
@@ -25,11 +25,11 @@ Feedboard should feel like the missing free feed widget in Windows 11:
 ```text
 Feedboard.Core
 ├─ Models/                     shared feed/article/settings models
-└─ Services/                   feed storage, app settings and OPML
+└─ Services/                   feed storage, app settings, discovery and OPML
 
 Feedboard.Settings
 ├─ MainWindow.xaml             WinUI feed/settings UI
-└─ MainWindow.xaml.cs          add/remove/enable feeds, refresh interval and OPML actions
+└─ MainWindow.xaml.cs          add/rename/remove/enable feeds, refresh interval and OPML actions
 
 Feedboard.WidgetProvider
 ├─ Services/FeedClient*        fetch + parse + cache/backoff + icon discovery
@@ -43,7 +43,7 @@ The Windows 11 board is the Windows Widgets host. Third-party widgets are suppli
 
 ## Managing feeds
 
-The packaged WinUI settings app is the normal way to add, remove, enable or disable feeds, choose the refresh interval, and import/export OPML.
+The packaged WinUI settings app is the normal way to add, rename, remove, enable or disable feeds, choose the refresh interval, and import/export OPML. Adding accepts either a direct feed URL or a normal website URL and discovers advertised feeds when available.
 
 The provider executable also keeps command-line feed management for development and recovery:
 
@@ -107,8 +107,8 @@ The original five implementation passes are now complete:
 
 Phase 2 can now focus on higher-level product polish rather than missing foundations:
 
-1. Feed discovery and validation from normal website URLs, with useful add-feed errors instead of requiring a direct feed URL.
-2. Settings UX polish: edit existing feeds, clearer health/status information and manual refresh/test actions.
+1. **Done:** feed discovery and validation from normal website URLs, with useful add-feed errors instead of requiring a direct feed URL.
+2. Settings UX polish: custom feed names are editable; next add stable-identity feed URL editing, clearer health/status information and manual refresh/test actions.
 3. Better article controls where the widget surface allows them, including explicit read/unread actions and richer expanded metadata.
 4. Local backup/restore and diagnostics for cache/feed state without introducing an account or backend.
 5. Production packaging/release readiness, including stable identity/signing and Store-oriented metadata when the app is ready for distribution.
