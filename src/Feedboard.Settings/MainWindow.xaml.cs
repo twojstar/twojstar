@@ -3,6 +3,7 @@ using Feedboard.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using Windows.Storage.Pickers;
 
 namespace Feedboard.Settings;
@@ -87,6 +88,33 @@ public sealed partial class MainWindow : Window
         });
     }
 
+    private async void TestFeed_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not FeedRow row) return;
+        await RunUiOperationAsync(async () =>
+        {
+            var error = await ProbeFeedAsync(row);
+            StatusText.Text = error is null ? $"{row.DisplayName} is healthy." : $"{row.DisplayName}: {error}";
+        });
+    }
+
+    private async void RefreshStatus_Click(object sender, RoutedEventArgs e)
+    {
+        await RunUiOperationAsync(async () =>
+        {
+            var enabled = Feeds.Where(row => row.Enabled).ToList();
+            if (enabled.Count == 0) { StatusText.Text = "No enabled feeds to test."; return; }
+            using var gate = new SemaphoreSlim(4);
+            var results = await Task.WhenAll(enabled.Select(async row =>
+            {
+                await gate.WaitAsync();
+                try { return await ProbeFeedAsync(row); }
+                finally { gate.Release(); }
+            }));
+            StatusText.Text = $"{results.Count(error => error is null)}/{enabled.Count} enabled feeds healthy.";
+        });
+    }
+
     private async void RenameFeed_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not FeedRow row) return;
@@ -121,6 +149,22 @@ public sealed partial class MainWindow : Window
                 ? "Custom feed name cleared."
                 : $"Renamed feed to {savedName}.";
         });
+    }
+
+    private async Task<string?> ProbeFeedAsync(FeedRow row)
+    {
+        row.HealthText = "Checking…";
+        try
+        {
+            await _feedDiscovery.ResolveFeedUrlAsync(row.Url);
+            row.HealthText = "Healthy";
+            return null;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or HttpRequestException or OperationCanceledException or IOException)
+        {
+            row.HealthText = "Problem";
+            return ex is OperationCanceledException ? "Feed test timed out." : ex.Message;
+        }
     }
 
     private async void RemoveFeed_Click(object sender, RoutedEventArgs e)
@@ -184,8 +228,10 @@ public sealed partial class MainWindow : Window
     }
 }
 
-public sealed class FeedRow
+public sealed class FeedRow : INotifyPropertyChanged
 {
+    private string _healthText = "Not tested";
+
     public FeedRow(FeedSource source)
     {
         Url = source.Url;
@@ -198,4 +244,15 @@ public sealed class FeedRow
     public string? CustomTitle { get; }
     public string DisplayName { get; }
     public bool Enabled { get; }
+    public string HealthText
+    {
+        get => _healthText;
+        set
+        {
+            if (string.Equals(_healthText, value, StringComparison.Ordinal)) return;
+            _healthText = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HealthText)));
+        }
+    }
+    public event PropertyChangedEventHandler? PropertyChanged;
 }

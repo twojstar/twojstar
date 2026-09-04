@@ -108,7 +108,7 @@ The original five implementation passes are now complete:
 Phase 2 can now focus on higher-level product polish rather than missing foundations:
 
 1. **Done:** feed discovery and validation from normal website URLs, with useful add-feed errors instead of requiring a direct feed URL.
-2. Settings UX polish: custom feed names are editable; next add stable-identity feed URL editing, clearer health/status information and manual refresh/test actions.
+2. Settings UX polish: custom feed names plus live feed health tests are available; next add stable-identity feed URL editing and deeper cache/refresh diagnostics.
 3. Better article controls where the widget surface allows them, including explicit read/unread actions and richer expanded metadata.
 4. Local backup/restore and diagnostics for cache/feed state without introducing an account or backend.
 5. Production packaging/release readiness, including stable identity/signing and Store-oriented metadata when the app is ready for distribution.

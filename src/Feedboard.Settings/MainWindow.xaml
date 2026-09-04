@@ -24,14 +24,16 @@
     <ListView x:Name="FeedsList" Grid.Row="3" ItemsSource="{x:Bind Feeds}">
       <ListView.ItemTemplate>
         <DataTemplate x:DataType="local:FeedRow" xmlns:local="using:Feedboard.Settings">
-          <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="12" Padding="4,8">
+          <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="12" Padding="4,8">
             <ToggleSwitch IsOn="{x:Bind Enabled, Mode=OneWay}" Toggled="Enabled_Toggled" />
             <StackPanel Grid.Column="1">
               <TextBlock Text="{x:Bind DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
               <TextBlock Text="{x:Bind Url}" Opacity="0.65" TextTrimming="CharacterEllipsis" />
+              <TextBlock Text="{x:Bind HealthText, Mode=OneWay}" Opacity="0.65" />
             </StackPanel>
-            <Button Grid.Column="2" Content="Rename" Click="RenameFeed_Click" />
-            <Button Grid.Column="3" Content="Remove" Click="RemoveFeed_Click" />
+            <Button Grid.Column="2" Content="Test" Click="TestFeed_Click" />
+            <Button Grid.Column="3" Content="Rename" Click="RenameFeed_Click" />
+            <Button Grid.Column="4" Content="Remove" Click="RemoveFeed_Click" />
           </Grid>
         </DataTemplate>
       </ListView.ItemTemplate>
@@ -39,6 +41,7 @@
     <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="8">
       <Button Content="Import OPML" Click="ImportOpml_Click" />
       <Button Content="Export OPML" Click="ExportOpml_Click" />
+      <Button Content="Refresh status" Click="RefreshStatus_Click" />
       <TextBlock x:Name="StatusText" VerticalAlignment="Center" Margin="8,0,0,0" />
     </StackPanel>
   </Grid>
