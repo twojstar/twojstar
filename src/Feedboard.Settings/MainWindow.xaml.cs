@@ -11,6 +11,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly FeedStore _store = new();
     private readonly AppSettingsStore _settingsStore = new();
+    private readonly FeedDiscovery _feedDiscovery = new();
     private bool _isReloading;
     public ObservableCollection<FeedRow> Feeds { get; } = new();
 
@@ -51,6 +52,18 @@ public sealed partial class MainWindow : Window
         {
             StatusText.Text = ex.Message;
         }
+        catch (InvalidOperationException ex)
+        {
+            StatusText.Text = ex.Message;
+        }
+        catch (HttpRequestException ex)
+        {
+            StatusText.Text = $"Feed request failed: {ex.Message}";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText.Text = "Feed request timed out.";
+        }
         catch (IOException ex)
         {
             StatusText.Text = $"File error: {ex.Message}";
@@ -65,9 +78,12 @@ public sealed partial class MainWindow : Window
     {
         await RunUiOperationAsync(async () =>
         {
-            await _store.AddAsync(FeedUrlBox.Text.Trim());
+            StatusText.Text = "Looking for a feed…";
+            var feedUrl = await _feedDiscovery.ResolveFeedUrlAsync(FeedUrlBox.Text.Trim());
+            await _store.AddAsync(feedUrl);
             FeedUrlBox.Text = string.Empty;
             await ReloadAsync();
+            StatusText.Text = $"Added {new Uri(feedUrl).Host}.";
         });
     }
 
