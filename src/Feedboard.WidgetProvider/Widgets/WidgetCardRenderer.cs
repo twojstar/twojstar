@@ -24,10 +24,14 @@ public static class WidgetCardRenderer
         var readIds = state.ReadArticleIds is null
             ? null
             : new HashSet<string>(state.ReadArticleIds, StringComparer.Ordinal);
+        var articleLimit = size == WidgetSize.Large && state.ExpandedArticleId is null && feedErrorLabels.Count == 0
+            ? 6
+            : profile.ArticleLimit;
         var visibleArticles = articles
-            .OrderBy(article => readIds?.Contains(article.Id) == true ? 1 : 0)
+            .OrderBy(article => state.ExpandedArticleId == article.Id ? 0 : 1)
+            .ThenBy(article => readIds?.Contains(article.Id) == true ? 1 : 0)
             .ThenByDescending(article => article.Published ?? DateTimeOffset.MinValue)
-            .Take(profile.ArticleLimit)
+            .Take(articleLimit)
             .ToList();
         var body = new JsonArray
         {
