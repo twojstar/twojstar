@@ -29,7 +29,11 @@
             <StackPanel Grid.Column="1">
               <TextBlock Text="{x:Bind DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
               <TextBlock Text="{x:Bind Url}" Opacity="0.65" TextTrimming="CharacterEllipsis" />
-              <TextBlock Text="{x:Bind HealthText, Mode=OneWay}" Opacity="0.65" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{x:Bind HealthText, Mode=OneWay}" Opacity="0.65" />
+                <TextBlock Text="{x:Bind LastCheckedText, Mode=OneWay}" Opacity="0.5" />
+              </StackPanel>
+              <TextBlock Text="{x:Bind LastError, Mode=OneWay}" Opacity="0.65" TextTrimming="CharacterEllipsis" />
             </StackPanel>
             <Button Grid.Column="2" Content="Test" Click="TestFeed_Click" />
             <Button Grid.Column="3" Content="Rename" Click="RenameFeed_Click" />

@@ -27,8 +27,20 @@ public sealed partial class MainWindow : Window
         _isReloading = true;
         try
         {
+            var existing = Feeds.ToDictionary(row => row.Url, StringComparer.OrdinalIgnoreCase);
             Feeds.Clear();
-            foreach (var feed in await _store.LoadAsync()) Feeds.Add(new FeedRow(feed));
+            foreach (var feed in await _store.LoadAsync())
+            {
+                if (existing.TryGetValue(feed.Url, out var row))
+                {
+                    row.UpdateSource(feed);
+                    Feeds.Add(row);
+                }
+                else
+                {
+                    Feeds.Add(new FeedRow(feed));
+                }
+            }
 
             var settings = await _settingsStore.LoadAsync();
             RefreshIntervalBox.SelectedItem = RefreshIntervalBox.Items
@@ -153,17 +165,26 @@ public sealed partial class MainWindow : Window
 
     private async Task<string?> ProbeFeedAsync(FeedRow row)
     {
-        row.HealthText = "Checking…";
+        await row.ProbeGate.WaitAsync();
         try
         {
-            await _feedDiscovery.ResolveFeedUrlAsync(row.Url);
-            row.HealthText = "Healthy";
-            return null;
+            row.HealthText = "Checking…";
+            try
+            {
+                await _feedDiscovery.ResolveFeedUrlAsync(row.Url);
+                row.SetHealth("Healthy");
+                return null;
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or HttpRequestException or OperationCanceledException or IOException)
+            {
+                var error = ex is OperationCanceledException ? "Feed test timed out." : ex.Message;
+                row.SetHealth("Problem", error);
+                return error;
+            }
         }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or HttpRequestException or OperationCanceledException or IOException)
+        finally
         {
-            row.HealthText = "Problem";
-            return ex is OperationCanceledException ? "Feed test timed out." : ex.Message;
+            row.ProbeGate.Release();
         }
     }
 
@@ -231,19 +252,47 @@ public sealed partial class MainWindow : Window
 public sealed class FeedRow : INotifyPropertyChanged
 {
     private string _healthText = "Not tested";
+    private DateTimeOffset? _lastCheckedAt;
+    private string? _lastError;
+    internal SemaphoreSlim ProbeGate { get; } = new(1, 1);
 
     public FeedRow(FeedSource source)
     {
         Url = source.Url;
+        UpdateSource(source);
+    }
+
+    public void UpdateSource(FeedSource source)
+    {
         CustomTitle = source.Title;
         DisplayName = source.Title ?? source.Url;
         Enabled = source.Enabled;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CustomTitle)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DisplayName)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Enabled)));
     }
 
     public string Url { get; }
-    public string? CustomTitle { get; }
-    public string DisplayName { get; }
-    public bool Enabled { get; }
+    public string? CustomTitle { get; private set; }
+    public string DisplayName { get; private set; } = string.Empty;
+    public bool Enabled { get; private set; }
+    public DateTimeOffset? LastCheckedAt
+    {
+        get => _lastCheckedAt;
+        private set { _lastCheckedAt = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LastCheckedText))); }
+    }
+    public string LastCheckedText => LastCheckedAt is null ? "Never checked" : $"Checked {LastCheckedAt.Value.LocalDateTime:HH:mm}";
+    public string? LastError
+    {
+        get => _lastError;
+        private set { _lastError = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LastError))); }
+    }
+    public void SetHealth(string text, string? error = null)
+    {
+        HealthText = text;
+        LastError = error;
+        LastCheckedAt = DateTimeOffset.Now;
+    }
     public string HealthText
     {
         get => _healthText;
