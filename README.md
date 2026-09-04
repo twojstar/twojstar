@@ -1,29 +1,39 @@
 # Feedboard
 
-A local-first RSS/Atom widget for the Windows 11 Widgets Board.
+A local-first RSS/Atom/JSON Feed reader for the Windows 11 Widgets Board.
 
-> Status: early prototype. The provider, feed parser, OPML plumbing and adaptive-card renderer are scaffolded. CI produces an attested, locally signed x64 MSIX development artifact, and the package has passed a real Windows 11 install/picker/render/resize smoke test.
+> Status: working development prototype. The packaged provider, WinUI settings app, feed parser, local state, OPML plumbing and adaptive-card renderer are implemented. For same-repository builds, CI produces an attested, locally signed x64 MSIX development artifact, and the package has passed a real Windows 11 install/picker/render/resize smoke test.
 
 ## Goal
 
 Feedboard should feel like the missing free feed widget in Windows 11:
 
-- RSS 2.0, Atom and RSS 1.0/RDF feeds
-- headline list with feed favicon and article thumbnail when available
-- small / medium / large widget layouts
+- RSS 2.0, Atom, RSS 1.0/RDF and JSON Feed 1.x
+- headline list with discovered feed/site icons and article thumbnails when available
+- small / medium / large layouts with size-specific density
 - first click expands an article in-place; clicking the expanded article opens the source
-- OPML import/export
+- per-widget feed selection
+- unread/read state with unread-first ordering
+- WinUI settings for adding, removing, enabling and disabling feeds, refresh interval and OPML import/export
+- conditional HTTP cache, transient-error backoff and duplicate suppression
+- compact feed retry/error status while cached headlines remain usable
 - local storage, no account and no backend
 - refresh while the Widgets Board is active
 
 ## Architecture
 
 ```text
+Feedboard.Core
+├─ Models/                     shared feed/article/settings models
+└─ Services/                   feed storage, app settings and OPML
+
+Feedboard.Settings
+├─ MainWindow.xaml             WinUI feed/settings UI
+└─ MainWindow.xaml.cs          add/remove/enable feeds, refresh interval and OPML actions
+
 Feedboard.WidgetProvider
-├─ Services/FeedClient.cs      fetch + parse RSS/Atom/RDF
-├─ Services/FeedStore.cs       local source persistence
-├─ Services/Opml.cs            OPML import/export
-├─ Widgets/FeedWidget.cs       widget lifecycle + refresh
+├─ Services/FeedClient*        fetch + parse + cache/backoff + icon discovery
+├─ Widgets/FeedWidget.cs       widget lifecycle, refresh, selection and read state
 ├─ Widgets/WidgetCardRenderer  Adaptive Card JSON
 ├─ Interop/                    packaged COM registration helper
 └─ Package.appxmanifest        single-project MSIX + widget registration
@@ -31,9 +41,11 @@ Feedboard.WidgetProvider
 
 The Windows 11 board is the Windows Widgets host. Third-party widgets are supplied by a packaged Win32 app (or PWA) and the widget UI is an Adaptive Card. Feedboard follows Microsoft's packaged C# provider shape.
 
-## Current prototype commands
+## Managing feeds
 
-The same executable can manage feeds while the settings UI is still being built:
+The packaged WinUI settings app is the normal way to add, remove, enable or disable feeds, choose the refresh interval, and import/export OPML.
+
+The provider executable also keeps command-line feed management for development and recovery:
 
 ```powershell
 Feedboard.WidgetProvider.exe feeds list
@@ -46,11 +58,13 @@ Feed definitions are stored in `%LOCALAPPDATA%\Feedboard\feeds.json`.
 
 ## MSIX package
 
-`Feedboard CI` builds the x64 provider as a single-project MSIX and uploads a `feedboard-msix-x64` artifact for each relevant PR/push. CI assigns a monotonically increasing development package version, includes the x86/x64 Windows App Runtime dependencies needed by the x64 package, and signs the MSIX with a fresh self-signed development certificate. Only the public `Feedboard.cer` is uploaded; the temporary private signing key is deleted on the runner.
+`Feedboard CI` is the single maintained Feedboard workflow. It publishes the self-contained WinUI settings app, packages it with the x64 provider as a single-project MSIX, and uploads a `feedboard-msix-x64` artifact for each relevant PR/push. CI assigns a monotonically increasing development package version, includes the x86/x64 Windows App Runtime dependencies needed by the x64 package, and signs the MSIX with a fresh self-signed development certificate. Only the public `Feedboard.cer` is uploaded; the temporary private signing key is deleted on the runner.
 
 For same-repository builds, GitHub also publishes Sigstore-backed artifact attestations for `Feedboard.msix`, `Feedboard.cer`, and the install helper. The helper refuses to trust the development certificate unless those attestations verify against `trvny/trvny`.
 
-To smoke-test it on Windows 11:
+The install helper is therefore intended for same-repository builds. Fork PR artifacts are still useful for CI validation, but they are not attested by this workflow and will fail the install helper's provenance verification.
+
+To smoke-test a same-repository build on Windows 11:
 
 1. Install and sign in to GitHub CLI (`gh`) so artifact provenance can be verified.
 2. Download and unzip the `feedboard-msix-x64` workflow artifact.
@@ -63,7 +77,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install-dev-package.ps
 4. Approve the administrator prompt. The helper verifies its own provenance, then verifies `Feedboard.msix` and `Feedboard.cer`, confirms that the certificate matches the package signature, imports the public certificate into `LocalMachine\TrustedPeople`, installs the bundled Windows App Runtime dependencies, and installs Feedboard.
 5. Open the Widgets Board, choose **Add widgets**, and look for Feedboard.
 
-The current development package has been verified on Windows 11: Feedboard installs, appears in the widget picker, renders live Atom headlines, reacts to small/medium/large size changes with size-specific content limits, collapses expanded content when shrinking, and keeps the provider running without a visible console window.
+The development package has been verified on Windows 11: Feedboard installs, appears in the widget picker, renders live headlines, reacts to small/medium/large size changes, preserves per-widget selection/read state, expands articles in place, and keeps the provider running without a visible console window.
 
 The certificate is a development-only trust anchor for this CI artifact. Remove it from `LocalMachine\TrustedPeople` when the build is no longer needed. Production/Store packaging will use a stable publisher identity and a publicly trusted signing route instead.
 
@@ -79,13 +93,25 @@ Requirements:
 
 The CI workflow is the reference packaging path because it creates the temporary development signing certificate, package, and provenance attestations together.
 
+## Phase 1 complete
+
+The original five implementation passes are now complete:
+
+1. WinUI settings window with adding/removing/enabling feeds, refresh interval and OPML import/export.
+2. Per-widget feed selection, unread/read state and unread-first ordering.
+3. JSON Feed support and HTML `link rel=icon` site-icon discovery.
+4. Conditional caching/backoff, duplicate suppression and feed-level retry status.
+5. Size-aware density, distinct empty/retry states, visual hierarchy and accessibility labels.
+
 ## Next passes
 
-1. Add a tiny WinUI settings window for feed CRUD, refresh interval and OPML import/export.
-2. Add per-widget feed selection, unread/read state and ordering.
-3. Add JSON Feed and better site icon discovery (`link rel=icon`).
-4. Add cache/backoff, duplicate suppression and feed-level error status.
-5. Polish widget density, empty/error states and visual hierarchy across all three sizes.
+Phase 2 can now focus on higher-level product polish rather than missing foundations:
+
+1. Feed discovery and validation from normal website URLs, with useful add-feed errors instead of requiring a direct feed URL.
+2. Settings UX polish: edit existing feeds, clearer health/status information and manual refresh/test actions.
+3. Better article controls where the widget surface allows them, including explicit read/unread actions and richer expanded metadata.
+4. Local backup/restore and diagnostics for cache/feed state without introducing an account or backend.
+5. Production packaging/release readiness, including stable identity/signing and Store-oriented metadata when the app is ready for distribution.
 
 ## References
 
