@@ -156,6 +156,12 @@ public sealed class FeedWidget : IDisposable
         const string openPrefix = "open:";
         const string customizeTogglePrefix = "customize:toggle:";
 
+        if (!_isCustomizing && args.Verb == "refresh")
+        {
+            RefreshAsync(waitForTurn: true, CancellationToken.None).GetAwaiter().GetResult();
+            return;
+        }
+
         if (_isCustomizing)
         {
             if (args.Verb == "customize:done")

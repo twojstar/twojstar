@@ -187,6 +187,30 @@ public static class WidgetCardRenderer
                 {
                     new JsonObject
                     {
+                        ["type"] = "ActionSet",
+                        ["spacing"] = "None",
+                        ["actions"] = new JsonArray
+                        {
+                            new JsonObject
+                            {
+                                ["type"] = "Action.Execute",
+                                ["verb"] = "refresh",
+                                ["title"] = "Refresh",
+                                ["tooltip"] = "Refresh feeds now"
+                            }
+                        }
+                    }
+                }
+            },
+            new JsonObject
+            {
+                ["type"] = "Column",
+                ["width"] = "auto",
+                ["verticalContentAlignment"] = "Center",
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
                         ["type"] = "TextBlock",
                         ["text"] = updatedAt.LocalDateTime.ToString("HH:mm"),
                         ["isSubtle"] = true,
