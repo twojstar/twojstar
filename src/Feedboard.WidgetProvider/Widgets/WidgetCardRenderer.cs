@@ -31,7 +31,7 @@ public static class WidgetCardRenderer
             .ToList();
         var body = new JsonArray
         {
-            Header(updatedAt)
+            Header(updatedAt, profile.CompactHeader)
         };
 
         if (visibleArticles.Count == 0)
@@ -47,11 +47,12 @@ public static class WidgetCardRenderer
                     state.ExpandedArticleId == article.Id,
                     readIds?.Contains(article.Id) == true,
                     profile.ShowThumbnails,
+                    profile.CompactRows,
                     profile.TitleLines,
                     profile.SummaryLines));
             }
 
-            if (size != WidgetSize.Small)
+            if (profile.ShowInteractionHint)
             {
                 body.Add(new JsonObject
                 {
@@ -155,7 +156,7 @@ public static class WidgetCardRenderer
         };
     }
 
-    private static JsonObject Header(DateTimeOffset updatedAt) => new()
+    private static JsonObject Header(DateTimeOffset updatedAt, bool compact) => new()
     {
         ["type"] = "ColumnSet",
         ["spacing"] = "None",
@@ -172,7 +173,7 @@ public static class WidgetCardRenderer
                         ["type"] = "TextBlock",
                         ["text"] = "Feedboard",
                         ["weight"] = "Bolder",
-                        ["size"] = "Medium",
+                        ["size"] = compact ? "Default" : "Medium",
                         ["wrap"] = true
                     }
                 }
@@ -201,67 +202,92 @@ public static class WidgetCardRenderer
         bool expanded,
         bool isRead,
         bool showThumbnail,
+        bool compact,
         int titleLines,
         int summaryLines)
     {
         var imageUrl = showThumbnail && !string.IsNullOrWhiteSpace(article.ThumbnailUrl)
             ? article.ThumbnailUrl
             : article.FaviconUrl;
+        var markerItems = isRead
+            ? new JsonArray()
+            : new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "TextBlock",
+                    ["text"] = "●",
+                    ["size"] = "Small",
+                    ["spacing"] = "None"
+                }
+            };
+        var columns = new JsonArray
+        {
+            new JsonObject
+            {
+                ["type"] = "Column",
+                ["width"] = "auto",
+                ["verticalContentAlignment"] = "Center",
+                ["items"] = markerItems
+            }
+        };
+
+        if (!string.IsNullOrWhiteSpace(imageUrl))
+        {
+            columns.Add(new JsonObject
+            {
+                ["type"] = "Column",
+                ["width"] = "auto",
+                ["verticalContentAlignment"] = "Center",
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["type"] = "Image",
+                        ["url"] = imageUrl,
+                        ["size"] = "Small",
+                        ["style"] = "Default",
+                        ["altText"] = article.FeedTitle
+                    }
+                }
+            });
+        }
+
+        columns.Add(new JsonObject
+        {
+            ["type"] = "Column",
+            ["width"] = "stretch",
+            ["items"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "TextBlock",
+                    ["text"] = article.Title,
+                    ["weight"] = isRead ? "Default" : "Bolder",
+                    ["isSubtle"] = isRead,
+                    ["wrap"] = true,
+                    ["maxLines"] = expanded ? titleLines + 1 : titleLines
+                },
+                new JsonObject
+                {
+                    ["type"] = "TextBlock",
+                    ["text"] = Meta(article),
+                    ["isSubtle"] = true,
+                    ["size"] = "Small",
+                    ["spacing"] = "None",
+                    ["wrap"] = true,
+                    ["maxLines"] = 1
+                }
+            }
+        });
 
         var rowItems = new JsonArray
         {
             new JsonObject
             {
                 ["type"] = "ColumnSet",
-                ["columns"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["type"] = "Column",
-                        ["width"] = "auto",
-                        ["verticalContentAlignment"] = "Center",
-                        ["items"] = string.IsNullOrWhiteSpace(imageUrl)
-                            ? new JsonArray()
-                            : new JsonArray
-                            {
-                                new JsonObject
-                                {
-                                    ["type"] = "Image",
-                                    ["url"] = imageUrl,
-                                    ["size"] = "Small",
-                                    ["style"] = "Default",
-                                    ["altText"] = article.FeedTitle
-                                }
-                            }
-                    },
-                    new JsonObject
-                    {
-                        ["type"] = "Column",
-                        ["width"] = "stretch",
-                        ["items"] = new JsonArray
-                        {
-                            new JsonObject
-                            {
-                                ["type"] = "TextBlock",
-                                ["text"] = isRead ? article.Title : $"● {article.Title}",
-                                ["weight"] = isRead ? "Default" : "Bolder",
-                                ["isSubtle"] = isRead,
-                                ["wrap"] = true,
-                                ["maxLines"] = expanded ? titleLines + 1 : titleLines
-                            },
-                            new JsonObject
-                            {
-                                ["type"] = "TextBlock",
-                                ["text"] = Meta(article),
-                                ["isSubtle"] = true,
-                                ["size"] = "Small",
-                                ["spacing"] = "None",
-                                ["wrap"] = true,
-                                ["maxLines"] = 1
-                            }
-                        }
-                    }
-                }
+                ["spacing"] = "None",
+                ["columns"] = columns
             }
         };
 
@@ -281,7 +307,7 @@ public static class WidgetCardRenderer
         {
             ["type"] = "Container",
             ["separator"] = true,
-            ["spacing"] = "Small",
+            ["spacing"] = compact ? "None" : "Small",
             ["items"] = rowItems,
             ["selectAction"] = new JsonObject
             {
@@ -298,14 +324,21 @@ public static class WidgetCardRenderer
         return string.IsNullOrWhiteSpace(date) ? article.FeedTitle : $"{article.FeedTitle} · {date}";
     }
 
-    private sealed record LayoutProfile(int ArticleLimit, bool ShowThumbnails, int TitleLines, int SummaryLines)
+    private sealed record LayoutProfile(
+        int ArticleLimit,
+        bool ShowThumbnails,
+        bool CompactHeader,
+        bool CompactRows,
+        bool ShowInteractionHint,
+        int TitleLines,
+        int SummaryLines)
     {
         public static LayoutProfile For(WidgetSize size) => size switch
         {
-            WidgetSize.Small => new LayoutProfile(1, false, 2, 2),
-            WidgetSize.Medium => new LayoutProfile(2, true, 2, 3),
-            WidgetSize.Large => new LayoutProfile(4, true, 2, 5),
-            _ => new LayoutProfile(2, true, 2, 3)
+            WidgetSize.Small => new LayoutProfile(2, false, true, true, false, 2, 1),
+            WidgetSize.Medium => new LayoutProfile(3, true, false, false, false, 2, 2),
+            WidgetSize.Large => new LayoutProfile(5, true, false, false, true, 2, 4),
+            _ => new LayoutProfile(3, true, false, false, false, 2, 2)
         };
     }
 }
