@@ -14,6 +14,7 @@ public static class WidgetCardRenderer
 
     public static string Render(
         IReadOnlyList<FeedArticle> articles,
+        IReadOnlyList<string> feedErrorLabels,
         WidgetState state,
         DateTimeOffset updatedAt,
         WidgetSize size)
@@ -67,6 +68,21 @@ public static class WidgetCardRenderer
                     ["spacing"] = "Small"
                 });
             }
+        }
+
+        if (feedErrorLabels.Count > 0)
+        {
+            var text = size == WidgetSize.Small
+                ? $"⚠ {feedErrorLabels.Count} feed{(feedErrorLabels.Count == 1 ? "" : "s")} retrying"
+                : $"⚠ Retrying: {string.Join(", ", feedErrorLabels.Take(2))}{(feedErrorLabels.Count > 2 ? $" +{feedErrorLabels.Count - 2}" : string.Empty)}";
+            body.Add(new JsonObject
+            {
+                ["type"] = "TextBlock",
+                ["text"] = text,
+                ["size"] = "Small",
+                ["wrap"] = true,
+                ["spacing"] = "Small"
+            });
         }
 
         var card = new JsonObject

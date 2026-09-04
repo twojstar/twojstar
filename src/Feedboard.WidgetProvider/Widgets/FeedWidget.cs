@@ -21,6 +21,7 @@ public sealed class FeedWidget : IDisposable
 
     private IReadOnlyList<FeedArticle> _articles = Array.Empty<FeedArticle>();
     private IReadOnlyList<FeedSource> _customizationSources = Array.Empty<FeedSource>();
+    private IReadOnlyList<string> _feedErrorLabels = Array.Empty<string>();
     private WidgetState _state;
     private WidgetSize _size;
     private Timer? _timer;
@@ -40,11 +41,7 @@ public sealed class FeedWidget : IDisposable
     {
         lock (_lifecycleGate)
         {
-            if (_disposed)
-            {
-                return;
-            }
-
+            if (_disposed) return;
             _timer ??= new Timer(_ => RefreshTimerCallback(), null, TimeSpan.Zero, _refreshInterval);
         }
     }
@@ -66,18 +63,12 @@ public sealed class FeedWidget : IDisposable
 
     private async Task RefreshAsync(bool waitForTurn, CancellationToken cancellationToken)
     {
-        if (_disposed)
-        {
-            return;
-        }
+        if (_disposed) return;
 
         var entered = waitForTurn
             ? await WaitForRefreshTurnAsync(cancellationToken)
             : await _refreshGate.WaitAsync(0, cancellationToken);
-        if (!entered)
-        {
-            return;
-        }
+        if (!entered) return;
 
         try
         {
@@ -90,6 +81,13 @@ public sealed class FeedWidget : IDisposable
             }
 
             _articles = await _client.LoadAsync(sources, cancellationToken);
+            var errors = _client.GetErrorStatuses(sources)
+                .Select(status => status.FeedUrl)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _feedErrorLabels = sources
+                .Where(source => errors.Contains(source.Url))
+                .Select(source => source.Title ?? source.Url)
+                .ToList();
             _updatedAt = DateTimeOffset.Now;
 
             if (_state.ExpandedArticleId is not null && _articles.All(x => x.Id != _state.ExpandedArticleId))
@@ -214,11 +212,7 @@ public sealed class FeedWidget : IDisposable
 
     public void PushCurrentCard()
     {
-        if (_disposed)
-        {
-            return;
-        }
-
+        if (_disposed) return;
         if (_isCustomizing)
         {
             PushCustomizationCard();
@@ -227,7 +221,7 @@ public sealed class FeedWidget : IDisposable
 
         var options = new WidgetUpdateRequestOptions(_id)
         {
-            Template = WidgetCardRenderer.Render(_articles, _state, _updatedAt, _size),
+            Template = WidgetCardRenderer.Render(_articles, _feedErrorLabels, _state, _updatedAt, _size),
             Data = "{}",
             CustomState = JsonSerializer.Serialize(_state)
         };
@@ -240,11 +234,7 @@ public sealed class FeedWidget : IDisposable
         Timer? timer;
         lock (_lifecycleGate)
         {
-            if (_disposed)
-            {
-                return;
-            }
-
+            if (_disposed) return;
             _disposed = true;
             timer = _timer;
             _timer = null;
@@ -253,10 +243,7 @@ public sealed class FeedWidget : IDisposable
         if (timer is not null)
         {
             using var drained = new ManualResetEvent(false);
-            if (timer.Dispose(drained))
-            {
-                drained.WaitOne();
-            }
+            if (timer.Dispose(drained)) drained.WaitOne();
         }
 
         _refreshGate.Wait();
@@ -285,20 +272,13 @@ public sealed class FeedWidget : IDisposable
             ? new HashSet<string>(_customizationSources.Select(source => source.Url), StringComparer.OrdinalIgnoreCase)
             : new HashSet<string>(_state.SelectedFeedUrls, StringComparer.OrdinalIgnoreCase);
 
-        if (!selected.Add(url))
-        {
-            selected.Remove(url);
-        }
-
+        if (!selected.Add(url)) selected.Remove(url);
         _state = _state with { SelectedFeedUrls = selected.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList() };
     }
 
     private void PushCustomizationCard()
     {
-        if (_disposed)
-        {
-            return;
-        }
+        if (_disposed) return;
 
         var options = new WidgetUpdateRequestOptions(_id)
         {
@@ -314,10 +294,7 @@ public sealed class FeedWidget : IDisposable
     {
         var settings = await _settingsStore.LoadAsync(cancellationToken);
         var nextInterval = TimeSpan.FromMinutes(settings.RefreshIntervalMinutes);
-        if (nextInterval == _refreshInterval)
-        {
-            return;
-        }
+        if (nextInterval == _refreshInterval) return;
 
         _refreshInterval = nextInterval;
         lock (_lifecycleGate)
@@ -340,10 +317,7 @@ public sealed class FeedWidget : IDisposable
 
     private static WidgetState ParseState(string customState)
     {
-        if (string.IsNullOrWhiteSpace(customState))
-        {
-            return new WidgetState();
-        }
+        if (string.IsNullOrWhiteSpace(customState)) return new WidgetState();
 
         try
         {
