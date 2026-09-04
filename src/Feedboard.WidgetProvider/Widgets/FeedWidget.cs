@@ -19,11 +19,13 @@ public sealed class FeedWidget : IDisposable
     private readonly object _lifecycleGate = new();
 
     private IReadOnlyList<FeedArticle> _articles = Array.Empty<FeedArticle>();
+    private IReadOnlyList<FeedSource> _customizationSources = Array.Empty<FeedSource>();
     private WidgetState _state;
     private WidgetSize _size;
     private Timer? _timer;
     private TimeSpan _refreshInterval = TimeSpan.FromMinutes(AppSettingsStore.DefaultRefreshIntervalMinutes);
     private DateTimeOffset _updatedAt = DateTimeOffset.Now;
+    private bool _isCustomizing;
     private bool _disposed;
 
     public FeedWidget(string id, string customState, WidgetSize size)
@@ -58,9 +60,20 @@ public sealed class FeedWidget : IDisposable
         timer?.Dispose();
     }
 
-    public async Task RefreshAsync(CancellationToken cancellationToken = default)
+    public Task RefreshAsync(CancellationToken cancellationToken = default) =>
+        RefreshAsync(waitForTurn: false, cancellationToken);
+
+    private async Task RefreshAsync(bool waitForTurn, CancellationToken cancellationToken)
     {
-        if (_disposed || !await _refreshGate.WaitAsync(0, cancellationToken))
+        if (_disposed)
+        {
+            return;
+        }
+
+        var entered = waitForTurn
+            ? await WaitForRefreshTurnAsync(cancellationToken)
+            : await _refreshGate.WaitAsync(0, cancellationToken);
+        if (!entered)
         {
             return;
         }
@@ -69,12 +82,18 @@ public sealed class FeedWidget : IDisposable
         {
             await UpdateRefreshIntervalAsync(cancellationToken);
             var sources = await _store.LoadAsync(cancellationToken);
+            if (_state.SelectedFeedUrls is not null)
+            {
+                var selected = new HashSet<string>(_state.SelectedFeedUrls, StringComparer.OrdinalIgnoreCase);
+                sources = sources.Where(source => selected.Contains(source.Url)).ToList();
+            }
+
             _articles = await _client.LoadAsync(sources, cancellationToken);
             _updatedAt = DateTimeOffset.Now;
 
             if (_state.ExpandedArticleId is not null && _articles.All(x => x.Id != _state.ExpandedArticleId))
             {
-                _state = new WidgetState();
+                _state = _state with { ExpandedArticleId = null };
             }
 
             PushCurrentCard();
@@ -92,6 +111,27 @@ public sealed class FeedWidget : IDisposable
         }
     }
 
+    private async Task<bool> WaitForRefreshTurnAsync(CancellationToken cancellationToken)
+    {
+        await _refreshGate.WaitAsync(cancellationToken);
+        if (_disposed)
+        {
+            _refreshGate.Release();
+            return false;
+        }
+
+        return true;
+    }
+
+    public async Task BeginCustomizationAsync(CancellationToken cancellationToken = default)
+    {
+        _customizationSources = (await _store.LoadAsync(cancellationToken))
+            .Where(source => source.Enabled)
+            .ToList();
+        _isCustomizing = true;
+        PushCustomizationCard();
+    }
+
     public void UpdateContext(WidgetSize size)
     {
         var previousSize = _size;
@@ -99,7 +139,7 @@ public sealed class FeedWidget : IDisposable
 
         if ((int)size < (int)previousSize && _state.ExpandedArticleId is not null)
         {
-            _state = new WidgetState();
+            _state = _state with { ExpandedArticleId = null };
         }
 
         PushCurrentCard();
@@ -109,13 +149,41 @@ public sealed class FeedWidget : IDisposable
     {
         const string expandPrefix = "expand:";
         const string openPrefix = "open:";
+        const string customizeTogglePrefix = "customize:toggle:";
+
+        if (_isCustomizing)
+        {
+            if (args.Verb == "customize:done")
+            {
+                _isCustomizing = false;
+                RefreshAsync(waitForTurn: true, CancellationToken.None).GetAwaiter().GetResult();
+                return;
+            }
+
+            if (args.Verb == "customize:all")
+            {
+                _state = _state with { SelectedFeedUrls = null };
+                PushCustomizationCard();
+                return;
+            }
+
+            if (args.Verb.StartsWith(customizeTogglePrefix, StringComparison.Ordinal) &&
+                int.TryParse(args.Verb[customizeTogglePrefix.Length..], out var index) &&
+                index >= 0 && index < _customizationSources.Count)
+            {
+                ToggleCustomizationSource(_customizationSources[index].Url);
+                PushCustomizationCard();
+            }
+
+            return;
+        }
 
         if (args.Verb.StartsWith(expandPrefix, StringComparison.Ordinal))
         {
             var articleId = args.Verb[expandPrefix.Length..];
             if (_articles.Any(x => x.Id == articleId))
             {
-                _state = new WidgetState(articleId);
+                _state = _state with { ExpandedArticleId = articleId };
                 PushCurrentCard();
             }
 
@@ -137,6 +205,12 @@ public sealed class FeedWidget : IDisposable
     {
         if (_disposed)
         {
+            return;
+        }
+
+        if (_isCustomizing)
+        {
+            PushCustomizationCard();
             return;
         }
 
@@ -177,6 +251,37 @@ public sealed class FeedWidget : IDisposable
         _refreshGate.Wait();
         _refreshGate.Release();
         _refreshGate.Dispose();
+    }
+
+    private void ToggleCustomizationSource(string url)
+    {
+        var selected = _state.SelectedFeedUrls is null
+            ? new HashSet<string>(_customizationSources.Select(source => source.Url), StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(_state.SelectedFeedUrls, StringComparer.OrdinalIgnoreCase);
+
+        if (!selected.Add(url))
+        {
+            selected.Remove(url);
+        }
+
+        _state = _state with { SelectedFeedUrls = selected.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList() };
+    }
+
+    private void PushCustomizationCard()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        var options = new WidgetUpdateRequestOptions(_id)
+        {
+            Template = WidgetCustomizationRenderer.Render(_customizationSources, _state),
+            Data = "{}",
+            CustomState = JsonSerializer.Serialize(_state)
+        };
+
+        WidgetManager.GetDefault().UpdateWidget(options);
     }
 
     private async Task UpdateRefreshIntervalAsync(CancellationToken cancellationToken)

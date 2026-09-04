@@ -43,7 +43,7 @@
                 <ProviderIcons><Icon Path="Assets\Square44x44Logo.png" /></ProviderIcons>
                 <Activation><CreateInstance ClassId="6890AE95-9824-4DD2-BF3B-B0E3724639F2" /></Activation>
                 <Definitions>
-                  <Definition Id="Feedboard_Headlines" DisplayName="Feedboard" Description="RSS and Atom headlines" AllowMultiple="true">
+                  <Definition Id="Feedboard_Headlines" DisplayName="Feedboard" Description="RSS and Atom headlines" AllowMultiple="true" IsCustomizable="true">
                     <Capabilities>
                       <Capability><Size Name="small" /></Capability>
                       <Capability><Size Name="medium" /></Capability>

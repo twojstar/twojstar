@@ -15,4 +15,6 @@ public sealed record FeedArticle(
     string? FaviconUrl,
     string? ThumbnailUrl);
 
-public sealed record WidgetState(string? ExpandedArticleId = null);
+public sealed record WidgetState(
+    string? ExpandedArticleId = null,
+    IReadOnlyList<string>? SelectedFeedUrls = null);

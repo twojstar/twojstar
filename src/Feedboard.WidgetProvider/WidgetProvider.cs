@@ -44,6 +44,14 @@ public sealed class WidgetProvider : IWidgetProvider
         }
     }
 
+    public void OnCustomizationRequested(WidgetCustomizationRequestedArgs customizationRequestedArgs)
+    {
+        if (Widgets.TryGetValue(customizationRequestedArgs.WidgetContext.Id, out var widget))
+        {
+            widget.BeginCustomizationAsync().GetAwaiter().GetResult();
+        }
+    }
+
     public void OnWidgetContextChanged(WidgetContextChangedArgs contextChangedArgs)
     {
         if (Widgets.TryGetValue(contextChangedArgs.WidgetContext.Id, out var widget))
