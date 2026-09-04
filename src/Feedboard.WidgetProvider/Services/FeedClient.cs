@@ -2,6 +2,7 @@ using Feedboard.Models;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
@@ -43,24 +44,33 @@ public sealed partial class FeedClient
             while (true)
             {
                 var read = await stream.ReadAsync(chunk.AsMemory(0, chunk.Length), bodyCts.Token);
-                if (read == 0)
-                {
-                    break;
-                }
-
-                if (buffer.Length + read > MaxFeedBytes)
-                {
-                    return Array.Empty<FeedArticle>();
-                }
-
+                if (read == 0) break;
+                if (buffer.Length + read > MaxFeedBytes) return Array.Empty<FeedArticle>();
                 await buffer.WriteAsync(chunk.AsMemory(0, read), bodyCts.Token);
             }
 
             buffer.Position = 0;
-            var document = XDocument.Load(buffer, LoadOptions.None);
             var finalUrl = response.RequestMessage?.RequestUri?.ToString() ?? source.Url;
             var parseSource = source with { Url = finalUrl };
-            return ParseDocument(parseSource, document);
+            var mediaType = response.Content.Headers.ContentType?.MediaType;
+            if (string.Equals(mediaType, "application/feed+json", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase))
+            {
+                using var json = await JsonDocument.ParseAsync(buffer, cancellationToken: bodyCts.Token);
+                return ParseJsonDocument(parseSource, json.RootElement);
+            }
+
+            try
+            {
+                var document = XDocument.Load(buffer, LoadOptions.None);
+                return ParseDocument(parseSource, document);
+            }
+            catch (System.Xml.XmlException)
+            {
+                buffer.Position = 0;
+                using var json = await JsonDocument.ParseAsync(buffer, cancellationToken: bodyCts.Token);
+                return ParseJsonDocument(parseSource, json.RootElement);
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -75,25 +85,51 @@ public sealed partial class FeedClient
     internal static IReadOnlyList<FeedArticle> ParseXml(FeedSource source, string xml) =>
         ParseDocument(source, XDocument.Parse(xml, LoadOptions.None));
 
+    internal static IReadOnlyList<FeedArticle> ParseJson(FeedSource source, string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return ParseJsonDocument(source, document.RootElement);
+    }
+
+    private static IReadOnlyList<FeedArticle> ParseJsonDocument(FeedSource source, JsonElement root)
+    {
+        var version = JsonString(root, "version");
+        if (version is null || !version.StartsWith("https://jsonfeed.org/version/", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new FormatException("Unsupported JSON Feed version.");
+        }
+
+        var feedTitle = JsonString(root, "title") ?? source.Title ?? HostName(source.Url);
+        var favicon = JsonString(root, "favicon") ?? JsonString(root, "icon") ?? FaviconFrom(source.Url);
+        if (!root.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<FeedArticle>();
+        }
+
+        return items.EnumerateArray().Select(item =>
+        {
+            var itemId = JsonString(item, "id");
+            var title = JsonString(item, "title") ?? "(untitled)";
+            var articleUrl = JsonString(item, "url") ?? JsonString(item, "external_url") ?? source.Url;
+            var summary = JsonString(item, "summary") ?? JsonString(item, "content_text") ?? JsonString(item, "content_html");
+            var published = ParseDate(JsonString(item, "date_published") ?? JsonString(item, "date_modified"));
+            var thumbnail = JsonString(item, "image") ?? JsonString(item, "banner_image");
+            var article = BuildArticle(source, feedTitle, title, articleUrl, summary, published, favicon, thumbnail);
+            return string.IsNullOrWhiteSpace(itemId)
+                ? article
+                : article with { Id = StableId(source.Url, itemId) };
+        }).ToList();
+    }
+
+    private static string? JsonString(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
     private static IReadOnlyList<FeedArticle> ParseDocument(FeedSource source, XDocument document)
     {
         var root = document.Root ?? throw new FormatException("Feed XML has no root element.");
-
-        if (root.Name.LocalName.Equals("feed", StringComparison.OrdinalIgnoreCase))
-        {
-            return ParseAtom(source, root);
-        }
-
-        if (root.Name.LocalName.Equals("rss", StringComparison.OrdinalIgnoreCase))
-        {
-            return ParseRss(source, root);
-        }
-
-        if (root.Name.LocalName.Equals("RDF", StringComparison.OrdinalIgnoreCase))
-        {
-            return ParseRdf(source, root);
-        }
-
+        if (root.Name.LocalName.Equals("feed", StringComparison.OrdinalIgnoreCase)) return ParseAtom(source, root);
+        if (root.Name.LocalName.Equals("rss", StringComparison.OrdinalIgnoreCase)) return ParseRss(source, root);
+        if (root.Name.LocalName.Equals("RDF", StringComparison.OrdinalIgnoreCase)) return ParseRdf(source, root);
         throw new FormatException($"Unsupported XML feed root: {root.Name.LocalName}");
     }
 
@@ -102,47 +138,22 @@ public sealed partial class FeedClient
         var channel = root.Elements().FirstOrDefault(x => x.Name.LocalName == "channel") ?? root;
         var feedTitle = Text(channel, "title") ?? source.Title ?? HostName(source.Url);
         var favicon = FirstUrl(channel.Descendants().FirstOrDefault(x => x.Name.LocalName == "image"), "url") ?? FaviconFrom(source.Url);
-
         return channel.Elements().Where(x => x.Name.LocalName == "item")
-            .Select(item => BuildArticle(
-                source,
-                feedTitle,
-                Text(item, "title") ?? "(untitled)",
-                FirstUrl(item, "link") ?? Text(item, "guid") ?? source.Url,
-                Text(item, "description") ?? Text(item, "encoded"),
-                ParseDate(Text(item, "pubDate") ?? Text(item, "date")),
-                favicon,
-                FindThumbnail(item, source.Url)))
-            .ToList();
+            .Select(item => BuildArticle(source, feedTitle, Text(item, "title") ?? "(untitled)", FirstUrl(item, "link") ?? Text(item, "guid") ?? source.Url, Text(item, "description") ?? Text(item, "encoded"), ParseDate(Text(item, "pubDate") ?? Text(item, "date")), favicon, FindThumbnail(item, source.Url))).ToList();
     }
 
     private static IReadOnlyList<FeedArticle> ParseAtom(FeedSource source, XElement root)
     {
         var feedTitle = Text(root, "title") ?? source.Title ?? HostName(source.Url);
         var icon = Text(root, "icon") ?? Text(root, "logo") ?? FaviconFrom(source.Url);
-
-        return root.Elements().Where(x => x.Name.LocalName == "entry")
-            .Select(entry =>
-            {
-                var link = entry.Elements().FirstOrDefault(x => x.Name.LocalName == "link" && ((string?)x.Attribute("rel") is null or "alternate"));
-                var href = (string?)link?.Attribute("href");
-                var articleUrl = string.IsNullOrWhiteSpace(href) ? source.Url : ResolveUrl(source.Url, href);
-                if (string.IsNullOrWhiteSpace(articleUrl))
-                {
-                    articleUrl = source.Url;
-                }
-
-                return BuildArticle(
-                    source,
-                    feedTitle,
-                    Text(entry, "title") ?? "(untitled)",
-                    articleUrl,
-                    Text(entry, "summary") ?? Text(entry, "content"),
-                    ParseDate(Text(entry, "published") ?? Text(entry, "updated")),
-                    ResolveUrl(source.Url, icon),
-                    FindThumbnail(entry, source.Url));
-            })
-            .ToList();
+        return root.Elements().Where(x => x.Name.LocalName == "entry").Select(entry =>
+        {
+            var link = entry.Elements().FirstOrDefault(x => x.Name.LocalName == "link" && ((string?)x.Attribute("rel") is null or "alternate"));
+            var href = (string?)link?.Attribute("href");
+            var articleUrl = string.IsNullOrWhiteSpace(href) ? source.Url : ResolveUrl(source.Url, href);
+            if (string.IsNullOrWhiteSpace(articleUrl)) articleUrl = source.Url;
+            return BuildArticle(source, feedTitle, Text(entry, "title") ?? "(untitled)", articleUrl, Text(entry, "summary") ?? Text(entry, "content"), ParseDate(Text(entry, "published") ?? Text(entry, "updated")), ResolveUrl(source.Url, icon), FindThumbnail(entry, source.Url));
+        }).ToList();
     }
 
     private static IReadOnlyList<FeedArticle> ParseRdf(FeedSource source, XElement root)
@@ -150,52 +161,30 @@ public sealed partial class FeedClient
         var channel = root.Elements().FirstOrDefault(x => x.Name.LocalName == "channel");
         var feedTitle = Text(channel, "title") ?? source.Title ?? HostName(source.Url);
         var favicon = FaviconFrom(source.Url);
-
         return root.Elements().Where(x => x.Name.LocalName == "item")
-            .Select(item => BuildArticle(
-                source,
-                feedTitle,
-                Text(item, "title") ?? "(untitled)",
-                FirstUrl(item, "link") ?? source.Url,
-                Text(item, "description") ?? Text(item, "encoded"),
-                ParseDate(Text(item, "date")),
-                favicon,
-                FindThumbnail(item, source.Url)))
-            .ToList();
+            .Select(item => BuildArticle(source, feedTitle, Text(item, "title") ?? "(untitled)", FirstUrl(item, "link") ?? source.Url, Text(item, "description") ?? Text(item, "encoded"), ParseDate(Text(item, "date")), favicon, FindThumbnail(item, source.Url))).ToList();
     }
 
     private static FeedArticle BuildArticle(FeedSource source, string feedTitle, string title, string url, string? summary, DateTimeOffset? published, string? favicon, string? thumbnail)
     {
         var absoluteUrl = ResolveUrl(source.Url, url);
-        return new FeedArticle(
-            StableId(absoluteUrl, title),
-            CleanText(feedTitle, 120),
-            CleanText(title, 240),
-            absoluteUrl,
-            string.IsNullOrWhiteSpace(summary) ? null : CleanText(summary, 600),
-            published,
-            ResolveUrl(source.Url, favicon),
-            ResolveUrl(source.Url, thumbnail));
+        return new FeedArticle(StableId(absoluteUrl, title), CleanText(feedTitle, 120), CleanText(title, 240), absoluteUrl, string.IsNullOrWhiteSpace(summary) ? null : CleanText(summary, 600), published, ResolveUrl(source.Url, favicon), ResolveUrl(source.Url, thumbnail));
     }
 
     private static string? FindThumbnail(XElement item, string baseUrl)
     {
         var media = item.Descendants().FirstOrDefault(x => (x.Name.LocalName == "thumbnail" || x.Name.LocalName == "content") && (string?)x.Attribute("url") is not null);
         if ((string?)media?.Attribute("url") is { Length: > 0 } mediaUrl) return ResolveUrl(baseUrl, mediaUrl);
-
         var enclosure = item.Elements().FirstOrDefault(x => x.Name.LocalName == "enclosure" && ((string?)x.Attribute("type"))?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true);
         if ((string?)enclosure?.Attribute("url") is { Length: > 0 } enclosureUrl) return ResolveUrl(baseUrl, enclosureUrl);
-
         var atomImage = item.Elements().FirstOrDefault(x => x.Name.LocalName == "link" && ((string?)x.Attribute("rel")) == "enclosure" && ((string?)x.Attribute("type"))?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true);
         if ((string?)atomImage?.Attribute("href") is { Length: > 0 } atomUrl) return ResolveUrl(baseUrl, atomUrl);
-
         var html = Text(item, "content") ?? Text(item, "encoded") ?? Text(item, "description") ?? Text(item, "summary");
         if (!string.IsNullOrWhiteSpace(html))
         {
             var match = ImgSrcRegex().Match(html);
             if (match.Success) return ResolveUrl(baseUrl, WebUtility.HtmlDecode(match.Groups[1].Value));
         }
-
         return null;
     }
 
@@ -232,6 +221,8 @@ public sealed partial class FeedClient
     {
         var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
         client.DefaultRequestHeaders.UserAgent.ParseAdd("Feedboard/0.1 (+https://github.com/trvny/trvny)");
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/feed+json");
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
         client.DefaultRequestHeaders.Accept.ParseAdd("application/rss+xml");
         client.DefaultRequestHeaders.Accept.ParseAdd("application/atom+xml");
         client.DefaultRequestHeaders.Accept.ParseAdd("application/xml");
