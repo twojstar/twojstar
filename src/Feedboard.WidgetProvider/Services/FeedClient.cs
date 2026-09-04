@@ -26,6 +26,8 @@ public sealed partial class FeedClient
         var tasks = sources.Where(x => x.Enabled).Take(32).Select(source => LoadSingleSafeAsync(source, cancellationToken));
         var results = await Task.WhenAll(tasks);
         return results.SelectMany(x => x)
+            .GroupBy(x => x.Id, StringComparer.Ordinal)
+            .Select(group => group.OrderByDescending(x => x.Published ?? DateTimeOffset.MinValue).First())
             .OrderByDescending(x => x.Published ?? DateTimeOffset.MinValue)
             .ThenBy(x => x.FeedTitle, StringComparer.CurrentCultureIgnoreCase)
             .Take(50)
