@@ -19,10 +19,14 @@ public static class WidgetCardRenderer
         WidgetSize size)
     {
         var profile = LayoutProfile.For(size);
-        var visibleArticles = articles.Take(profile.ArticleLimit).ToList();
         var readIds = state.ReadArticleIds is null
             ? null
             : new HashSet<string>(state.ReadArticleIds, StringComparer.Ordinal);
+        var visibleArticles = articles
+            .OrderBy(article => readIds?.Contains(article.Id) == true ? 1 : 0)
+            .ThenByDescending(article => article.Published ?? DateTimeOffset.MinValue)
+            .Take(profile.ArticleLimit)
+            .ToList();
         var body = new JsonArray
         {
             Header(updatedAt)
