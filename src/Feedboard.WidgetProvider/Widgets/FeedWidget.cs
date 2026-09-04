@@ -22,6 +22,7 @@ public sealed class FeedWidget : IDisposable
     private IReadOnlyList<FeedArticle> _articles = Array.Empty<FeedArticle>();
     private IReadOnlyList<FeedSource> _customizationSources = Array.Empty<FeedSource>();
     private IReadOnlyList<string> _feedErrorLabels = Array.Empty<string>();
+    private int _visibleFeedCount;
     private WidgetState _state;
     private WidgetSize _size;
     private Timer? _timer;
@@ -80,14 +81,19 @@ public sealed class FeedWidget : IDisposable
                 sources = sources.Where(source => selected.Contains(source.Url)).ToList();
             }
 
-            _articles = await _client.LoadAsync(sources, cancellationToken);
+            var visibleFeedCount = sources.Count(source => source.Enabled);
+            var articles = await _client.LoadAsync(sources, cancellationToken);
             var errors = _client.GetErrorStatuses(sources)
                 .Select(status => status.FeedUrl)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            _feedErrorLabels = sources
+            var feedErrorLabels = sources
                 .Where(source => errors.Contains(source.Url))
                 .Select(source => source.Title ?? source.Url)
                 .ToList();
+
+            _visibleFeedCount = visibleFeedCount;
+            _articles = articles;
+            _feedErrorLabels = feedErrorLabels;
             _updatedAt = DateTimeOffset.Now;
 
             if (_state.ExpandedArticleId is not null && _articles.All(x => x.Id != _state.ExpandedArticleId))
@@ -221,7 +227,7 @@ public sealed class FeedWidget : IDisposable
 
         var options = new WidgetUpdateRequestOptions(_id)
         {
-            Template = WidgetCardRenderer.Render(_articles, _feedErrorLabels, _state, _updatedAt, _size),
+            Template = WidgetCardRenderer.Render(_articles, _feedErrorLabels, _visibleFeedCount, _state, _updatedAt, _size),
             Data = "{}",
             CustomState = JsonSerializer.Serialize(_state)
         };

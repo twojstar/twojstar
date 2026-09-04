@@ -15,6 +15,7 @@ public static class WidgetCardRenderer
     public static string Render(
         IReadOnlyList<FeedArticle> articles,
         IReadOnlyList<string> feedErrorLabels,
+        int visibleFeedCount,
         WidgetState state,
         DateTimeOffset updatedAt,
         WidgetSize size)
@@ -35,13 +36,7 @@ public static class WidgetCardRenderer
 
         if (visibleArticles.Count == 0)
         {
-            body.Add(new JsonObject
-            {
-                ["type"] = "TextBlock",
-                ["text"] = "No feeds yet. Add one with the Feedboard app/CLI.",
-                ["wrap"] = true,
-                ["isSubtle"] = true
-            });
+            body.Add(EmptyState(feedErrorLabels.Count, visibleFeedCount, size));
         }
         else
         {
@@ -61,7 +56,7 @@ public static class WidgetCardRenderer
                 body.Add(new JsonObject
                 {
                     ["type"] = "TextBlock",
-                    ["text"] = "Tap once for details · tap the expanded item to open",
+                    ["text"] = "Tap a headline for details · tap again to open",
                     ["size"] = "Small",
                     ["isSubtle"] = true,
                     ["wrap"] = true,
@@ -70,19 +65,9 @@ public static class WidgetCardRenderer
             }
         }
 
-        if (feedErrorLabels.Count > 0)
+        if (feedErrorLabels.Count > 0 && visibleArticles.Count > 0)
         {
-            var text = size == WidgetSize.Small
-                ? $"⚠ {feedErrorLabels.Count} feed{(feedErrorLabels.Count == 1 ? "" : "s")} retrying"
-                : $"⚠ Retrying: {string.Join(", ", feedErrorLabels.Take(2))}{(feedErrorLabels.Count > 2 ? $" +{feedErrorLabels.Count - 2}" : string.Empty)}";
-            body.Add(new JsonObject
-            {
-                ["type"] = "TextBlock",
-                ["text"] = text,
-                ["size"] = "Small",
-                ["wrap"] = true,
-                ["spacing"] = "Small"
-            });
+            body.Add(ErrorStatus(feedErrorLabels, size));
         }
 
         var card = new JsonObject
@@ -94,6 +79,80 @@ public static class WidgetCardRenderer
         };
 
         return card.ToJsonString(JsonOptions);
+    }
+
+    private static JsonObject EmptyState(int feedErrorCount, int visibleFeedCount, WidgetSize size)
+    {
+        var noFeeds = visibleFeedCount == 0;
+        var allFeedsRetrying = visibleFeedCount > 0 && feedErrorCount >= visibleFeedCount;
+        var title = noFeeds
+            ? "Your Feedboard is empty"
+            : allFeedsRetrying
+                ? "Feeds are taking a break"
+                : "No headlines right now";
+        var detail = noFeeds
+            ? size == WidgetSize.Small
+                ? "Add a feed in Feedboard."
+                : "Add or import a feed in the Feedboard app to start seeing headlines here."
+            : allFeedsRetrying
+                ? size == WidgetSize.Small
+                    ? "We'll retry automatically."
+                    : "Cached headlines aren't available yet. Feedboard will retry automatically."
+                : size == WidgetSize.Small
+                    ? "Check back after the next refresh."
+                    : "Your feeds are configured and healthy. Check back after the next refresh.";
+
+        return new JsonObject
+        {
+            ["type"] = "Container",
+            ["spacing"] = "Medium",
+            ["items"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "TextBlock",
+                    ["text"] = allFeedsRetrying ? "⚠" : "◌",
+                    ["size"] = "Large",
+                    ["horizontalAlignment"] = "Center",
+                    ["spacing"] = "Small"
+                },
+                new JsonObject
+                {
+                    ["type"] = "TextBlock",
+                    ["text"] = title,
+                    ["weight"] = "Bolder",
+                    ["horizontalAlignment"] = "Center",
+                    ["wrap"] = true,
+                    ["spacing"] = "Small"
+                },
+                new JsonObject
+                {
+                    ["type"] = "TextBlock",
+                    ["text"] = detail,
+                    ["isSubtle"] = true,
+                    ["size"] = "Small",
+                    ["horizontalAlignment"] = "Center",
+                    ["wrap"] = true,
+                    ["spacing"] = "Small"
+                }
+            }
+        };
+    }
+
+    private static JsonObject ErrorStatus(IReadOnlyList<string> feedErrorLabels, WidgetSize size)
+    {
+        var text = size == WidgetSize.Small
+            ? $"⚠ {feedErrorLabels.Count} feed{(feedErrorLabels.Count == 1 ? "" : "s")} retrying"
+            : $"⚠ Retrying: {string.Join(", ", feedErrorLabels.Take(2))}{(feedErrorLabels.Count > 2 ? $" +{feedErrorLabels.Count - 2}" : string.Empty)}";
+        return new JsonObject
+        {
+            ["type"] = "TextBlock",
+            ["text"] = text,
+            ["size"] = "Small",
+            ["isSubtle"] = true,
+            ["wrap"] = true,
+            ["spacing"] = "Small"
+        };
     }
 
     private static JsonObject Header(DateTimeOffset updatedAt) => new()
