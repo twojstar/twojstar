@@ -24,6 +24,9 @@ platformClassifiers.each { artifactName, classifier ->
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-javafx:1.11.0"
+    javafxModules.each { module ->
+        compileOnly "org.openjfx:javafx-$module:$javafxVersion:linux"
+    }
     platformClassifiers.each { artifactName, classifier ->
         javafxModules.each { module ->
             add(platformConfigs[artifactName].name, "org.openjfx:javafx-$module:$javafxVersion:$classifier")
