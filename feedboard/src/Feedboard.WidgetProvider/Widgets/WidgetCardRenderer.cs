@@ -166,7 +166,8 @@ public static class WidgetCardRenderer
             ["text"] = text,
             ["size"] = "Small",
             ["isSubtle"] = true,
-            ["wrap"] = true,
+            ["wrap"] = false,
+            ["maxLines"] = 1,
             ["spacing"] = "Small"
         };
     }
