@@ -13,11 +13,11 @@ requests.
 
 ## Deploy via Cloudflare Workers Builds
 
-This lives in the `trvny/trvny` monorepo under `benches/codebench/`.
+This lives in the `twojstar/twojstar` workshop under `benches/codebench/`.
 
 1. Cloudflare dashboard → **Workers & Pages** → **Create** →
    **Import a repository**.
-2. Connect GitHub and select **trvny/trvny**.
+2. Connect GitHub and select **twojstar/twojstar**.
 3. Configure:
    - **Worker name:** `codebench`
    - **Root directory:** `benches`
