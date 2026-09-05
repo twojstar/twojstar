@@ -100,7 +100,10 @@ jobs:
             throw "GitHub run attempt cannot be represented in the MSIX version."
           }
 
-          $serial = ($runId * [uint64]256) + ($runAttempt - 1)
+          # Keep every generated version strictly above the highest package produced by
+          # the old run_number scheme, even if this workflow is moved or recreated.
+          $legacyFloor = [uint64]0x000200850001 # 0.2.133.1
+          $serial = $legacyFloor + 1 + ($runId * [uint64]256) + ($runAttempt - 1)
           if ($serial -gt [uint64]0xFFFFFFFFFFFF) {
             throw "GitHub run id cannot be represented in the MSIX version."
           }
