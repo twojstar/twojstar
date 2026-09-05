@@ -1,21 +1,31 @@
 # twojstar
 
-Organization workshop for shared tools, experiments, Workers, and projects that
-benefit from one maintained home instead of another tiny repository.
+Shared workshop for projects that benefit from one maintained home, common CI,
+and one rolling release instead of another tiny repository.
 
-## Bench family
+## Projects
 
-The first migrated workspace is [`benches/`](benches/):
+- **Benches** — browser-first tools under [`benches/`](benches/):
+  [Codebench](https://codebench.trfny.com),
+  [Docbench](https://docbench.travny.workers.dev), and
+  [Streambench](https://streambench.trfny.com).
+- **Weather** — [`weather-feed/`](weather-feed/) publishes multi-source weather
+  and IMGW alerts for Kościelec/Chrzanów.
+- **Feedboard** — [`feedboard/`](feedboard/) is a Windows feed widget/provider
+  with a small settings application.
+- **Xiaomi ADB Tools** — [`xiaomi-adb-tools/`](xiaomi-adb-tools/) carries the
+  maintained desktop ADB/Fastboot utility.
 
-- [Codebench](benches/codebench/) · https://codebench.trfny.com
-- [Docbench](benches/docbench/) · https://docbench.travny.workers.dev
-- [Streambench](benches/streambench/) · https://streambench.trfny.com
+## Downloads
 
-The Bench workspace was extracted from [`trvny/trvny`](https://github.com/trvny/trvny)
-with its filtered Git history preserved. Its existing Cloudflare Workers remain
-separate deployments and keep their current public endpoints.
+GitHub **Latest** is the unified rolling snapshot for downloadable builds from
+this repository. It is refreshed only from successful CI artifacts and includes
+checksums plus source provenance, so one release serves the current Bench,
+Feedboard, and Xiaomi ADB Tools outputs.
+
+[Download the latest release](https://github.com/twojstar/twojstar/releases/latest).
 
 ## License
 
-The repository-level license is [Apache-2.0](LICENSE). Migrated Bench code keeps
-its original [ISC license](benches/LICENSE).
+Repository-level code is under the [ISC License](LICENSE). Migrated projects
+may retain their original license files where required.

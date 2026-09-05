@@ -1,15 +1,34 @@
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
-    schedule:
-      interval: "weekly"
-      time: "21:37"
-      timezone: "Europe/Warsaw"
-    commit-message:
-      prefix: "ci"
+    schedule: { interval: "weekly" }
     groups:
-      actions:
-        patterns:
-          - "*"
+      actions: { patterns: ["*"] }
+
+  - package-ecosystem: "npm"
+    directory: "/benches"
+    schedule: { interval: "weekly" }
+    groups:
+      benches: { patterns: ["*"] }
+
+  - package-ecosystem: "npm"
+    directory: "/weather-feed"
+    schedule: { interval: "weekly" }
+    groups:
+      weather: { patterns: ["*"] }
+
+  - package-ecosystem: "gradle"
+    directory: "/xiaomi-adb-tools"
+    schedule: { interval: "weekly" }
+    groups:
+      xiaomi: { patterns: ["*"] }
+
+  - package-ecosystem: "nuget"
+    directories:
+      - "/feedboard/src/Feedboard.Core"
+      - "/feedboard/src/Feedboard.Settings"
+      - "/feedboard/src/Feedboard.WidgetProvider"
+    schedule: { interval: "weekly" }
+    groups:
+      dotnet: { patterns: ["*"] }
