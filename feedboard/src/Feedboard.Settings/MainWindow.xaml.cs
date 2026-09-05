@@ -13,6 +13,7 @@ public sealed partial class MainWindow : Window
     private readonly FeedStore _store = new();
     private readonly AppSettingsStore _settingsStore = new();
     private readonly FeedDiscovery _feedDiscovery = new();
+    private readonly SemaphoreSlim _dialogGate = new(1, 1);
     private bool _isReloading;
     private readonly Dictionary<string, int> _urlEditGenerations = new(StringComparer.Ordinal);
     public ObservableCollection<FeedRow> Feeds { get; } = new();
@@ -154,7 +155,7 @@ public sealed partial class MainWindow : Window
                 XamlRoot = root
             };
 
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary) return;
 
             var savedName = input.Text.Trim();
             await _store.SetTitleAsync(row.Id, savedName);
@@ -190,7 +191,7 @@ public sealed partial class MainWindow : Window
                 XamlRoot = root
             };
 
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary) return;
 
             var generation = _urlEditGenerations.TryGetValue(row.Id, out var current) ? current + 1 : 1;
             _urlEditGenerations[row.Id] = generation;
@@ -203,6 +204,18 @@ public sealed partial class MainWindow : Window
             StatusText.Text = $"Feed URL updated to {new Uri(feedUrl).Host}.";
         });
     }
+    private async Task<ContentDialogResult?> ShowDialogAsync(ContentDialog dialog)
+    {
+        if (!await _dialogGate.WaitAsync(0))
+        {
+            StatusText.Text = "Close the current dialog first.";
+            return null;
+        }
+
+        try { return await dialog.ShowAsync(); }
+        finally { _dialogGate.Release(); }
+    }
+
     private static void AttachTextBoxCommands(TextBox textBox)
     {
         var flyout = new MenuFlyout();

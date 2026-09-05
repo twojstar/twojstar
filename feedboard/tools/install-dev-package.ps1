@@ -143,39 +143,32 @@ if ($signature.SignerCertificate.Thumbprint -ne $artifactCertificate.Thumbprint)
     throw 'Feedboard.cer does not match the certificate that signed Feedboard.msix.'
 }
 
-Write-Host "Trusting attested Feedboard development certificate $($artifactCertificate.Thumbprint)..."
-Import-Certificate `
-    -FilePath $certificate.FullName `
-    -CertStoreLocation 'Cert:\LocalMachine\TrustedPeople' | Out-Null
-
-$dependencyRoot = Join-Path $mainPackage.Directory.FullName 'Dependencies'
-if (-not (Test-Path $dependencyRoot)) {
-    throw "Dependency folder not found: $dependencyRoot"
-}
-
-$dependencyPackages = @()
-foreach ($arch in @('x86', 'x64')) {
-    $archDir = Join-Path $dependencyRoot $arch
-    $packages = @(
-        Get-ChildItem -Path $archDir -File -ErrorAction SilentlyContinue |
-            Where-Object { $_.Extension -in '.appx', '.msix' }
-    )
-
-    if ($packages.Count -eq 0) {
-        throw "Required $arch dependency packages are missing from $archDir"
-    }
-
-    $dependencyPackages += $packages
+$trustedCertificatePath = "Cert:\LocalMachine\TrustedPeople\$($artifactCertificate.Thumbprint)"
+$certificateWasTrusted = Test-Path -LiteralPath $trustedCertificatePath
+if (-not $certificateWasTrusted) {
+    Write-Host "Trusting attested Feedboard development certificate $($artifactCertificate.Thumbprint)..."
+    Import-Certificate -FilePath $certificate.FullName -CertStoreLocation 'Cert:\LocalMachine\TrustedPeople' | Out-Null
 }
 
 try {
-    Add-AppxPackage `
-        -Path $mainPackage.FullName `
-        -DependencyPath $dependencyPackages.FullName `
-        -ForceUpdateFromAnyVersion `
-        -ForceApplicationShutdown
+    $dependencyRoot = Join-Path $mainPackage.Directory.FullName 'Dependencies'
+    if (-not (Test-Path $dependencyRoot)) { throw "Dependency folder not found: $dependencyRoot" }
+    $dependencyPackages = @()
+    foreach ($arch in @('x86', 'x64')) {
+        $archDir = Join-Path $dependencyRoot $arch
+        $packages = @(Get-ChildItem -Path $archDir -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -in '.appx', '.msix' })
+        if ($packages.Count -eq 0) { throw "Required $arch dependency packages are missing from $archDir" }
+        $dependencyPackages += $packages
+    }
+
+    Add-AppxPackage -Path $mainPackage.FullName -DependencyPath $dependencyPackages.FullName `
+        -ForceUpdateFromAnyVersion -ForceApplicationShutdown
 }
 catch {
+    if (-not $certificateWasTrusted) {
+        Remove-Item -LiteralPath $trustedCertificatePath -Force -ErrorAction SilentlyContinue
+    }
     Write-Host ''
     Write-Host "Install failed: $($_.Exception.Message)"
     throw

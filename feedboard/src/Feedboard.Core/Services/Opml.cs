@@ -7,7 +7,15 @@ public static class Opml
 {
     public static IReadOnlyList<FeedSource> Import(string xml)
     {
-        var document = XDocument.Parse(xml, LoadOptions.None);
+        XDocument document;
+        try
+        {
+            document = XDocument.Parse(xml, LoadOptions.None);
+        }
+        catch (System.Xml.XmlException ex)
+        {
+            throw new InvalidOperationException("The selected OPML/XML file is malformed.", ex);
+        }
         return document
             .Descendants()
             .Where(x => x.Name.LocalName.Equals("outline", StringComparison.OrdinalIgnoreCase))

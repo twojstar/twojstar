@@ -105,16 +105,19 @@ public sealed class AppSettingsStore
         var directory = GetDirectory();
         Directory.CreateDirectory(directory);
         var lockPath = _path + ".lock";
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(5));
+        var lockToken = timeoutCts.Token;
         while (true)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            lockToken.ThrowIfCancellationRequested();
             try
             {
                 return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, useAsync: true);
             }
             catch (IOException)
             {
-                await Task.Delay(50, cancellationToken);
+                await Task.Delay(50, lockToken);
             }
         }
     }

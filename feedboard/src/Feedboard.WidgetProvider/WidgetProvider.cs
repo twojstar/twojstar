@@ -19,6 +19,7 @@ public sealed class WidgetProvider : IWidgetProvider
 
     public void CreateWidget(WidgetContext widgetContext)
     {
+        RecoverRunningWidgets();
         if (!string.Equals(widgetContext.DefinitionId, FeedWidget.DefinitionId, StringComparison.Ordinal))
         {
             throw new InvalidOperationException($"Unknown widget definition: {widgetContext.DefinitionId}");
@@ -38,6 +39,7 @@ public sealed class WidgetProvider : IWidgetProvider
 
     public void OnActionInvoked(WidgetActionInvokedArgs actionInvokedArgs)
     {
+        RecoverRunningWidgets();
         if (Widgets.TryGetValue(actionInvokedArgs.WidgetContext.Id, out var widget))
         {
             widget.OnActionInvoked(actionInvokedArgs);
@@ -46,6 +48,7 @@ public sealed class WidgetProvider : IWidgetProvider
 
     public void OnCustomizationRequested(WidgetCustomizationRequestedArgs customizationRequestedArgs)
     {
+        RecoverRunningWidgets();
         if (Widgets.TryGetValue(customizationRequestedArgs.WidgetContext.Id, out var widget))
         {
             widget.BeginCustomizationAsync().GetAwaiter().GetResult();
@@ -54,6 +57,7 @@ public sealed class WidgetProvider : IWidgetProvider
 
     public void OnWidgetContextChanged(WidgetContextChangedArgs contextChangedArgs)
     {
+        RecoverRunningWidgets();
         if (Widgets.TryGetValue(contextChangedArgs.WidgetContext.Id, out var widget))
         {
             widget.UpdateContext(contextChangedArgs.WidgetContext.Size);
@@ -62,6 +66,7 @@ public sealed class WidgetProvider : IWidgetProvider
 
     public void Activate(WidgetContext widgetContext)
     {
+        RecoverRunningWidgets();
         if (Widgets.TryGetValue(widgetContext.Id, out var widget))
         {
             widget.Activate();
@@ -104,6 +109,7 @@ public sealed class WidgetProvider : IWidgetProvider
         catch
         {
             // The Widgets host can be unavailable during ordinary app launch.
+            Interlocked.Exchange(ref _recovered, 0);
         }
     }
 

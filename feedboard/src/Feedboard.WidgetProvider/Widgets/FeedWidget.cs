@@ -18,6 +18,7 @@ public sealed class FeedWidget : IDisposable
     private readonly FeedClient _client = new();
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
     private readonly object _lifecycleGate = new();
+    private readonly object _stateGate = new();
 
     private IReadOnlyList<FeedArticle> _articles = Array.Empty<FeedArticle>();
     private IReadOnlyList<FeedSource> _customizationSources = Array.Empty<FeedSource>();
@@ -29,7 +30,7 @@ public sealed class FeedWidget : IDisposable
     private TimeSpan _refreshInterval = TimeSpan.FromMinutes(AppSettingsStore.DefaultRefreshIntervalMinutes);
     private DateTimeOffset _updatedAt = DateTimeOffset.Now;
     private bool _isCustomizing;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     public FeedWidget(string id, string customState, WidgetSize size)
     {
@@ -76,9 +77,14 @@ public sealed class FeedWidget : IDisposable
             await UpdateRefreshIntervalAsync(cancellationToken);
             var sources = await _store.LoadAsync(cancellationToken);
             MigrateLegacyFeedSelection();
-            if (_state.SelectedFeedIds is not null)
+            IReadOnlyList<string>? selectedFeedIds;
+            lock (_stateGate)
             {
-                var selected = new HashSet<string>(_state.SelectedFeedIds, StringComparer.Ordinal);
+                selectedFeedIds = _state.SelectedFeedIds?.ToList();
+            }
+            if (selectedFeedIds is not null)
+            {
+                var selected = new HashSet<string>(selectedFeedIds, StringComparer.Ordinal);
                 sources = sources.Where(source => selected.Contains(source.StableId)).ToList();
             }
 
@@ -92,14 +98,16 @@ public sealed class FeedWidget : IDisposable
                 .Select(source => source.Title ?? source.Url)
                 .ToList();
 
-            _visibleFeedCount = visibleFeedCount;
-            _articles = articles;
-            _feedErrorLabels = feedErrorLabels;
-            _updatedAt = DateTimeOffset.Now;
-
-            if (_state.ExpandedArticleId is not null && _articles.All(x => x.Id != _state.ExpandedArticleId))
+            lock (_stateGate)
             {
-                _state = _state with { ExpandedArticleId = null };
+                _visibleFeedCount = visibleFeedCount;
+                _articles = articles;
+                _feedErrorLabels = feedErrorLabels;
+                _updatedAt = DateTimeOffset.Now;
+                if (_state.ExpandedArticleId is not null && _articles.All(x => x.Id != _state.ExpandedArticleId))
+                {
+                    _state = _state with { ExpandedArticleId = null };
+                }
             }
 
             PushCurrentCard();
@@ -131,24 +139,29 @@ public sealed class FeedWidget : IDisposable
 
     public async Task BeginCustomizationAsync(CancellationToken cancellationToken = default)
     {
-        _customizationSources = (await _store.LoadAsync(cancellationToken))
+        var sources = (await _store.LoadAsync(cancellationToken))
             .Where(source => source.Enabled)
             .ToList();
-        MigrateLegacyFeedSelection();
-        _isCustomizing = true;
+        lock (_stateGate)
+        {
+            _customizationSources = sources;
+            MigrateLegacyFeedSelectionLocked();
+            _isCustomizing = true;
+        }
         PushCustomizationCard();
     }
 
     public void UpdateContext(WidgetSize size)
     {
-        var previousSize = _size;
-        _size = size;
-
-        if ((int)size < (int)previousSize && _state.ExpandedArticleId is not null)
+        lock (_stateGate)
         {
-            _state = _state with { ExpandedArticleId = null };
+            var previousSize = _size;
+            _size = size;
+            if ((int)size < (int)previousSize && _state.ExpandedArticleId is not null)
+            {
+                _state = _state with { ExpandedArticleId = null };
+            }
         }
-
         PushCurrentCard();
     }
 
@@ -157,63 +170,75 @@ public sealed class FeedWidget : IDisposable
         const string expandPrefix = "expand:";
         const string openPrefix = "open:";
         const string customizeTogglePrefix = "customize:toggle:";
+        bool customizing;
+        lock (_stateGate) { customizing = _isCustomizing; }
 
-        if (!_isCustomizing && args.Verb == "refresh")
+        if (!customizing && args.Verb == "refresh")
         {
             RefreshAsync(waitForTurn: true, CancellationToken.None).GetAwaiter().GetResult();
             return;
         }
 
-        if (_isCustomizing)
+        if (customizing)
         {
             if (args.Verb == "customize:done")
             {
-                _isCustomizing = false;
+                lock (_stateGate) { _isCustomizing = false; }
                 RefreshAsync(waitForTurn: true, CancellationToken.None).GetAwaiter().GetResult();
                 return;
             }
-
             if (args.Verb == "customize:all")
             {
-                _state = _state with { SelectedFeedUrls = null, SelectedFeedIds = null };
+                lock (_stateGate) { _state = _state with { SelectedFeedUrls = null, SelectedFeedIds = null }; }
                 PushCustomizationCard();
                 return;
             }
-
             if (args.Verb.StartsWith(customizeTogglePrefix, StringComparison.Ordinal) &&
-                int.TryParse(args.Verb[customizeTogglePrefix.Length..], out var index) &&
-                index >= 0 && index < _customizationSources.Count)
+                int.TryParse(args.Verb[customizeTogglePrefix.Length..], out var index))
             {
-                ToggleCustomizationSource(_customizationSources[index].StableId);
-                PushCustomizationCard();
+                var changed = false;
+                lock (_stateGate)
+                {
+                    if (index >= 0 && index < _customizationSources.Count)
+                    {
+                        ToggleCustomizationSourceLocked(_customizationSources[index].StableId);
+                        changed = true;
+                    }
+                }
+                if (changed) PushCustomizationCard();
             }
-
             return;
         }
 
         if (args.Verb.StartsWith(expandPrefix, StringComparison.Ordinal))
         {
             var articleId = args.Verb[expandPrefix.Length..];
-            if (_articles.Any(x => x.Id == articleId))
+            var changed = false;
+            lock (_stateGate)
             {
-                MarkArticleRead(articleId);
-                _state = _state with { ExpandedArticleId = articleId };
-                PushCurrentCard();
+                if (_articles.Any(x => x.Id == articleId))
+                {
+                    MarkArticleReadLocked(articleId);
+                    _state = _state with { ExpandedArticleId = articleId };
+                    changed = true;
+                }
             }
-
+            if (changed) PushCurrentCard();
             return;
         }
 
         if (args.Verb.StartsWith(openPrefix, StringComparison.Ordinal))
         {
             var articleId = args.Verb[openPrefix.Length..];
-            var article = _articles.FirstOrDefault(x => x.Id == articleId);
-            if (article is not null && Uri.TryCreate(article.Url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+            FeedArticle? article;
+            lock (_stateGate) { article = _articles.FirstOrDefault(x => x.Id == articleId); }
+            if (article is not null && Uri.TryCreate(article.Url, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
             {
                 try
                 {
                     Process.Start(new ProcessStartInfo(uri.ToString()) { UseShellExecute = true });
-                    MarkArticleRead(articleId);
+                    lock (_stateGate) { MarkArticleReadLocked(articleId); }
                     PushCurrentCard();
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or PlatformNotSupportedException)
@@ -226,20 +251,35 @@ public sealed class FeedWidget : IDisposable
 
     public void PushCurrentCard()
     {
-        if (_disposed) return;
-        if (_isCustomizing)
+        IReadOnlyList<FeedArticle> articles;
+        IReadOnlyList<string> errors;
+        int visibleFeedCount;
+        WidgetState state;
+        DateTimeOffset updatedAt;
+        WidgetSize size;
+        bool customizing;
+        lock (_stateGate)
+        {
+            if (_disposed) return;
+            customizing = _isCustomizing;
+            articles = _articles;
+            errors = _feedErrorLabels;
+            visibleFeedCount = _visibleFeedCount;
+            state = _state;
+            updatedAt = _updatedAt;
+            size = _size;
+        }
+        if (customizing)
         {
             PushCustomizationCard();
             return;
         }
-
         var options = new WidgetUpdateRequestOptions(_id)
         {
-            Template = WidgetCardRenderer.Render(_articles, _feedErrorLabels, _visibleFeedCount, _state, _updatedAt, _size),
+            Template = WidgetCardRenderer.Render(articles, errors, visibleFeedCount, state, updatedAt, size),
             Data = "{}",
-            CustomState = JsonSerializer.Serialize(_state)
+            CustomState = JsonSerializer.Serialize(state)
         };
-
         WidgetManager.GetDefault().UpdateWidget(options);
     }
 
@@ -265,7 +305,7 @@ public sealed class FeedWidget : IDisposable
         _refreshGate.Dispose();
     }
 
-    private void MarkArticleRead(string articleId)
+    private void MarkArticleReadLocked(string articleId)
     {
         var readIds = _state.ReadArticleIds is not { Count: > 0 }
             ? new List<string>()
@@ -280,9 +320,9 @@ public sealed class FeedWidget : IDisposable
         _state = _state with { ReadArticleIds = readIds };
     }
 
-    private void ToggleCustomizationSource(string feedId)
+    private void ToggleCustomizationSourceLocked(string feedId)
     {
-        MigrateLegacyFeedSelection();
+        MigrateLegacyFeedSelectionLocked();
         var selected = _state.SelectedFeedIds is null
             ? new HashSet<string>(_customizationSources.Select(source => source.StableId), StringComparer.Ordinal)
             : new HashSet<string>(_state.SelectedFeedIds, StringComparer.Ordinal);
@@ -297,29 +337,36 @@ public sealed class FeedWidget : IDisposable
 
     private void MigrateLegacyFeedSelection()
     {
+        lock (_stateGate) { MigrateLegacyFeedSelectionLocked(); }
+    }
+
+    private void MigrateLegacyFeedSelectionLocked()
+    {
         if (_state.SelectedFeedIds is not null || _state.SelectedFeedUrls is null) return;
         _state = _state with
         {
-            SelectedFeedIds = _state.SelectedFeedUrls
-                .Select(FeedIdentity.FromUrl)
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(value => value, StringComparer.Ordinal)
-                .ToList(),
+            SelectedFeedIds = _state.SelectedFeedUrls.Select(FeedIdentity.FromUrl)
+                .Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).ToList(),
             SelectedFeedUrls = null
         };
     }
 
     private void PushCustomizationCard()
     {
-        if (_disposed) return;
-
+        IReadOnlyList<FeedSource> sources;
+        WidgetState state;
+        lock (_stateGate)
+        {
+            if (_disposed) return;
+            sources = _customizationSources;
+            state = _state;
+        }
         var options = new WidgetUpdateRequestOptions(_id)
         {
-            Template = WidgetCustomizationRenderer.Render(_customizationSources, _state),
+            Template = WidgetCustomizationRenderer.Render(sources, state),
             Data = "{}",
-            CustomState = JsonSerializer.Serialize(_state)
+            CustomState = JsonSerializer.Serialize(state)
         };
-
         WidgetManager.GetDefault().UpdateWidget(options);
     }
 

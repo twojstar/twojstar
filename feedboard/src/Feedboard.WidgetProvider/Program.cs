@@ -25,7 +25,15 @@ public static class Program
 
         if (args.Length > 0 && args[0].Equals("feeds", StringComparison.OrdinalIgnoreCase))
         {
-            RunFeedCommand(args.Skip(1).ToArray()).GetAwaiter().GetResult();
+            try
+            {
+                RunFeedCommand(args.Skip(1).ToArray()).GetAwaiter().GetResult();
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or InvalidOperationException or OperationCanceledException)
+            {
+                Console.Error.WriteLine(ex.Message);
+                Environment.ExitCode = 1;
+            }
             return;
         }
 

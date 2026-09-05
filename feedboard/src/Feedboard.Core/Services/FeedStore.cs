@@ -31,7 +31,11 @@ public sealed class FeedStore
         if (!TryNormalizeUrl(url, out var normalizedUrl))
             throw new ArgumentException("Feed URL must be an absolute HTTP(S) URL.", nameof(url));
 
-        await MergeAsync(new[] { new FeedSource(normalizedUrl) }, cancellationToken);
+        await MutateAsync(byUrl =>
+        {
+            if (!byUrl.ContainsKey(normalizedUrl))
+                byUrl[normalizedUrl] = new FeedSource(normalizedUrl);
+        }, cancellationToken);
     }
 
     public async Task MergeAsync(IEnumerable<FeedSource> incoming, CancellationToken cancellationToken = default)
@@ -196,11 +200,14 @@ public sealed class FeedStore
         var directory = GetDirectory();
         Directory.CreateDirectory(directory);
         var lockPath = _path + ".lock";
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(5));
+        var lockToken = timeoutCts.Token;
         while (true)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            lockToken.ThrowIfCancellationRequested();
             try { return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, useAsync: true); }
-            catch (IOException) { await Task.Delay(50, cancellationToken); }
+            catch (IOException) { await Task.Delay(50, lockToken); }
         }
     }
 

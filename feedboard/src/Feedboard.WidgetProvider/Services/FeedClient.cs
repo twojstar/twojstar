@@ -23,7 +23,14 @@ public sealed partial class FeedClient
 
     public async Task<IReadOnlyList<FeedArticle>> LoadAsync(IEnumerable<FeedSource> sources, CancellationToken cancellationToken = default)
     {
-        var tasks = sources.Where(x => x.Enabled).Take(32).Select(source => LoadSingleSafeAsync(source, cancellationToken));
+        var enabled = sources.Where(x => x.Enabled).ToList();
+        using var gate = new SemaphoreSlim(8, 8);
+        var tasks = enabled.Select(async source =>
+        {
+            await gate.WaitAsync(cancellationToken);
+            try { return await LoadSingleSafeAsync(source, cancellationToken); }
+            finally { gate.Release(); }
+        });
         var results = await Task.WhenAll(tasks);
         return results.SelectMany(x => x)
             .GroupBy(x => x.Id, StringComparer.Ordinal)
@@ -39,7 +46,7 @@ public sealed partial class FeedClient
         FeedCache.TryGetValue(source.Url, out var cached);
         if (cached?.RetryAfter is { } retryAfter && retryAfter > DateTimeOffset.UtcNow)
         {
-            return cached.Articles;
+            return ApplyCustomTitle(source, cached.Articles);
         }
 
         try
@@ -51,8 +58,11 @@ public sealed partial class FeedClient
             using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             if (response.StatusCode == HttpStatusCode.NotModified && cached is not null)
             {
-                FeedCache[source.Url] = cached with { FailureCount = 0, RetryAfter = null };
-                return cached.Articles;
+                var updated = FeedCache.AddOrUpdate(
+                    source.Url,
+                    cached with { FailureCount = 0, RetryAfter = null },
+                    (_, current) => current with { FailureCount = 0, RetryAfter = null });
+                return ApplyCustomTitle(source, updated.Articles);
             }
 
             response.EnsureSuccessStatusCode();
@@ -73,7 +83,7 @@ public sealed partial class FeedClient
 
             buffer.Position = 0;
             var finalUrl = response.RequestMessage?.RequestUri?.ToString() ?? source.Url;
-            var parseSource = source with { Url = finalUrl };
+            var parseSource = source with { Url = finalUrl, Title = null };
             IReadOnlyList<FeedArticle> articles;
             var mediaType = response.Content.Headers.ContentType?.MediaType;
             if (string.Equals(mediaType, "application/feed+json", StringComparison.OrdinalIgnoreCase) || string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase))
@@ -113,7 +123,7 @@ public sealed partial class FeedClient
                 response.Content.Headers.LastModified,
                 FailureCount: 0,
                 RetryAfter: null);
-            return articles;
+            return ApplyCustomTitle(source, articles);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException or JsonException or FormatException)
@@ -123,17 +133,20 @@ public sealed partial class FeedClient
         }
     }
 
-    private static IReadOnlyList<FeedArticle> RegisterFeedFailure(string feedUrl, FeedCacheEntry? cached)
+    private static IReadOnlyList<FeedArticle> RegisterFeedFailure(string feedUrl, FeedCacheEntry? _)
     {
-        if (cached is null) return Array.Empty<FeedArticle>();
-        var failures = Math.Min(cached.FailureCount + 1, 5);
+        var updated = FeedCache.AddOrUpdate(
+            feedUrl,
+            _ => FailedEntry(Array.Empty<FeedArticle>(), 1),
+            (_, current) => FailedEntry(current.Articles, Math.Min(current.FailureCount + 1, 5), current));
+        return updated.Articles;
+    }
+
+    private static FeedCacheEntry FailedEntry(IReadOnlyList<FeedArticle> articles, int failures, FeedCacheEntry? current = null)
+    {
         var delayMinutes = Math.Min(5 * (1 << (failures - 1)), 60);
-        FeedCache[feedUrl] = cached with
-        {
-            FailureCount = failures,
-            RetryAfter = DateTimeOffset.UtcNow.AddMinutes(delayMinutes)
-        };
-        return cached.Articles;
+        return new FeedCacheEntry(articles, current?.ETag, current?.LastModified, failures,
+            DateTimeOffset.UtcNow.AddMinutes(delayMinutes));
     }
 
     private static async Task<string?> GetSiteIconAsync(string feedUrl, CancellationToken cancellationToken)
@@ -234,7 +247,7 @@ public sealed partial class FeedClient
     {
         var version = JsonString(root, "version");
         if (version is null || !version.StartsWith("https://jsonfeed.org/version/", StringComparison.OrdinalIgnoreCase)) throw new FormatException("Unsupported JSON Feed version.");
-        var feedTitle = JsonString(root, "title") ?? source.Title ?? HostName(source.Url);
+        var feedTitle = source.Title ?? JsonString(root, "title") ?? HostName(source.Url);
         var favicon = JsonString(root, "favicon") ?? JsonString(root, "icon") ?? FaviconFrom(source.Url);
         if (!root.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array) return Array.Empty<FeedArticle>();
         return items.EnumerateArray().Select(item =>
@@ -264,14 +277,22 @@ public sealed partial class FeedClient
     private static IReadOnlyList<FeedArticle> ParseRss(FeedSource source, XElement root)
     {
         var channel = root.Elements().FirstOrDefault(x => x.Name.LocalName == "channel") ?? root;
-        var feedTitle = Text(channel, "title") ?? source.Title ?? HostName(source.Url);
+        var feedTitle = source.Title ?? Text(channel, "title") ?? HostName(source.Url);
         var favicon = FirstUrl(channel.Descendants().FirstOrDefault(x => x.Name.LocalName == "image"), "url") ?? FaviconFrom(source.Url);
-        return channel.Elements().Where(x => x.Name.LocalName == "item").Select(item => BuildArticle(source, feedTitle, Text(item, "title") ?? "(untitled)", FirstUrl(item, "link") ?? Text(item, "guid") ?? source.Url, Text(item, "description") ?? Text(item, "encoded"), ParseDate(Text(item, "pubDate") ?? Text(item, "date")), favicon, FindThumbnail(item, source.Url))).ToList();
+        return channel.Elements().Where(x => x.Name.LocalName == "item").Select(item =>
+        {
+            var guidElement = item.Elements().FirstOrDefault(x => x.Name.LocalName.Equals("guid", StringComparison.OrdinalIgnoreCase));
+            var guid = guidElement?.Value.Trim();
+            var guidIsPermalink = !string.Equals((string?)guidElement?.Attribute("isPermaLink"), "false", StringComparison.OrdinalIgnoreCase);
+            var guidUrl = guidIsPermalink && IsHttpUrl(guid) ? guid : null;
+            var article = BuildArticle(source, feedTitle, Text(item, "title") ?? "(untitled)", FirstUrl(item, "link") ?? guidUrl ?? source.Url, Text(item, "description") ?? Text(item, "encoded"), ParseDate(Text(item, "pubDate") ?? Text(item, "date")), favicon, FindThumbnail(item, source.Url));
+            return string.IsNullOrWhiteSpace(guid) ? article : article with { Id = StableId(source.Url, guid) };
+        }).ToList();
     }
 
     private static IReadOnlyList<FeedArticle> ParseAtom(FeedSource source, XElement root)
     {
-        var feedTitle = Text(root, "title") ?? source.Title ?? HostName(source.Url);
+        var feedTitle = source.Title ?? Text(root, "title") ?? HostName(source.Url);
         var icon = Text(root, "icon") ?? Text(root, "logo") ?? FaviconFrom(source.Url);
         return root.Elements().Where(x => x.Name.LocalName == "entry").Select(entry =>
         {
@@ -286,10 +307,21 @@ public sealed partial class FeedClient
     private static IReadOnlyList<FeedArticle> ParseRdf(FeedSource source, XElement root)
     {
         var channel = root.Elements().FirstOrDefault(x => x.Name.LocalName == "channel");
-        var feedTitle = Text(channel, "title") ?? source.Title ?? HostName(source.Url);
+        var feedTitle = source.Title ?? Text(channel, "title") ?? HostName(source.Url);
         var favicon = FaviconFrom(source.Url);
         return root.Elements().Where(x => x.Name.LocalName == "item").Select(item => BuildArticle(source, feedTitle, Text(item, "title") ?? "(untitled)", FirstUrl(item, "link") ?? source.Url, Text(item, "description") ?? Text(item, "encoded"), ParseDate(Text(item, "date")), favicon, FindThumbnail(item, source.Url))).ToList();
     }
+
+    private static IReadOnlyList<FeedArticle> ApplyCustomTitle(FeedSource source, IReadOnlyList<FeedArticle> articles)
+    {
+        if (string.IsNullOrWhiteSpace(source.Title)) return articles;
+        var title = CleanText(source.Title, 120);
+        return articles.Select(article => article with { FeedTitle = title }).ToList();
+    }
+
+    private static bool IsHttpUrl(string? value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
     private static FeedArticle BuildArticle(FeedSource source, string feedTitle, string title, string url, string? summary, DateTimeOffset? published, string? favicon, string? thumbnail)
     {
