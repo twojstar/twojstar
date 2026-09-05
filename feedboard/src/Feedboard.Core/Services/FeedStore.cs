@@ -164,7 +164,9 @@ public sealed class FeedStore
         foreach (var source in sources)
         {
             if (source is null || !TryNormalizeUrl(source.Url, out var normalizedUrl)) continue;
-            var id = string.IsNullOrWhiteSpace(source.Id) ? FeedIdentity.FromUrl(normalizedUrl) : source.Id.Trim();
+            // Derive missing IDs from the URL exactly as it was persisted by earlier
+            // releases, then canonicalize only the URL used for lookup/deduplication.
+            var id = string.IsNullOrWhiteSpace(source.Id) ? FeedIdentity.FromUrl(source.Url) : source.Id.Trim();
             byUrl[normalizedUrl] = source with { Url = normalizedUrl, Id = id };
         }
         return byUrl;

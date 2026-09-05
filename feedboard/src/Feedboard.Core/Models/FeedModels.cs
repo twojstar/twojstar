@@ -41,8 +41,11 @@ public static class FeedIdentity
 {
     public static string FromUrl(string url)
     {
-        var normalized = FeedUrl.TryNormalize(url, out var value) ? value : url.Trim();
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
+        // Stable IDs predate FeedUrl canonicalization and are persisted in widget state.
+        // Keep the original identity algorithm so URL-normalization improvements never
+        // silently invalidate an existing feed selection (notably for Unicode IDNs).
+        var legacy = Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.ToString() : url.Trim();
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(legacy));
         return Convert.ToHexString(hash.AsSpan(0, 16)).ToLowerInvariant();
     }
 }

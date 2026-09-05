@@ -62,14 +62,12 @@ Feed definitions are stored in `%LOCALAPPDATA%\Feedboard\feeds.json`.
 
 For same-repository builds, GitHub also publishes Sigstore-backed artifact attestations for `Feedboard.msix`, `Feedboard.cer`, and the install helper. The helper refuses to trust the development certificate unless those attestations verify against `twojstar/twojstar`.
 
-Successful `main` builds also refresh the [Feedboard rolling release](https://github.com/twojstar/twojstar/releases/tag/feedboard-latest). Its `Feedboard-dev-x64.zip` contains the same attested development package, dependencies and install helper behind a stable download page instead of a short-lived Actions artifact URL.
-
-The install helper is therefore intended for same-repository builds. Fork PR artifacts are still useful for CI validation, but they are not attested by this workflow and will fail the install helper's provenance verification.
+The install helper is intended for same-repository builds. Fork PR artifacts are still useful for CI validation, but they are not attested by this workflow and will fail the install helper's provenance verification.
 
 To smoke-test a same-repository build on Windows 11:
 
 1. Install and sign in to GitHub CLI (`gh`) so artifact provenance can be verified.
-2. Download and unzip either the `feedboard-msix-x64` workflow artifact or `Feedboard-dev-x64.zip` from the rolling release.
+2. Download and unzip the `feedboard-msix-x64` workflow artifact from a successful same-repository `Feedboard CI` run.
 3. From the directory containing the package run:
 
 ```powershell
