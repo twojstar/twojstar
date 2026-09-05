@@ -18,25 +18,25 @@
 
 | project | entry points | purpose |
 |---|---|---|
-| 🔳 **Benches** | [`benches/`](benches/) · [Codebench](https://codebench.trfny.com) · [Docbench](https://docbench.travny.workers.dev) · [Streambench](https://streambench.trfny.com) | Browser-first QR/barcode, document/PDF and media workshops. |
+| 🔳 **Benches** | [`benches/`](benches/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/benches-portable.zip) · [Codebench](https://codebench.trfny.com) · [Docbench](https://docbench.travny.workers.dev) · [Streambench](https://streambench.trfny.com) | Browser-first QR/barcode, document/PDF and media workshops. |
 | 🌦️ **Weather Feed** | [`weather-feed/`](weather-feed/) · [weather.trfny.com](https://weather.trfny.com) | Multi-source weather, air-quality and IMGW alerts for Kościelec/Chrzanów, exposed as web, JSON and Atom. |
-| 📰 **Feedboard** | [`feedboard/`](feedboard/) | Windows 11 feed widget/provider with RSS/Atom/JSON Feed support and a small settings app. |
-| 📱 **Xiaomi ADB Tools** | [`xiaomi-adb-tools/`](xiaomi-adb-tools/) | Maintained desktop ADB/Fastboot utility with platform-specific JavaFX builds. |
+| 📰 **Feedboard** | [`feedboard/`](feedboard/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/feedboard.zip) | Windows 11 feed widget/provider with RSS/Atom/JSON Feed support and a small settings app. |
+| 📱 **Xiaomi ADB Tools** | [`xiaomi-adb-tools/`](xiaomi-adb-tools/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/xiaomi-adb-tools.zip) | Maintained desktop ADB/Fastboot utility with platform-specific JavaFX builds. |
 | 🖼️ **Paint.NET ICO FileType** | [`paintdotnet-ico/`](paintdotnet-ico/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/paintdotnet-ico.zip) | ICO import/export plugin for Paint.NET 5.1 and 5.2+, shipped as verified dual adapters. |
 
 ## 📦 One rolling release
 
-GitHub **Latest** is the repository-wide rolling snapshot. Product workflows build and attest their own artifacts; the central publisher assembles only complete successful outputs into one release and then moves the `Latest` pointer.
+GitHub **Latest** is the repository-wide rolling snapshot. Product workflows can keep detailed build artifacts internally; the central publisher exposes only compact product bundles:
 
-Current downloadable groups include:
+- [`benches-portable.zip`](https://github.com/twojstar/twojstar/releases/latest/download/benches-portable.zip) — Codebench, Docbench and Streambench portable builds,
+- [`feedboard.zip`](https://github.com/twojstar/twojstar/releases/latest/download/feedboard.zip) — Feedboard sideload package, certificate, verified installer and dependencies,
+- [`xiaomi-adb-tools.zip`](https://github.com/twojstar/twojstar/releases/latest/download/xiaomi-adb-tools.zip) — all five platform-specific Xiaomi ADB Tools JARs,
+- [`paintdotnet-ico.zip`](https://github.com/twojstar/twojstar/releases/latest/download/paintdotnet-ico.zip) — Paint.NET ICO plugin package,
+- [`SHA256SUMS`](https://github.com/twojstar/twojstar/releases/latest/download/SHA256SUMS) — checksums for the four product bundles.
 
-- portable **Codebench / Docbench / Streambench** builds,
-- **Feedboard** MSIX/package assets,
-- five platform-specific **Xiaomi ADB Tools** JARs,
-- **Paint.NET ICO** legacy + modern DLLs and `paintdotnet-ico.zip`,
-- repository-wide `SHA256SUMS` and provenance attestations.
+The publisher assembles a complete draft first and moves the GitHub `Latest` pointer only after all required bundles are uploaded.
 
-➡️ **[Download the current unified Latest](https://github.com/twojstar/twojstar/releases/latest)**
+➡️ **[Open the current unified Latest](https://github.com/twojstar/twojstar/releases/latest)**
 
 ## ⚙️ Maintenance
 
