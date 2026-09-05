@@ -92,6 +92,8 @@ const K = {
   lastGood: "lastgood:current",
   statusCurrent: "status:current",
   statusForecast: "status:forecast",
+  pendingCurrent: "pending:current",
+  pendingForecast: "pending:forecast",
 } as const;
 
 const POINT_SOURCES: readonly SourceId[] = ["openmeteo", "openweather", "visualcrossing"];
@@ -102,6 +104,17 @@ interface CycleStatus {
   sources?: SourceId[];
   warningsFresh?: ("meteo" | "hydro")[];
   message?: string;
+}
+interface PendingCurrent {
+  entries: FeedEntry[];
+  baselineCurrent?: Ensemble;
+  baselineAir?: AirQuality;
+  warnings?: Warning[];
+  currentState?: CurrentState;
+}
+interface PendingForecast {
+  entries: FeedEntry[];
+  baselineForecast: DayEnsemble[];
 }
 
 async function load<T>(env: Env, key: string): Promise<T | null> {
@@ -116,8 +129,12 @@ export async function pushEntries(env: Env, fresh: FeedEntry[]): Promise<void> {
   if (fresh.length === 0) return;
   const existing = (await load<FeedEntry[]>(env, K.entries)) ?? [];
   const unique = new Map<string, FeedEntry>();
-  for (const entry of existing) unique.set(entry.id, entry);
-  for (const entry of fresh) unique.set(entry.id, entry);
+  for (const entry of [...existing, ...fresh]) {
+    const previous = unique.get(entry.id);
+    if (!previous || Date.parse(entry.published) >= Date.parse(previous.published)) {
+      unique.set(entry.id, entry);
+    }
+  }
   const merged = [...unique.values()]
     .sort((a, b) => Date.parse(b.published) - Date.parse(a.published))
     .slice(0, CONFIG.maxEntries);
@@ -125,7 +142,29 @@ export async function pushEntries(env: Env, fresh: FeedEntry[]): Promise<void> {
   log("info", { msg: "entries appended", added: fresh.length, total: merged.length });
 }
 
+export async function completePendingCurrent(env: Env): Promise<boolean> {
+  const pending = await load<PendingCurrent>(env, K.pendingCurrent);
+  if (!pending) return false;
+  await pushEntries(env, pending.entries);
+  if (pending.baselineCurrent) await env.WEATHER_KV.put(K.baselineCurrent, JSON.stringify(pending.baselineCurrent));
+  if (pending.baselineAir) await env.WEATHER_KV.put(K.baselineAir, JSON.stringify(pending.baselineAir));
+  if (pending.warnings) await env.WEATHER_KV.put(K.warnings, JSON.stringify(pending.warnings));
+  if (pending.currentState) await env.WEATHER_KV.put(K.current, JSON.stringify(pending.currentState));
+  await env.WEATHER_KV.delete(K.pendingCurrent);
+  return true;
+}
+
+async function completePendingForecast(env: Env): Promise<boolean> {
+  const pending = await load<PendingForecast>(env, K.pendingForecast);
+  if (!pending) return false;
+  await pushEntries(env, pending.entries);
+  await env.WEATHER_KV.put(K.baselineForecast, JSON.stringify(pending.baselineForecast));
+  await env.WEATHER_KV.delete(K.pendingForecast);
+  return true;
+}
+
 async function runCurrent(env: Env): Promise<void> {
+  await completePendingCurrent(env);
   const [om, ow, vc, air, warningFetch, station] = await Promise.all([
     fetchOpenMeteo().catch(asNull("openmeteo")),
     fetchOpenWeather(env).catch(asNull("openweather")),
@@ -190,29 +229,31 @@ async function runCurrent(env: Env): Promise<void> {
   }
 
   const prevState = await load<CurrentState>(env, K.current);
+  let currentState: CurrentState | undefined;
   if (ensemble) {
-    const state: CurrentState = {
+    currentState = {
       ensemble,
       warnings,
       airQuality: air ?? prevState?.airQuality ?? null,
       imgwStation: station ?? prevState?.imgwStation ?? null,
     };
-    await env.WEATHER_KV.put(K.current, JSON.stringify(state));
   } else if (prevState) {
-    const state: CurrentState = {
+    currentState = {
       ...prevState,
       warnings,
       airQuality: air ?? prevState.airQuality,
       imgwStation: station ?? prevState.imgwStation,
     };
-    await env.WEATHER_KV.put(K.current, JSON.stringify(state));
   }
 
-  await pushEntries(env, fresh);
-  if (baselineCurrent) await env.WEATHER_KV.put(K.baselineCurrent, JSON.stringify(baselineCurrent));
-  if (baselineAir) await env.WEATHER_KV.put(K.baselineAir, JSON.stringify(baselineAir));
-  if (warningsChanged || warningResult.succeeded.length > 0) {
-    await env.WEATHER_KV.put(K.warnings, JSON.stringify(warnings));
+  const pending: PendingCurrent = { entries: fresh };
+  if (baselineCurrent) pending.baselineCurrent = baselineCurrent;
+  if (baselineAir) pending.baselineAir = baselineAir;
+  if (warningsChanged || warningResult.succeeded.length > 0) pending.warnings = warnings;
+  if (currentState) pending.currentState = currentState;
+  if (fresh.length || pending.baselineCurrent || pending.baselineAir || pending.warnings || pending.currentState) {
+    await env.WEATHER_KV.put(K.pendingCurrent, JSON.stringify(pending));
+    await completePendingCurrent(env);
   }
   const status: CycleStatus = {
     ok: liveReadings.length > 0,
@@ -224,6 +265,7 @@ async function runCurrent(env: Env): Promise<void> {
 }
 
 async function runForecast(env: Env): Promise<void> {
+  await completePendingForecast(env);
   const [om, ow, vc] = await Promise.all([
     fetchOpenMeteo().catch(asNull("openmeteo")),
     fetchOpenWeather(env).catch(asNull("openweather")),
@@ -242,8 +284,9 @@ async function runForecast(env: Env): Promise<void> {
   const prev = await load<DayEnsemble[]>(env, K.baselineForecast);
   const entry = forecastRevision(prev, next);
   if (entry) {
-    await pushEntries(env, [entry]);
-    await env.WEATHER_KV.put(K.baselineForecast, JSON.stringify(next));
+    const pending: PendingForecast = { entries: [entry], baselineForecast: next };
+    await env.WEATHER_KV.put(K.pendingForecast, JSON.stringify(pending));
+    await completePendingForecast(env);
   }
   const sources = [om, ow, vc]
     .flatMap((result) => result?.days[0]?.source ? [result.days[0].source] : []);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { FEED_ID, renderAtom, warningEntries } from "../src/feed";
-import worker, { pushEntries } from "../src/index";
+import worker, { completePendingCurrent, pushEntries } from "../src/index";
 import { renderPage } from "../src/page";
 import type { FeedEntry, Warning } from "../src/types";
 import {
@@ -128,15 +128,15 @@ test("pushEntries is idempotent and keeps newest entries first", async () => {
   } as unknown as KVNamespace;
   const env = { WEATHER_KV: kv } as Env;
   const older: FeedEntry = {
-    id: "same", kind: "current", title: "old", summary: "old",
+    id: "same", kind: "current_change", title: "old", summary: "old",
     published: "2026-09-05T08:00:00.000Z",
   };
   const newer: FeedEntry = {
-    id: "same", kind: "current", title: "new", summary: "new",
+    id: "same", kind: "current_change", title: "new", summary: "new",
     published: "2026-09-05T10:00:00.000Z",
   };
   const middle: FeedEntry = {
-    id: "middle", kind: "forecast", title: "middle", summary: "middle",
+    id: "middle", kind: "forecast_revision", title: "middle", summary: "middle",
     published: "2026-09-05T09:00:00.000Z",
   };
   store.set("entries", JSON.stringify([older, middle]));
@@ -144,4 +144,44 @@ test("pushEntries is idempotent and keeps newest entries first", async () => {
   const saved = JSON.parse(store.get("entries") ?? "[]") as FeedEntry[];
   assert.deepEqual(saved.map((entry) => entry.id), ["same", "middle"]);
   assert.equal(saved[0]?.title, "new");
+  await pushEntries(env, [older]);
+  const afterRetry = JSON.parse(store.get("entries") ?? "[]") as FeedEntry[];
+  assert.equal(afterRetry[0]?.title, "new");
+});
+
+
+test("pending current transaction retries without duplicating entries", async () => {
+  const store = new Map<string, string>();
+  let failWarnings = true;
+  const entry: FeedEntry = {
+    id: "pending-current", kind: "current_change", title: "change", summary: "change",
+    published: "2026-09-05T10:30:00.000Z",
+  };
+  store.set("pending:current", JSON.stringify({ entries: [entry], warnings: [meteo] }));
+  const kv = {
+    async get(key: string, type?: string) {
+      const value = store.get(key);
+      if (value == null) return null;
+      return type === "json" ? JSON.parse(value) : value;
+    },
+    async put(key: string, value: string) {
+      if (key === "warnings:active" && failWarnings) {
+        failWarnings = false;
+        throw new Error("simulated KV failure");
+      }
+      store.set(key, value);
+    },
+    async delete(key: string) { store.delete(key); },
+  } as unknown as KVNamespace;
+  const env = { WEATHER_KV: kv } as Env;
+
+  await assert.rejects(() => completePendingCurrent(env), /simulated KV failure/);
+  assert.ok(store.has("pending:current"));
+  assert.equal((JSON.parse(store.get("entries") ?? "[]") as FeedEntry[]).length, 1);
+
+  assert.equal(await completePendingCurrent(env), true);
+  assert.ok(!store.has("pending:current"));
+  assert.ok(store.has("warnings:active"));
+  const entries = JSON.parse(store.get("entries") ?? "[]") as FeedEntry[];
+  assert.deepEqual(entries.map((item) => item.id), ["pending-current"]);
 });
