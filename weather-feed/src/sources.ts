@@ -156,8 +156,12 @@ export async function fetchOpenWeather(env: Env): Promise<{ current: Reading | n
   if (!key) return { current: null, days: [] };
   const q = `lat=${CONFIG.lat}&lon=${CONFIG.lon}&units=metric&appid=${key}`;
 
+  const [currentResult, forecastResult] = await Promise.allSettled([
+    getJson(`https://api.openweathermap.org/data/2.5/weather?${q}`),
+    getJson(`https://api.openweathermap.org/data/2.5/forecast?${q}`),
+  ]);
   let current: Reading | null = null;
-  const w = await getJson(`https://api.openweathermap.org/data/2.5/weather?${q}`);
+  const w = currentResult.status === "fulfilled" ? currentResult.value : null;
   if (isObj(w) && isObj(w["main"]) && Array.isArray(w["weather"])) {
     const m = w["main"] as Record<string, unknown>;
     const wind = isObj(w["wind"]) ? w["wind"] : {};
@@ -177,7 +181,7 @@ export async function fetchOpenWeather(env: Env): Promise<{ current: Reading | n
 
   // Free forecast = 5-day / 3-hour. Roll up to local Europe/Warsaw days.
   const days: DayForecast[] = [];
-  const f = await getJson(`https://api.openweathermap.org/data/2.5/forecast?${q}`);
+  const f = forecastResult.status === "fulfilled" ? forecastResult.value : null;
   if (isObj(f) && Array.isArray(f["list"])) {
     type Bucket = { max: number; min: number; precip: number; prob: number; conds: Condition[] };
     const byDay = new Map<string, Bucket>();
@@ -329,9 +333,11 @@ function parseWarnings(data: unknown, category: WarningCategory): Warning[] {
   for (const w of data) {
     if (!isObj(w) || !matchesArea(w)) continue;
     const pick = (...keys: string[]): unknown => keys.map((k) => w[k]).find((v) => v != null);
+    const str = (value: unknown): string | null =>
+      typeof value === "string" && value.trim() !== "" ? value : null;
     const numer = String(pick("numer", "nr", "id") ?? "");
     const event = String(pick("zdarzenie", "nazwa_zdarzenia", "nazwa") ?? "Ostrzeżenie");
-    const from = (pick("data_od", "obowiazuje_od", "od") as string) ?? null;
+    const from = str(pick("data_od", "obowiazuje_od", "od"));
     out.push({
       category,
       id: `${category}:${numer || `${event}-${from ?? ""}`}`,
@@ -339,7 +345,7 @@ function parseWarnings(data: unknown, category: WarningCategory): Warning[] {
       level: num(pick("stopień", "stopien", "Stopien")),
       probability: num(pick("prawdopodobienstwo", "Prawdopodobienstwo")),
       from,
-      to: (pick("data_do", "obowiazuje_do", "do") as string) ?? null,
+      to: str(pick("data_do", "obowiazuje_do", "do")),
       content: String(pick("przebieg", "tresc", "Tresc", "komentarz") ?? ""),
     });
   }

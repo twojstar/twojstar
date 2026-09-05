@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { FEED_ID, renderAtom, warningEntries } from "../src/feed";
-import worker from "../src/index";
+import worker, { pushEntries } from "../src/index";
 import { renderPage } from "../src/page";
-import type { Warning } from "../src/types";
+import type { FeedEntry, Warning } from "../src/types";
 import {
   reconcileWarnings, warningEndTimeMs,
 } from "../src/warnings";
@@ -113,4 +113,35 @@ test("weather discovery routes do not require storage", async () => {
     assert.equal(response.status, 200);
     assert.ok((await response.text()).includes(canonicalUrl));
   }
+});
+
+
+test("pushEntries is idempotent and keeps newest entries first", async () => {
+  const store = new Map<string, string>();
+  const kv = {
+    async get(key: string, type?: string) {
+      const value = store.get(key);
+      if (value == null) return null;
+      return type === "json" ? JSON.parse(value) : value;
+    },
+    async put(key: string, value: string) { store.set(key, value); },
+  } as unknown as KVNamespace;
+  const env = { WEATHER_KV: kv } as Env;
+  const older: FeedEntry = {
+    id: "same", kind: "current", title: "old", summary: "old",
+    published: "2026-09-05T08:00:00.000Z",
+  };
+  const newer: FeedEntry = {
+    id: "same", kind: "current", title: "new", summary: "new",
+    published: "2026-09-05T10:00:00.000Z",
+  };
+  const middle: FeedEntry = {
+    id: "middle", kind: "forecast", title: "middle", summary: "middle",
+    published: "2026-09-05T09:00:00.000Z",
+  };
+  store.set("entries", JSON.stringify([older, middle]));
+  await pushEntries(env, [newer]);
+  const saved = JSON.parse(store.get("entries") ?? "[]") as FeedEntry[];
+  assert.deepEqual(saved.map((entry) => entry.id), ["same", "middle"]);
+  assert.equal(saved[0]?.title, "new");
 });

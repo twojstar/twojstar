@@ -112,10 +112,15 @@ function log(level: "info" | "warn" | "error", fields: Record<string, unknown>):
   console.log(JSON.stringify({ level, ...fields }));
 }
 
-async function pushEntries(env: Env, fresh: FeedEntry[]): Promise<void> {
+export async function pushEntries(env: Env, fresh: FeedEntry[]): Promise<void> {
   if (fresh.length === 0) return;
   const existing = (await load<FeedEntry[]>(env, K.entries)) ?? [];
-  const merged = [...fresh, ...existing].slice(0, CONFIG.maxEntries);
+  const unique = new Map<string, FeedEntry>();
+  for (const entry of existing) unique.set(entry.id, entry);
+  for (const entry of fresh) unique.set(entry.id, entry);
+  const merged = [...unique.values()]
+    .sort((a, b) => Date.parse(b.published) - Date.parse(a.published))
+    .slice(0, CONFIG.maxEntries);
   await env.WEATHER_KV.put(K.entries, JSON.stringify(merged));
   log("info", { msg: "entries appended", added: fresh.length, total: merged.length });
 }
@@ -153,6 +158,8 @@ async function runCurrent(env: Env): Promise<void> {
 
   const fresh: FeedEntry[] = [];
   let ensemble: Ensemble | null = null;
+  let baselineCurrent: Ensemble | null = null;
+  let baselineAir: AirQuality | null = null;
 
   if (readings.length > 0) {
     ensemble = buildEnsemble(readings);
@@ -160,7 +167,7 @@ async function runCurrent(env: Env): Promise<void> {
     const entry = currentChange(prev, ensemble);
     if (entry) {
       fresh.push(entry);
-      await env.WEATHER_KV.put(K.baselineCurrent, JSON.stringify(ensemble));
+      baselineCurrent = ensemble;
     }
   }
 
@@ -169,18 +176,17 @@ async function runCurrent(env: Env): Promise<void> {
     const entry = airQualityChange(prevAir, air);
     if (entry) {
       fresh.push(entry);
-      await env.WEATHER_KV.put(K.baselineAir, JSON.stringify(air));
+      baselineAir = air;
     }
   }
 
   const prevWarnings = (await load<Warning[]>(env, K.warnings)) ?? [];
-  let warnings = prevWarnings;
-  if (warningFetch && warningFetch.succeeded.length > 0) {
-    warnings = reconcileWarnings(prevWarnings, warningFetch);
-    fresh.push(...warningEntries(prevWarnings, warnings));
-    await env.WEATHER_KV.put(K.warnings, JSON.stringify(warnings));
-  } else {
-    log("warn", { msg: "IMGW warnings unavailable; preserving previous state" });
+  const warningResult = warningFetch ?? { warnings: [], succeeded: [] };
+  const warnings = reconcileWarnings(prevWarnings, warningResult);
+  fresh.push(...warningEntries(prevWarnings, warnings));
+  const warningsChanged = JSON.stringify(warnings) !== JSON.stringify(prevWarnings);
+  if (warningResult.succeeded.length === 0) {
+    log("warn", { msg: "IMGW warnings unavailable; preserving unexpired previous state" });
   }
 
   const prevState = await load<CurrentState>(env, K.current);
@@ -203,6 +209,11 @@ async function runCurrent(env: Env): Promise<void> {
   }
 
   await pushEntries(env, fresh);
+  if (baselineCurrent) await env.WEATHER_KV.put(K.baselineCurrent, JSON.stringify(baselineCurrent));
+  if (baselineAir) await env.WEATHER_KV.put(K.baselineAir, JSON.stringify(baselineAir));
+  if (warningsChanged || warningResult.succeeded.length > 0) {
+    await env.WEATHER_KV.put(K.warnings, JSON.stringify(warnings));
+  }
   const status: CycleStatus = {
     ok: liveReadings.length > 0,
     completedAt: new Date().toISOString(),
@@ -231,8 +242,8 @@ async function runForecast(env: Env): Promise<void> {
   const prev = await load<DayEnsemble[]>(env, K.baselineForecast);
   const entry = forecastRevision(prev, next);
   if (entry) {
-    await env.WEATHER_KV.put(K.baselineForecast, JSON.stringify(next));
     await pushEntries(env, [entry]);
+    await env.WEATHER_KV.put(K.baselineForecast, JSON.stringify(next));
   }
   const sources = [om, ow, vc]
     .flatMap((result) => result?.days[0]?.source ? [result.days[0].source] : []);

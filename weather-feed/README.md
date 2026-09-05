@@ -1,4 +1,4 @@
-# [weather-feed](https://weather.travny.workers.dev)
+# [weather-feed](https://weather.trfny.com)
 
 [![Weather](https://github.com/twojstar/twojstar/actions/workflows/weather-ci.yml/badge.svg)](https://github.com/twojstar/twojstar/actions/workflows/weather-ci.yml)
 
@@ -44,12 +44,16 @@ The request path is read-only. KV writes happen only during scheduled cycles.
 
 ```sh
 npm install
-wrangler kv namespace create WEATHER_KV
 wrangler secret put OPENWEATHER_KEY
 wrangler secret put VISUALCROSSING_KEY
 npm run check
 wrangler deploy
 ```
+
+`wrangler.jsonc` is pinned to the existing production `WEATHER_KV` namespace.
+For a new environment, create a separate namespace with
+`wrangler kv namespace create WEATHER_KV` and replace `kv_namespaces[0].id`
+with the returned ID before deploying.
 
 Open-Meteo and IMGW need no key. Without keyed providers the Worker continues
 in degraded single-source mode.
