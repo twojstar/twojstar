@@ -177,22 +177,22 @@ public static class WidgetCardRenderer
                 ["width"] = "auto",
                 ["verticalContentAlignment"] = "Center",
                 ["spacing"] = "Small",
-                ["selectAction"] = new JsonObject
-                {
-                    ["type"] = "Action.Execute",
-                    ["verb"] = "refresh",
-                    ["title"] = "Refresh feeds now",
-                    ["tooltip"] = "Refresh feeds now"
-                },
                 ["items"] = new JsonArray
                 {
                     new JsonObject
                     {
-                        ["type"] = "TextBlock",
-                        ["text"] = "↻",
-                        ["size"] = "Medium",
-                        ["horizontalAlignment"] = "Center",
-                        ["spacing"] = "None"
+                        ["type"] = "ActionSet",
+                        ["spacing"] = "None",
+                        ["actions"] = new JsonArray
+                        {
+                            new JsonObject
+                            {
+                                ["type"] = "Action.Execute",
+                                ["verb"] = "refresh",
+                                ["title"] = "↻",
+                                ["tooltip"] = "Refresh feeds now"
+                            }
+                        }
                     }
                 }
             }
