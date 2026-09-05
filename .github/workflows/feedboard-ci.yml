@@ -90,16 +90,25 @@ jobs:
             Copy-Item -LiteralPath $source -Destination (Join-Path $settingsXamlStage $name)
           }
 
-          $runNumber = [int64]"${{ github.run_number }}"
-          $runAttempt = [int64]"${{ github.run_attempt }}"
-          $minor = 2 + [math]::Floor(($runNumber - 1) / 65535)
-          $build = (($runNumber - 1) % 65535) + 1
-
-          if ($minor -gt 65535 -or $runAttempt -gt 65535) {
-            throw "GitHub run number cannot be represented as an MSIX version."
+          # github.run_number can reset when a workflow is recreated, which once made
+          # a fresh 0.2.25.1 package older than an installed 0.2.133.1 build. Encode the
+          # monotonically increasing run id plus rerun attempt into the 48 bits available
+          # after the fixed MSIX major version instead.
+          $runId = [uint64]"${{ github.run_id }}"
+          $runAttempt = [uint64]"${{ github.run_attempt }}"
+          if ($runAttempt -lt 1 -or $runAttempt -gt 256) {
+            throw "GitHub run attempt cannot be represented in the MSIX version."
           }
 
-          $packageVersion = "0.$minor.$build.$runAttempt"
+          $serial = ($runId * [uint64]256) + ($runAttempt - 1)
+          if ($serial -gt [uint64]0xFFFFFFFFFFFF) {
+            throw "GitHub run id cannot be represented in the MSIX version."
+          }
+
+          $minor = [uint16](($serial -shr 32) -band 0xFFFF)
+          $build = [uint16](($serial -shr 16) -band 0xFFFF)
+          $revision = [uint16]($serial -band 0xFFFF)
+          $packageVersion = "0.$minor.$build.$revision"
           Write-Host "Packaging Feedboard $packageVersion"
 
           [xml]$manifest = Get-Content -LiteralPath $manifestPath -Raw
