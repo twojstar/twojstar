@@ -67,6 +67,18 @@ platformClassifiers.each { artifactName, classifier ->
     }
 }
 
-tasks.register('platformJars') { dependsOn platformJarTasks }
+tasks.register('platformJars') {
+    dependsOn platformJarTasks
+    doLast {
+        def artifacts = platformJarTasks.collect { it.get().archiveFile.get().asFile }
+        artifacts.each { artifact ->
+            if (!artifact.isFile()) {
+                throw new GradleException("Missing platform artifact: ${artifact}")
+            }
+        }
+        def manifest = layout.buildDirectory.file('libs/XiaomiADBFastbootTools-ASSETS.txt').get().asFile
+        manifest.text = artifacts.collect { it.name }.sort().join(System.lineSeparator()) + System.lineSeparator()
+    }
+}
 tasks.named('jar') { enabled = false }
 tasks.named('assemble') { dependsOn 'platformJars' }

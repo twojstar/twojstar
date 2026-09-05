@@ -1,0 +1,272 @@
+---
+name: Unified rolling release
+
+on: # yamllint disable-line rule:truthy
+  workflow_run:
+    workflows:
+      - Benches portable release
+      - Feedboard CI
+      - Xiaomi ADB Tools CI
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: unified-rolling-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish complete snapshot
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+
+    steps:
+      - name: Reconcile rolling snapshot
+        id: assemble
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p assets work
+          updated=0
+
+          latest_run() {
+            local workflow="$1"
+            local result
+            if ! result="$(gh api --method GET "repos/$GH_REPO/actions/workflows/$workflow/runs" \
+              -f branch=main -f status=success -F per_page=1 \
+              --jq '.workflow_runs[0] | "\(.id)\t\(.head_sha)"')"; then
+              echo "Failed to resolve the latest successful run for $workflow." >&2
+              return 2
+            fi
+            if [ -z "$result" ] || [ "$result" = $'null\tnull' ]; then
+              echo "No successful main run found for $workflow." >&2
+              return 1
+            fi
+            printf '%s\n' "$result"
+          }
+
+          artifact_available() {
+            local run_id="$1" artifact="$2" names
+            if ! names="$(gh api "repos/$GH_REPO/actions/runs/$run_id/artifacts?per_page=100" \
+              --jq '.artifacts[] | select(.expired == false) | .name')"; then
+              echo "Artifact lookup failed for run $run_id." >&2
+              return 2
+            fi
+            grep -Fxq "$artifact" <<< "$names"
+          }
+
+          current_run() {
+            local product="$1"
+            if [ ! -f assets/ROLLING-PROVENANCE.tsv ]; then
+              printf '0\n'
+              return
+            fi
+            awk -F '\t' -v product="$product" '$1 == product { print $3; found=1 } END { if (!found) print 0 }' \
+              assets/ROLLING-PROVENANCE.tsv
+          }
+
+          set_provenance() {
+            local product="$1" workflow="$2" run_id="$3" sha="$4"
+            local file="assets/ROLLING-PROVENANCE.tsv" tmp
+            touch "$file"
+            tmp="$(mktemp)"
+            awk -F '\t' -v product="$product" '$1 != product' "$file" > "$tmp"
+            printf '%s\t%s\t%s\t%s\n' "$product" "$workflow" "$run_id" "$sha" >> "$tmp"
+            sort -t $'\t' -k1,1 "$tmp" > "$file"
+            rm -f "$tmp"
+          }
+
+          download_benches() {
+            local run_id="$1" sha="$2"
+            rm -rf work/benches
+            mkdir -p work/benches
+            gh run download "$run_id" --repo "$GH_REPO" --name benches-portable-release --dir work/benches
+            rm -f assets/codebench-portable.html assets/streambench-portable.html \
+              assets/docbench-portable.html assets/benches-portable.zip
+            for file in codebench-portable.html streambench-portable.html docbench-portable.html benches-portable.zip; do
+              test -s "work/benches/$file"
+              cp "work/benches/$file" assets/
+            done
+            set_provenance Benches benches-release.yml "$run_id" "$sha"
+          }
+
+          download_feedboard() {
+            local run_id="$1" sha="$2"
+            rm -rf work/feedboard
+            mkdir -p work/feedboard
+            gh run download "$run_id" --repo "$GH_REPO" --name feedboard-msix-x64 --dir work/feedboard
+            rm -f assets/Feedboard.msix assets/Feedboard.cer assets/install-dev-package.ps1 assets/Feedboard-dev-x64.zip
+            for file in Feedboard.msix Feedboard.cer install-dev-package.ps1; do
+              test -s "work/feedboard/$file"
+              cp "work/feedboard/$file" assets/
+            done
+            test -d work/feedboard/Dependencies
+            (
+              cd work/feedboard
+              zip -9 -r ../../assets/Feedboard-dev-x64.zip \
+                Feedboard.msix Feedboard.cer install-dev-package.ps1 Dependencies
+            )
+            set_provenance Feedboard feedboard-ci.yml "$run_id" "$sha"
+          }
+
+          download_xiaomi() {
+            local run_id="$1" sha="$2"
+            rm -rf work/xiaomi
+            mkdir -p work/xiaomi
+            gh run download "$run_id" --repo "$GH_REPO" --name XiaomiADBFastbootTools --dir work/xiaomi
+            test -s work/xiaomi/XiaomiADBFastbootTools-ASSETS.txt
+            rm -f assets/XiaomiADBFastbootTools-*.jar assets/XiaomiADBFastbootTools-ASSETS.txt
+            copied=0
+            while IFS= read -r file; do
+              [ -n "$file" ] || continue
+              case "$file" in
+                XiaomiADBFastbootTools-*.jar) ;;
+                *) echo "Unexpected Xiaomi artifact in manifest: $file" >&2; exit 1 ;;
+              esac
+              test -s "work/xiaomi/$file"
+              cp "work/xiaomi/$file" assets/
+              copied=$((copied + 1))
+            done < work/xiaomi/XiaomiADBFastbootTools-ASSETS.txt
+            [ "$copied" -gt 0 ]
+            cp work/xiaomi/XiaomiADBFastbootTools-ASSETS.txt assets/
+            set_provenance Xiaomi-ADB-Tools xiaomi-adb-tools-ci.yml "$run_id" "$sha"
+          }
+
+          reconcile() {
+            local product="$1" workflow="$2" artifact="$3" downloader="$4"
+            local run_id sha published_run info latest_status
+            published_run="$(current_run "$product")"
+            if info="$(latest_run "$workflow")"; then
+              :
+            else
+              latest_status=$?
+              if [ "$latest_status" -eq 2 ]; then
+                exit 1
+              fi
+              if [ "$published_run" -gt 0 ]; then
+                echo "No successful main run for $product; preserving published run $published_run."
+                return
+              fi
+              echo "Cannot resolve any successful $product run to seed the rolling snapshot." >&2
+              exit 1
+            fi
+            IFS=$'\t' read -r run_id sha <<< "$info"
+            if [ "$published_run" -ge "$run_id" ]; then
+              echo "$product is already at run $published_run (latest successful: $run_id)."
+              return
+            fi
+            if artifact_available "$run_id" "$artifact"; then
+              :
+            else
+              availability=$?
+              if [ "$availability" -eq 2 ]; then
+                exit 1
+              fi
+              if [ "$published_run" -gt 0 ]; then
+                echo "Latest $product artifact from run $run_id is unavailable; preserving published run $published_run."
+                return
+              fi
+              echo "No downloadable $product artifact is available to seed the rolling snapshot." >&2
+              exit 1
+            fi
+            "$downloader" "$run_id" "$sha"
+            updated=1
+          }
+
+          previous_tag="$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name 2>/dev/null || true)"
+          if [[ "$previous_tag" =~ ^rolling-[0-9]+-[0-9]+$ ]]; then
+            gh release download "$previous_tag" --repo "$GH_REPO" --dir assets
+            rm -f assets/SHA256SUMS
+          else
+            previous_tag=""
+            rm -rf assets/*
+            echo "No unified rolling snapshot exists yet; seeding from current CI artifacts."
+          fi
+
+          # Reconcile every product on every surviving run. GitHub concurrency may coalesce
+          # pending workflow_run events, so a publisher must never rely only on its trigger.
+          reconcile Benches benches-release.yml benches-portable-release download_benches
+          reconcile Feedboard feedboard-ci.yml feedboard-msix-x64 download_feedboard
+          reconcile Xiaomi-ADB-Tools xiaomi-adb-tools-ci.yml XiaomiADBFastbootTools download_xiaomi
+
+          if [ "$updated" -eq 0 ]; then
+            echo "No newer downloadable product build needs publishing."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          for file in codebench-portable.html streambench-portable.html docbench-portable.html \
+            benches-portable.zip Feedboard.msix Feedboard.cer install-dev-package.ps1 \
+            Feedboard-dev-x64.zip ROLLING-PROVENANCE.tsv XiaomiADBFastbootTools-ASSETS.txt; do
+            test -s "assets/$file"
+          done
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            test -s "assets/$file"
+          done < assets/XiaomiADBFastbootTools-ASSETS.txt
+
+          (
+            cd assets
+            find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\0' | sort -z | xargs -0 sha256sum > SHA256SUMS
+          )
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Publish atomic Latest release
+        if: steps.assemble.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="rolling-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          published=0
+
+          {
+            echo "Rolling snapshot of the latest successful product builds in twojstar/twojstar."
+            echo
+            echo "### Source provenance"
+            while IFS=$'\t' read -r product workflow run_id sha; do
+              printf -- '- **%s** - %s run #%s, commit `%s`\n' "$product" "$workflow" "$run_id" "$sha"
+            done < assets/ROLLING-PROVENANCE.tsv
+            echo
+            echo "The release is assembled as a complete draft and becomes GitHub Latest only after every required asset and checksum has been uploaded."
+          } > release-notes.md
+
+          cleanup_draft() {
+            if [ "$published" -eq 0 ]; then
+              gh release delete "$tag" --repo "$GH_REPO" --cleanup-tag --yes >/dev/null 2>&1 || true
+            fi
+          }
+          trap cleanup_draft ERR INT TERM
+
+          gh release create "$tag" --repo "$GH_REPO" --draft \
+            --target main --title "twojstar · rolling" --notes-file release-notes.md
+          gh release upload "$tag" --repo "$GH_REPO" assets/*
+          gh release edit "$tag" --repo "$GH_REPO" --draft=false --latest
+          published=1
+          trap - ERR INT TERM
+
+          gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
+            --jq '.[] | select((.tag_name | test("^rolling-[0-9]+-[0-9]+$|^benches-[0-9a-f]{12}$")) and .tag_name != "'"$tag"'") | [.id, .tag_name] | @tsv' |
+            while IFS=$'\t' read -r release_id old_tag; do
+              [ -n "$release_id" ] || continue
+              echo "Removing superseded release $old_tag."
+              gh api --method DELETE "repos/$GH_REPO/releases/$release_id"
+              gh api --method DELETE "repos/$GH_REPO/git/refs/tags/$old_tag" || true
+            done
+
+          for legacy in benches-portable-latest feedboard-latest; do
+            if gh release view "$legacy" --repo "$GH_REPO" >/dev/null 2>&1; then
+              echo "Removing legacy rolling release $legacy."
+              gh release delete "$legacy" --repo "$GH_REPO" --cleanup-tag --yes
+            fi
+          done
