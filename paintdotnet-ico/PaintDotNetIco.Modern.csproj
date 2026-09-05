@@ -19,7 +19,6 @@
     <Compile Include="src\IcoDecoder.cs" />
     <Compile Include="src\IcoEncoder.cs" />
     <Compile Include="src\IcoExportOptions.cs" />
-    <Compile Include="src\FrameSelectionDialog.cs" />
     <Compile Include="src\PluginSupportInfo.cs" />
     <Compile Include="modern\IcoFileTypeModern.cs" />
     <Compile Include="modern\IcoFileTypeFactoryModern.cs" />
