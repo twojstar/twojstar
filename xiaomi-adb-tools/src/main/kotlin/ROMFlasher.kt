@@ -20,7 +20,18 @@ object ROMFlasher {
         val source = File(directory, "$arg.$extension")
         val target = File.createTempFile("xiaomi-adb-flash-", ".$extension", directory)
         try {
-            target.writeText(source.readText().replace("fastboot", "${Command.prefix}fastboot"))
+            val fastbootPath = "${Command.prefix}fastboot"
+            val fastbootToken = if (XiaomiADBFastbootTools.win) {
+                "\"$fastbootPath\""
+            } else {
+                "'${fastbootPath.replace("'", "'\\''")}'"
+            }
+            val sourceText = source.readText()
+            val prepared = sourceText.lineSequence()
+                .filterNot { line -> XiaomiADBFastbootTools.win && Regex("(?i)^\\s*@?pause(?:\\s*>.*)?\\s*$").matches(line) }
+                .joinToString(System.lineSeparator())
+                .replace(Regex("\\bfastboot\\b"), fastbootToken)
+            target.writeText(prepared)
             target.setExecutable(true, false)
             target
         } catch (ex: Exception) {
@@ -46,23 +57,19 @@ object ROMFlasher {
                     val commandCount = (script.readText().split("fastboot").size - 1).coerceAtLeast(1)
                     val started = runScript(script, redirectErrorStream = true)
                     process = started
-                    var aborted = false
                     Scanner(started.inputStream, "UTF-8").useDelimiter("").use { scanner ->
                         val output = StringBuilder()
                         while (scanner.hasNext()) {
                             val next = scanner.next()
                             output.append(next)
                             val full = output.toString()
-                            if ("pause" in full) { aborted = true; break }
                             withContext(Dispatchers.Main) {
                                 outputTextArea.appendText(next)
                                 progressBar.progress = 1.0 * (full.lowercase().split("finished.").size - 1) / commandCount
                             }
                         }
                     }
-                    if (aborted) started.destroy()
-                    val exitCode = started.waitFor()
-                    !aborted && exitCode == 0
+                    started.waitFor() == 0
                 } catch (ex: Exception) {
                     ex.printStackTrace()
                     ex.alert(fatal = false)

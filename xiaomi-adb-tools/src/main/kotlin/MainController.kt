@@ -840,14 +840,18 @@ class MainController : Initializable {
                     if (Device.checkFastboot()) {
                         if (confirm()) {
                             setPanels(null)
-                            when (scb) {
-                                "Clean install" -> ROMFlasher.flash("flash_all")
-                                "Clean install and lock" -> ROMFlasher.flash("flash_all_lock")
-                                "Update" -> ROMFlasher.flash(
-                                    dir.list()?.find { "flash_all_except" in it }?.substringBefore(
-                                        '.'
+                            try {
+                                when (scb) {
+                                    "Clean install" -> ROMFlasher.flash("flash_all")
+                                    "Clean install and lock" -> ROMFlasher.flash("flash_all_lock")
+                                    "Update" -> ROMFlasher.flash(
+                                        dir.list()?.find { "flash_all_except" in it }?.substringBefore(
+                                            '.'
+                                        )
                                     )
-                                )
+                                }
+                            } finally {
+                                setPanels(Device.mode)
                             }
                         }
                     } else checkDevice()
@@ -1159,16 +1163,35 @@ class MainController : Initializable {
             }
     }
 
+    private suspend fun findSecondSpaceUser(): String? {
+        val users = Command.exec(mutableListOf("adb", "shell", "pm", "list", "users"))
+        val parsed = Regex("""UserInfo\{(\d+):([^:}]*)""").findAll(users)
+            .map { it.groupValues[1] to it.groupValues[2] }
+            .filter { (id, _) -> id != "0" }
+            .toList()
+        return parsed.firstOrNull { (_, name) ->
+            name.contains("xspace", ignoreCase = true) ||
+                name.contains("second space", ignoreCase = true)
+        }?.first ?: parsed.firstOrNull { (id, _) -> id == "999" }?.first
+    }
+
     @FXML
     private fun secondSpaceButtonPressed(event: ActionEvent) {
         GlobalScope.launch {
-            if (Device.checkADB())
+            if (Device.checkADB()) {
+                val requestedUser = if (secondSpaceButton.isSelected) findSecondSpaceUser() else "0"
+                if (requestedUser == null) {
+                    withContext(Dispatchers.Main) {
+                        secondSpaceButton.isSelected = false
+                        outputTextArea.text = "ERROR: Second Space user profile not found."
+                    }
+                    return@launch
+                }
                 AppManager.apply {
-                    user = if (secondSpaceButton.isSelected)
-                        "10"
-                    else "0"
+                    user = requestedUser
                     createTables()
                 }
+            }
         }
     }
 
