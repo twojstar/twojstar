@@ -62,10 +62,7 @@ public sealed class FeedWidget : IDisposable
         timer?.Dispose();
     }
 
-    public Task RefreshAsync(CancellationToken cancellationToken = default) =>
-        RefreshAsync(waitForTurn: false, cancellationToken);
-
-    private async Task RefreshAsync(bool waitForTurn, CancellationToken cancellationToken)
+    public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
         if (_disposed) return;
 
@@ -74,9 +71,7 @@ public sealed class FeedWidget : IDisposable
         bool entered;
         try
         {
-            entered = waitForTurn
-                ? await WaitForRefreshTurnAsync(refreshToken)
-                : await _refreshGate.WaitAsync(0, refreshToken);
+            entered = await _refreshGate.WaitAsync(0, refreshToken);
         }
         catch (OperationCanceledException) when (refreshToken.IsCancellationRequested)
         {
@@ -130,6 +125,18 @@ public sealed class FeedWidget : IDisposable
         catch (Exception ex)
         {
             Trace.TraceError($"Feedboard refresh failed: {ex}");
+            var showInitialFailure = false;
+            lock (_stateGate)
+            {
+                if (_visibleFeedCount < 0)
+                {
+                    _visibleFeedCount = 1;
+                    _feedErrorLabels = new[] { "Feed refresh" };
+                    _updatedAt = DateTimeOffset.Now;
+                    showInitialFailure = true;
+                }
+            }
+            if (showInitialFailure) PushCurrentCard();
         }
         finally
         {
@@ -137,19 +144,24 @@ public sealed class FeedWidget : IDisposable
         }
     }
 
-    private async Task<bool> WaitForRefreshTurnAsync(CancellationToken cancellationToken)
-    {
-        await _refreshGate.WaitAsync(cancellationToken);
-        if (_disposed)
-        {
-            _refreshGate.Release();
-            return false;
-        }
+    public void BeginCustomization() => _ = BeginCustomizationSafelyAsync();
 
-        return true;
+    private async Task BeginCustomizationSafelyAsync()
+    {
+        try
+        {
+            await BeginCustomizationAsync(_disposeCts.Token);
+        }
+        catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceError($"Feedboard customization failed: {ex}");
+        }
     }
 
-    public async Task BeginCustomizationAsync(CancellationToken cancellationToken = default)
+    private async Task BeginCustomizationAsync(CancellationToken cancellationToken)
     {
         var sources = (await _store.LoadAsync(cancellationToken))
             .Where(source => source.Enabled)
@@ -187,7 +199,7 @@ public sealed class FeedWidget : IDisposable
 
         if (!customizing && args.Verb == "refresh")
         {
-            _ = RefreshAsync(waitForTurn: true, CancellationToken.None);
+            _ = RefreshAsync();
             return;
         }
 
@@ -196,7 +208,7 @@ public sealed class FeedWidget : IDisposable
             if (args.Verb == "customize:done")
             {
                 lock (_stateGate) { _isCustomizing = false; }
-                _ = RefreshAsync(waitForTurn: true, CancellationToken.None);
+                _ = RefreshAsync();
                 return;
             }
             if (args.Verb == "customize:all")
