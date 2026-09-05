@@ -52,7 +52,7 @@ public sealed class WidgetProvider : IWidgetProvider
         RecoverRunningWidgets();
         if (Widgets.TryGetValue(customizationRequestedArgs.WidgetContext.Id, out var widget))
         {
-            widget.BeginCustomizationAsync().GetAwaiter().GetResult();
+            widget.BeginCustomization();
         }
     }
 
