@@ -4,13 +4,10 @@
 
 **Shared workshop for the small tools, experiments and utilities that are better maintained together.**
 
-[![Latest](https://img.shields.io/github/v/release/twojstar/twojstar?display_name=tag&include_prereleases&style=for-the-badge&label=rolling%20latest)](https://github.com/twojstar/twojstar/releases/latest)
-[![license](https://img.shields.io/github/license/twojstar/twojstar?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Cloudflare](https://workers.cloudflare.com/built-with-cloudflare.svg)](https://www.cloudflare.com/)
+[![Cloudflare](https://workers.cloudflare.com/built-with-cloudflare.svg)](https://www.cloudflare.com/)  
+[![Latest](https://img.shields.io/github/v/release/twojstar/twojstar?display_name=tag&include_prereleases&style=for-the-badge&label=rolling%20latest)](https://github.com/twojstar/twojstar/releases/latest) [![license](https://img.shields.io/github/license/twojstar/twojstar?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 
-[![Codebench](https://img.shields.io/badge/Codebench-barcodes-111827?style=flat-square&logo=qrcode&logoColor=white)](https://codebench.trfny.com)
-[![Streambench](https://img.shields.io/badge/Streambench-media-7c3aed?style=flat-square&logo=vlcmediaplayer&logoColor=white)](https://streambench.trfny.com)
-[![Docbench](https://img.shields.io/badge/Docbench-docs_%26_PDF-b45309?style=flat-square&logo=googledocs&logoColor=white)](https://docbench.travny.workers.dev)
+[![Codebench](https://img.shields.io/badge/Codebench-barcodes-111827?style=flat-square&logo=qrcode&logoColor=white)](https://codebench.trfny.com) [![Streambench](https://img.shields.io/badge/Streambench-media-7c3aed?style=flat-square&logo=vlcmediaplayer&logoColor=white)](https://streambench.trfny.com) [![Docbench](https://img.shields.io/badge/Docbench-docs_%26_PDF-b45309?style=flat-square&logo=googledocs&logoColor=white)](https://docbench.travny.workers.dev)
 [![Weather](https://img.shields.io/badge/Weather-Ko%C5%9Bcielec-16a34a?style=flat-square&logo=cloudflareworkers&logoColor=white)](https://weather.trfny.com)
 
 </div>
