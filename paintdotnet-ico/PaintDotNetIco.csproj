@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Travny.PaintDotNet.IcoFileType</AssemblyName>
+    <RootNamespace>Travny.PaintDotNetIco</RootNamespace>
+    <Version>0.2.0</Version>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <Deterministic>false</Deterministic>
+    <NoWarn>MSB3277</NoWarn>
+    <PaintDotNetDir Condition="'$(PaintDotNetDir)' == ''">C:\Program Files\paint.net</PaintDotNetDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="PaintDotNet.Base" HintPath="$(PaintDotNetDir)\PaintDotNet.Base.dll" Private="false" />
+    <Reference Include="PaintDotNet.ComponentModel" HintPath="$(PaintDotNetDir)\PaintDotNet.ComponentModel.dll" Private="false" />
+    <Reference Include="PaintDotNet.Core" HintPath="$(PaintDotNetDir)\PaintDotNet.Core.dll" Private="false" />
+    <Reference Include="PaintDotNet.Primitives" HintPath="$(PaintDotNetDir)\PaintDotNet.Primitives.dll" Private="false" />
+    <Reference Include="PaintDotNet.Data" HintPath="$(PaintDotNetDir)\PaintDotNet.Data.dll" Private="false" />
+    <Reference Include="PaintDotNet.PropertySystem" HintPath="$(PaintDotNetDir)\PaintDotNet.PropertySystem.dll" Private="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="modern\**\*.cs" />
+  </ItemGroup>
+</Project>
