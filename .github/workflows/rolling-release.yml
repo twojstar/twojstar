@@ -21,7 +21,7 @@ jobs:
   release:
     name: Publish complete snapshot
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       actions: read
@@ -41,12 +41,15 @@ jobs:
           latest_run() {
             local workflow="$1"
             local result
-            result="$(gh api --method GET "repos/$GH_REPO/actions/workflows/$workflow/runs" \
+            if ! result="$(gh api --method GET "repos/$GH_REPO/actions/workflows/$workflow/runs" \
               -f branch=main -f status=success -F per_page=1 \
-              --jq '.workflow_runs[0] | "\(.id)\t\(.head_sha)"')"
+              --jq '.workflow_runs[0] | "\(.id)\t\(.head_sha)"')"; then
+              echo "Failed to resolve the latest successful run for $workflow." >&2
+              return 2
+            fi
             if [ -z "$result" ] || [ "$result" = $'null\tnull' ]; then
               echo "No successful main run found for $workflow." >&2
-              exit 1
+              return 1
             fi
             printf '%s\n' "$result"
           }
@@ -140,9 +143,23 @@ jobs:
 
           reconcile() {
             local product="$1" workflow="$2" artifact="$3" downloader="$4"
-            local run_id sha published_run
-            IFS=$'\t' read -r run_id sha < <(latest_run "$workflow")
+            local run_id sha published_run info latest_status
             published_run="$(current_run "$product")"
+            if info="$(latest_run "$workflow")"; then
+              :
+            else
+              latest_status=$?
+              if [ "$latest_status" -eq 2 ]; then
+                exit 1
+              fi
+              if [ "$published_run" -gt 0 ]; then
+                echo "No successful main run for $product; preserving published run $published_run."
+                return
+              fi
+              echo "Cannot resolve any successful $product run to seed the rolling snapshot." >&2
+              exit 1
+            fi
+            IFS=$'\t' read -r run_id sha <<< "$info"
             if [ "$published_run" -ge "$run_id" ]; then
               echo "$product is already at run $published_run (latest successful: $run_id)."
               return
