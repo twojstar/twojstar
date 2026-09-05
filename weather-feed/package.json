@@ -1,0 +1,24 @@
+{
+  "name": "weather-feed",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-source weather aggregator for Kościelec (Chrzanów) served as an Atom feed of changes. Cloudflare Worker, free tier.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/**/*.test.ts",
+    "check": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260828.1",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.127.1"
+  },
+  "overrides": {
+    "sharp": "0.35.3",
+    "undici": "7.29.0"
+  }
+}
