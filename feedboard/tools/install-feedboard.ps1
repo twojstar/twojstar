@@ -107,23 +107,21 @@ else {
 }
 
 $ghCommand = Get-Command gh.exe -ErrorAction SilentlyContinue
-$canVerifyAttestations = $false
-if ($ghCommand) {
-    & $ghCommand.Source auth status --hostname github.com *> $null
-    $canVerifyAttestations = $LASTEXITCODE -eq 0
+if (-not $ghCommand) {
+    throw 'GitHub CLI (gh.exe) is required to verify Feedboard before trusting its signing certificate.'
 }
 
-if ($canVerifyAttestations) {
-    Write-Host 'Verifying GitHub artifact attestations...'
-    foreach ($subject in @($mainPackage.FullName, $certificate.FullName, $PSCommandPath)) {
-        & $ghCommand.Source attestation verify $subject --repo $attestationRepo
-        if ($LASTEXITCODE -ne 0) {
-            throw "GitHub artifact attestation verification failed for '$subject'."
-        }
-    }
+& $ghCommand.Source auth status --hostname github.com *> $null
+if ($LASTEXITCODE -ne 0) {
+    throw 'GitHub CLI must be authenticated (`gh auth login`) before Feedboard can trust its signing certificate.'
 }
-else {
-    Write-Host 'GitHub CLI authentication is unavailable; continuing with the package signature/certificate match check.'
+
+Write-Host 'Verifying GitHub artifact attestations...'
+foreach ($subject in @($mainPackage.FullName, $certificate.FullName, $PSCommandPath)) {
+    & $ghCommand.Source attestation verify $subject --repo $attestationRepo
+    if ($LASTEXITCODE -ne 0) {
+        throw "GitHub artifact attestation verification failed for '$subject'."
+    }
 }
 
 $signature = Get-AuthenticodeSignature -FilePath $mainPackage.FullName

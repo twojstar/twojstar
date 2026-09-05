@@ -60,7 +60,7 @@ Feed definitions are stored in `%LOCALAPPDATA%\Feedboard\feeds.json`.
 
 `Feedboard CI` is the single maintained Feedboard workflow. It publishes the self-contained WinUI settings app, packages it with the x64 provider as a single-project MSIX, bundles the x86/x64 Windows App Runtime dependencies, and signs the package with a fresh self-signed sideload certificate. The temporary private signing key is deleted on the runner.
 
-The GitHub **Latest** release exposes one Feedboard download: `Feedboard-x64.zip`. Extract it and double-click `Install-Feedboard.cmd`. The installer requests elevation, confirms that `Feedboard.cer` matches the MSIX signature, trusts that certificate in `LocalMachine\TrustedPeople`, installs the bundled dependencies, and installs Feedboard. GitHub CLI is optional; when present, the installer also verifies the published artifact attestations.
+The GitHub **Latest** release exposes one Feedboard download: `Feedboard-x64.zip`. Extract it and double-click `Install-Feedboard.cmd`. The GitHub sideload path requires an authenticated GitHub CLI (`gh auth login`) so the installer can verify the published artifact attestations before it trusts `Feedboard.cer` in `LocalMachine\TrustedPeople`; it then installs the bundled dependencies and Feedboard.
 
 A raw GitHub-built `Feedboard.msix` cannot be installed by double-clicking on a clean machine because Windows requires a trusted signing chain. The sideload installer handles that trust step automatically. A genuinely certificate-free end-user install requires Microsoft Store signing or another publicly trusted code-signing route.
 

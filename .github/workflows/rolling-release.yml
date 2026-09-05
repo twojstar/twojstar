@@ -86,6 +86,17 @@ jobs:
             rm -f "$tmp"
           }
 
+          cleanup_legacy_feedboard_assets() {
+            local file
+            for file in Feedboard.msix Feedboard.cer install-dev-package.ps1 \
+              install-feedboard.ps1 Install-Feedboard.cmd Feedboard-dev-x64.zip; do
+              if [ -e "assets/$file" ]; then
+                rm -f "assets/$file"
+                updated=1
+              fi
+            done
+          }
+
           download_benches() {
             local run_id="$1" sha="$2"
             rm -rf work/benches
@@ -207,6 +218,8 @@ jobs:
             rm -rf assets/*
             echo "No unified rolling snapshot exists yet; seeding from current CI artifacts."
           fi
+
+          cleanup_legacy_feedboard_assets
 
           # Reconcile every product on every surviving run. GitHub concurrency may coalesce
           # pending workflow_run events, so a publisher must never rely only on its trigger.
