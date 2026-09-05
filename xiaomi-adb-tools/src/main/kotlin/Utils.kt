@@ -23,7 +23,7 @@ enum class Mode {
 
 fun isAppSelected(list: ObservableList<App>) = list.isNotEmpty() && list.any { it.selectedProperty().get() }
 
-fun String.escape(): String = "'$this'"
+fun String.escape(): String = "'${replace("'", "'\\''")}'"
 
 fun MutableMap<String, MutableList<String>>.add(key: String, value: String) {
     if (this[key] == null) {

@@ -24,22 +24,22 @@ class FileExplorer(val statusTextField: TextField, val statusProgressBar: Progre
         }
         return when {
             bits.size < 6 -> null
-            bits[5].length == 10 && bits[6].length == 5 -> AndroidFile(
+            bits.size >= 7 && bits[5].length == 10 && bits[6].length == 5 -> AndroidFile(
                 bits[0][0] != '-',
                 bits.drop(7).joinToString(" ").trim(),
-                bits[4].toInt(),
+                bits[4].toLong(),
                 "${bits[5]} ${bits[6]}"
             )
             bits[4].length == 10 && bits[5].length == 5 -> AndroidFile(
                 bits[0][0] != '-',
                 bits.drop(6).joinToString(" ").trim(),
-                bits[3].toInt(),
+                bits[3].toLong(),
                 "${bits[4]} ${bits[5]}"
             )
             bits[3].length == 10 && bits[4].length == 5 -> AndroidFile(
                 bits[0][0] != '-',
                 bits.drop(5).joinToString(" ").trim(),
-                0,
+                0L,
                 "${bits[3]} ${bits[4]}"
             )
             else -> null

@@ -458,16 +458,20 @@ class MainController : Initializable {
                             withContext(Dispatchers.Main) {
                                 label.text = "Unzipping..."
                             }
-                            File(XiaomiADBFastbootTools.dir, "platform-tools").mkdirs()
+                            val extractionRoot = XiaomiADBFastbootTools.dir.canonicalFile
+                            File(extractionRoot, "platform-tools").mkdirs()
                             ZipFile(file).use { zip ->
                                 zip.stream().forEach { entry ->
+                                    val target = File(extractionRoot, entry.name).canonicalFile
+                                    require(target.toPath().startsWith(extractionRoot.toPath())) {
+                                        "Unsafe platform-tools archive entry: ${entry.name}"
+                                    }
                                     if (entry.isDirectory)
-                                        File(XiaomiADBFastbootTools.dir, entry.name).mkdirs()
+                                        target.mkdirs()
                                     else zip.getInputStream(entry).use { input ->
-                                        File(XiaomiADBFastbootTools.dir, entry.name).apply {
-                                            outputStream().use { output ->
-                                                input.copyTo(output)
-                                            }
+                                        target.apply {
+                                            parentFile?.mkdirs()
+                                            outputStream().use { output -> input.copyTo(output) }
                                             setExecutable(true, false)
                                         }
                                     }
