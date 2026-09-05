@@ -20,6 +20,7 @@ internal sealed class FrameSelectionDialog : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
+        TopMost = true;
         ClientSize = new Size(390, 330);
 
         var label = new Label

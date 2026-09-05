@@ -65,17 +65,17 @@ public sealed class IcoFileTypeModern : PropertyBasedFileType, IPluginSupportInf
         protected override IFileTypeDocument OnLoad(IPropertyBasedFileTypeLoadContext context)
         {
             using IcoDocument icon = IcoDecoder.Read(context.Input);
-            IReadOnlyList<IcoFrame> frames = icon.Frames;
+            IReadOnlyList<IcoFrame> frames = icon.GetDecodableFrames();
             if (frames.Count == 1)
             {
                 return CreateDocument(context, icon, new[] { frames[0] });
             }
 
-            int defaultIndex = icon.FindDefaultFrameIndex();
+            int defaultIndex = icon.FindDefaultFrameIndex(frames);
             FrameSelectionChoice choice = fileType.ShowFrameSelection(frames, defaultIndex);
 
             IReadOnlyList<IcoFrame> selected = choice.OpenAll
-                ? frames.Where(icon.CanDecode).ToArray()
+                ? frames
                 : new[] { frames[choice.SelectedIndex] };
             return CreateDocument(context, icon, selected);
         }

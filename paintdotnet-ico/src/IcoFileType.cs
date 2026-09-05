@@ -42,14 +42,14 @@ public sealed class IcoFileType : PropertyBasedFileType
     protected override Document OnLoad(Stream input)
     {
         using IcoDocument icon = IcoDecoder.Read(input);
-        IReadOnlyList<IcoFrame> frames = icon.Frames;
+        IReadOnlyList<IcoFrame> frames = icon.GetDecodableFrames();
 
         if (frames.Count == 1)
         {
             return CreateDocument(icon, frames, skipInvalid: false);
         }
 
-        int defaultIndex = icon.FindDefaultFrameIndex();
+        int defaultIndex = icon.FindDefaultFrameIndex(frames);
         FrameSelectionChoice choice = FrameSelectionDialog.ShowOnStaThread(frames, defaultIndex);
 
         if (choice.OpenAll)

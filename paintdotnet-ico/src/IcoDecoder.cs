@@ -37,9 +37,13 @@ internal sealed class IcoDocument : IDisposable
     }
     public IReadOnlyList<IcoFrame> Frames { get; }
 
-    public int FindDefaultFrameIndex()
+    public IReadOnlyList<IcoFrame> GetDecodableFrames() =>
+        Frames.Where(CanDecode).ToArray();
+
+    public int FindDefaultFrameIndex(IReadOnlyList<IcoFrame>? frames = null)
     {
-        foreach ((IcoFrame frame, int index) in Frames
+        IReadOnlyList<IcoFrame> candidates = frames ?? Frames;
+        foreach ((IcoFrame frame, int index) in candidates
                      .Select((frame, index) => (frame, index))
                      .OrderByDescending(item => item.frame.Score))
         {
