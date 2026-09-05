@@ -62,7 +62,7 @@ public sealed partial class FeedDiscovery
 
     private static IEnumerable<Uri> DiscoverCandidates(Uri pageUri, string html)
     {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (Match tag in LinkTagRegex().Matches(html))
         {
             var rel = AttributeValue(tag.Value, "rel");

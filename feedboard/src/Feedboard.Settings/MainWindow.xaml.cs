@@ -344,7 +344,7 @@ public sealed class FeedRow : INotifyPropertyChanged
 
     public void UpdateSource(FeedSource source)
     {
-        var urlChanged = !string.IsNullOrEmpty(Url) && !string.Equals(Url, source.Url, StringComparison.OrdinalIgnoreCase);
+        var urlChanged = !string.IsNullOrEmpty(Url) && !FeedUrl.Equivalent(Url, source.Url);
         Url = source.Url;
         CustomTitle = source.Title;
         DisplayName = source.Title ?? source.Url;

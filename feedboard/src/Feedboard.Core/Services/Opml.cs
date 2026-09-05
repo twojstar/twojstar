@@ -19,19 +19,11 @@ public static class Opml
         return document
             .Descendants()
             .Where(x => x.Name.LocalName.Equals("outline", StringComparison.OrdinalIgnoreCase))
-            .Select(x => new
-            {
-                Url = (string?)x.Attribute("xmlUrl"),
-                Title = (string?)x.Attribute("title") ?? (string?)x.Attribute("text"),
-                Enabled = ParseEnabled((string?)x.Attribute("enabled"))
-            })
-            .Where(x => Uri.TryCreate(x.Url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp))
-            .GroupBy(x => x.Url!, StringComparer.OrdinalIgnoreCase)
-            .Select(g =>
-            {
-                var feed = g.First();
-                return new FeedSource(g.Key, feed.Title, feed.Enabled);
-            })
+            .Select(ParseOutline)
+            .Where(x => x is not null)
+            .Select(x => x!)
+            .GroupBy(x => x.Url, StringComparer.Ordinal)
+            .Select(g => g.First())
             .ToList();
     }
 
@@ -54,6 +46,14 @@ public static class Opml
                 body));
 
         return document.ToString();
+    }
+
+    private static FeedSource? ParseOutline(XElement element)
+    {
+        var rawUrl = (string?)element.Attribute("xmlUrl");
+        if (!FeedUrl.TryNormalize(rawUrl, out var url)) return null;
+        var title = (string?)element.Attribute("title") ?? (string?)element.Attribute("text");
+        return new FeedSource(url, title, ParseEnabled((string?)element.Attribute("enabled")));
     }
 
     private static bool ParseEnabled(string? value) =>

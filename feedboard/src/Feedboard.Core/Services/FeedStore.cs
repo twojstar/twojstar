@@ -98,7 +98,7 @@ public sealed class FeedStore
             await using var processLock = await AcquireProcessLockAsync(cancellationToken);
             var byUrl = NormalizeSources(await ReadSourcesAsync(cancellationToken));
             var source = FindById(byUrl, id);
-            if (source is null || string.Equals(source.Url, normalizedUrl, StringComparison.OrdinalIgnoreCase)) return;
+            if (source is null || FeedUrl.Equivalent(source.Url, normalizedUrl)) return;
 
             if (byUrl.TryGetValue(normalizedUrl, out var duplicate) &&
                 !string.Equals(duplicate.StableId, source.StableId, StringComparison.Ordinal))
@@ -160,7 +160,7 @@ public sealed class FeedStore
 
     private static Dictionary<string, FeedSource> NormalizeSources(IEnumerable<FeedSource> sources)
     {
-        var byUrl = new Dictionary<string, FeedSource>(StringComparer.OrdinalIgnoreCase);
+        var byUrl = new Dictionary<string, FeedSource>(StringComparer.Ordinal);
         foreach (var source in sources)
         {
             if (source is null || !TryNormalizeUrl(source.Url, out var normalizedUrl)) continue;
@@ -178,11 +178,7 @@ public sealed class FeedStore
 
     private static bool TryNormalizeUrl(string? url, out string normalizedUrl)
     {
-        normalizedUrl = string.Empty;
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)) return false;
-        normalizedUrl = uri.ToString();
-        return true;
+        return FeedUrl.TryNormalize(url, out normalizedUrl);
     }
 
     private void QuarantineCorruptStore()

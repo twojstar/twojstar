@@ -77,10 +77,7 @@ public static class Program
     {
         var store = new FeedStore();
         if (args.Length == 0)
-        {
-            Console.Error.WriteLine("Missing feed command.");
-            return;
-        }
+            throw new ArgumentException("Missing feed command.");
 
         switch (args[0].ToLowerInvariant())
         {
@@ -109,8 +106,7 @@ public static class Program
                 break;
 
             default:
-                Console.Error.WriteLine("Unknown or incomplete feed command.");
-                break;
+                throw new ArgumentException("Unknown or incomplete feed command.");
         }
     }
 }

@@ -18,7 +18,7 @@ public sealed partial class FeedClient
     private static readonly TimeSpan BodyTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan SiteIconCacheTtl = TimeSpan.FromHours(24);
     private static readonly HttpClient Http = CreateHttpClient();
-    private static readonly ConcurrentDictionary<string, FeedCacheEntry> FeedCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, FeedCacheEntry> FeedCache = new(StringComparer.Ordinal);
     private static readonly ConcurrentDictionary<string, SiteIconCacheEntry> SiteIconCache = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<IReadOnlyList<FeedArticle>> LoadAsync(IEnumerable<FeedSource> sources, CancellationToken cancellationToken = default)
@@ -43,6 +43,7 @@ public sealed partial class FeedClient
 
     private static async Task<IReadOnlyList<FeedArticle>> LoadSingleSafeAsync(FeedSource source, CancellationToken cancellationToken)
     {
+        var requestStartedAt = DateTimeOffset.UtcNow;
         FeedCache.TryGetValue(source.Url, out var cached);
         if (cached?.RetryAfter is { } retryAfter && retryAfter > DateTimeOffset.UtcNow)
         {
@@ -60,13 +61,13 @@ public sealed partial class FeedClient
             {
                 var updated = FeedCache.AddOrUpdate(
                     source.Url,
-                    cached with { FailureCount = 0, RetryAfter = null },
-                    (_, current) => current with { FailureCount = 0, RetryAfter = null });
+                    cached with { FailureCount = 0, RetryAfter = null, LastSuccessAt = DateTimeOffset.UtcNow },
+                    (_, current) => current with { FailureCount = 0, RetryAfter = null, LastSuccessAt = DateTimeOffset.UtcNow });
                 return ApplyCustomTitle(source, updated.Articles);
             }
 
             response.EnsureSuccessStatusCode();
-            if (response.Content.Headers.ContentLength is > MaxFeedBytes) return RegisterFeedFailure(source.Url, cached);
+            if (response.Content.Headers.ContentLength is > MaxFeedBytes) return ApplyCustomTitle(source, RegisterFeedFailure(source.Url, requestStartedAt));
 
             using var bodyCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             bodyCts.CancelAfter(BodyTimeout);
@@ -77,7 +78,7 @@ public sealed partial class FeedClient
             {
                 var read = await stream.ReadAsync(chunk.AsMemory(0, chunk.Length), bodyCts.Token);
                 if (read == 0) break;
-                if (buffer.Length + read > MaxFeedBytes) return RegisterFeedFailure(source.Url, cached);
+                if (buffer.Length + read > MaxFeedBytes) return ApplyCustomTitle(source, RegisterFeedFailure(source.Url, requestStartedAt));
                 await buffer.WriteAsync(chunk.AsMemory(0, read), bodyCts.Token);
             }
 
@@ -122,23 +123,26 @@ public sealed partial class FeedClient
                 response.Headers.ETag?.ToString(),
                 response.Content.Headers.LastModified,
                 FailureCount: 0,
-                RetryAfter: null);
+                RetryAfter: null,
+                LastSuccessAt: DateTimeOffset.UtcNow);
             return ApplyCustomTitle(source, articles);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException or JsonException or FormatException)
         {
             Trace.TraceWarning($"Feedboard feed refresh failed for {source.Url}: {ex.Message}");
-            return RegisterFeedFailure(source.Url, cached);
+            return ApplyCustomTitle(source, RegisterFeedFailure(source.Url, requestStartedAt));
         }
     }
 
-    private static IReadOnlyList<FeedArticle> RegisterFeedFailure(string feedUrl, FeedCacheEntry? _)
+    private static IReadOnlyList<FeedArticle> RegisterFeedFailure(string feedUrl, DateTimeOffset requestStartedAt)
     {
         var updated = FeedCache.AddOrUpdate(
             feedUrl,
             _ => FailedEntry(Array.Empty<FeedArticle>(), 1),
-            (_, current) => FailedEntry(current.Articles, Math.Min(current.FailureCount + 1, 5), current));
+            (_, current) => current.LastSuccessAt is { } success && success > requestStartedAt
+                ? current
+                : FailedEntry(current.Articles, Math.Min(current.FailureCount + 1, 5), current));
         return updated.Articles;
     }
 
@@ -146,7 +150,7 @@ public sealed partial class FeedClient
     {
         var delayMinutes = Math.Min(5 * (1 << (failures - 1)), 60);
         return new FeedCacheEntry(articles, current?.ETag, current?.LastModified, failures,
-            DateTimeOffset.UtcNow.AddMinutes(delayMinutes));
+            DateTimeOffset.UtcNow.AddMinutes(delayMinutes), current?.LastSuccessAt);
     }
 
     private static async Task<string?> GetSiteIconAsync(string feedUrl, CancellationToken cancellationToken)
@@ -245,12 +249,13 @@ public sealed partial class FeedClient
 
     private static IReadOnlyList<FeedArticle> ParseJsonDocument(FeedSource source, JsonElement root)
     {
+        if (root.ValueKind != JsonValueKind.Object) throw new FormatException("JSON Feed root must be an object.");
         var version = JsonString(root, "version");
         if (version is null || !version.StartsWith("https://jsonfeed.org/version/", StringComparison.OrdinalIgnoreCase)) throw new FormatException("Unsupported JSON Feed version.");
         var feedTitle = source.Title ?? JsonString(root, "title") ?? HostName(source.Url);
         var favicon = JsonString(root, "favicon") ?? JsonString(root, "icon") ?? FaviconFrom(source.Url);
         if (!root.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array) return Array.Empty<FeedArticle>();
-        return items.EnumerateArray().Select(item =>
+        return items.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.Object).Select(item =>
         {
             var itemId = JsonString(item, "id");
             var title = JsonString(item, "title") ?? "(untitled)";
@@ -263,7 +268,9 @@ public sealed partial class FeedClient
         }).ToList();
     }
 
-    private static string? JsonString(JsonElement element, string name) => element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+    private static string? JsonString(JsonElement element, string name) =>
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) &&
+        value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
     private static IReadOnlyList<FeedArticle> ParseDocument(FeedSource source, XDocument document)
     {
@@ -364,7 +371,8 @@ public sealed partial class FeedClient
         string? ETag,
         DateTimeOffset? LastModified,
         int FailureCount,
-        DateTimeOffset? RetryAfter);
+        DateTimeOffset? RetryAfter,
+        DateTimeOffset? LastSuccessAt);
     private sealed record SiteIconCacheEntry(Lazy<Task<string?>> Value, DateTimeOffset ExpiresAt);
 
     [GeneratedRegex("<link\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex LinkTagRegex();
