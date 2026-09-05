@@ -34,7 +34,7 @@ On browser hosts that implement WebMCP, Doc Bench exposes the current local edit
 - [Application](https://docbench.travny.workers.dev/index.md): Markdown version of the Doc Bench application page.
 - [Full LLM guide](https://docbench.travny.workers.dev/llms-full.txt): complete Doc Bench documentation in one file.
 - [Source](https://github.com/twojstar/twojstar/tree/main/benches/docbench): application source and documentation.
-- [Benches portable release](https://github.com/twojstar/twojstar/releases/tag/benches-portable-latest): rolling standalone builds.
+- [Benches portable release](https://github.com/twojstar/twojstar/releases/latest): rolling standalone builds.
 
 ## Related TRAVNY tools
 

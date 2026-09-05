@@ -28,12 +28,16 @@ jobs:
       contents: write
 
     steps:
-      - name: Assemble latest successful product artifacts
+      - name: Assemble rolling snapshot
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          TRIGGER_WORKFLOW: ${{ github.event.workflow_run.name }}
+          TRIGGER_RUN: ${{ github.event.workflow_run.id }}
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
+          mkdir -p assets work
 
           latest_run() {
             local workflow="$1"
@@ -48,50 +52,101 @@ jobs:
             printf '%s\n' "$result"
           }
 
-          IFS=$'\t' read -r BENCH_RUN BENCH_SHA < <(latest_run benches-release.yml)
-          IFS=$'\t' read -r FEEDBOARD_RUN FEEDBOARD_SHA < <(latest_run feedboard-ci.yml)
-          IFS=$'\t' read -r XIAOMI_RUN XIAOMI_SHA < <(latest_run xiaomi-adb-tools-ci.yml)
+          set_provenance() {
+            local product="$1" workflow="$2" run_id="$3" sha="$4"
+            local file="assets/ROLLING-PROVENANCE.tsv" tmp
+            touch "$file"
+            tmp="$(mktemp)"
+            awk -F '\t' -v product="$product" '$1 != product' "$file" > "$tmp"
+            printf '%s\t%s\t%s\t%s\n' "$product" "$workflow" "$run_id" "$sha" >> "$tmp"
+            sort -t $'\t' -k1,1 "$tmp" > "$file"
+            rm -f "$tmp"
+          }
 
-          mkdir -p work/benches work/feedboard work/xiaomi assets
-          gh run download "$BENCH_RUN" --repo "$GH_REPO" --name benches-portable-release --dir work/benches
-          gh run download "$FEEDBOARD_RUN" --repo "$GH_REPO" --name feedboard-msix-x64 --dir work/feedboard
-          gh run download "$XIAOMI_RUN" --repo "$GH_REPO" --name XiaomiADBFastbootTools --dir work/xiaomi
+          download_benches() {
+            local run_id="$1" sha="$2"
+            rm -rf work/benches
+            mkdir -p work/benches
+            gh run download "$run_id" --repo "$GH_REPO" --name benches-portable-release --dir work/benches
+            rm -f assets/codebench-portable.html assets/streambench-portable.html \
+              assets/docbench-portable.html assets/benches-portable.zip
+            for file in codebench-portable.html streambench-portable.html docbench-portable.html benches-portable.zip; do
+              test -s "work/benches/$file"
+              cp "work/benches/$file" assets/
+            done
+            set_provenance Benches benches-release.yml "$run_id" "$sha"
+          }
 
-          for file in codebench-portable.html streambench-portable.html docbench-portable.html benches-portable.zip; do
-            test -s "work/benches/$file"
-            cp "work/benches/$file" assets/
-          done
-          for file in Feedboard.msix Feedboard.cer install-dev-package.ps1; do
-            test -s "work/feedboard/$file"
-            cp "work/feedboard/$file" assets/
-          done
-          test -d work/feedboard/Dependencies
-          (
-            cd work/feedboard
-            zip -9 -r ../../assets/Feedboard-dev-x64.zip \
-              Feedboard.msix Feedboard.cer install-dev-package.ps1 Dependencies
-          )
+          download_feedboard() {
+            local run_id="$1" sha="$2"
+            rm -rf work/feedboard
+            mkdir -p work/feedboard
+            gh run download "$run_id" --repo "$GH_REPO" --name feedboard-msix-x64 --dir work/feedboard
+            rm -f assets/Feedboard.msix assets/Feedboard.cer assets/install-dev-package.ps1 assets/Feedboard-dev-x64.zip
+            for file in Feedboard.msix Feedboard.cer install-dev-package.ps1; do
+              test -s "work/feedboard/$file"
+              cp "work/feedboard/$file" assets/
+            done
+            test -d work/feedboard/Dependencies
+            (
+              cd work/feedboard
+              zip -9 -r ../../assets/Feedboard-dev-x64.zip \
+                Feedboard.msix Feedboard.cer install-dev-package.ps1 Dependencies
+            )
+            set_provenance Feedboard feedboard-ci.yml "$run_id" "$sha"
+          }
 
-          jar_count="$(find work/xiaomi -maxdepth 1 -type f -name 'XiaomiADBFastbootTools-*.jar' | wc -l | tr -d ' ')"
-          if [ "$jar_count" -ne 5 ]; then
-            echo "Expected 5 Xiaomi platform JARs, found $jar_count." >&2
-            exit 1
+          download_xiaomi() {
+            local run_id="$1" sha="$2"
+            rm -rf work/xiaomi
+            mkdir -p work/xiaomi
+            gh run download "$run_id" --repo "$GH_REPO" --name XiaomiADBFastbootTools --dir work/xiaomi
+            rm -f assets/XiaomiADBFastbootTools-*.jar
+            find work/xiaomi -maxdepth 1 -type f -name 'XiaomiADBFastbootTools-*.jar' -print -quit | grep -q .
+            cp work/xiaomi/XiaomiADBFastbootTools-*.jar assets/
+            set_provenance Xiaomi-ADB-Tools xiaomi-adb-tools-ci.yml "$run_id" "$sha"
+          }
+
+          seed_all() {
+            local run_id sha
+            IFS=$'\t' read -r run_id sha < <(latest_run benches-release.yml)
+            download_benches "$run_id" "$sha"
+            IFS=$'\t' read -r run_id sha < <(latest_run feedboard-ci.yml)
+            download_feedboard "$run_id" "$sha"
+            IFS=$'\t' read -r run_id sha < <(latest_run xiaomi-adb-tools-ci.yml)
+            download_xiaomi "$run_id" "$sha"
+          }
+
+          previous_tag="$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name 2>/dev/null || true)"
+          if [[ "$previous_tag" =~ ^rolling-[0-9]+-[0-9]+$ ]]; then
+            gh release download "$previous_tag" --repo "$GH_REPO" --dir assets
+            rm -f assets/SHA256SUMS
+            if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+              seed_all
+            else
+              case "$TRIGGER_WORKFLOW" in
+                "Benches portable release") download_benches "$TRIGGER_RUN" "$TRIGGER_SHA" ;;
+                "Feedboard CI") download_feedboard "$TRIGGER_RUN" "$TRIGGER_SHA" ;;
+                "Xiaomi ADB Tools CI") download_xiaomi "$TRIGGER_RUN" "$TRIGGER_SHA" ;;
+                *) echo "Unsupported triggering workflow: $TRIGGER_WORKFLOW" >&2; exit 1 ;;
+              esac
+            fi
+          else
+            echo "No unified rolling snapshot exists yet; seeding all products."
+            seed_all
           fi
-          cp work/xiaomi/XiaomiADBFastbootTools-*.jar assets/
+
+          for file in codebench-portable.html streambench-portable.html docbench-portable.html \
+            benches-portable.zip Feedboard.msix Feedboard.cer install-dev-package.ps1 \
+            Feedboard-dev-x64.zip ROLLING-PROVENANCE.tsv; do
+            test -s "assets/$file"
+          done
+          find assets -maxdepth 1 -type f -name 'XiaomiADBFastbootTools-*.jar' -print -quit | grep -q .
 
           (
             cd assets
-            sha256sum * > SHA256SUMS
+            find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS
           )
-
-          {
-            echo "BENCH_RUN=$BENCH_RUN"
-            echo "BENCH_SHA=$BENCH_SHA"
-            echo "FEEDBOARD_RUN=$FEEDBOARD_RUN"
-            echo "FEEDBOARD_SHA=$FEEDBOARD_SHA"
-            echo "XIAOMI_RUN=$XIAOMI_RUN"
-            echo "XIAOMI_SHA=$XIAOMI_SHA"
-          } >> "$GITHUB_ENV"
 
       - name: Publish atomic Latest release
         env:
@@ -100,35 +155,38 @@ jobs:
         run: |
           set -euo pipefail
           tag="rolling-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          published=0
 
-          cat > release-notes.md <<EOF
-          Rolling snapshot of the latest successful main builds in twojstar/twojstar.
-
-          ### Included
-          - **Benches Portable** — run #${BENCH_RUN}, commit ${BENCH_SHA}
-          - **Feedboard** — run #${FEEDBOARD_RUN}, commit ${FEEDBOARD_SHA}
-          - **Xiaomi ADB Tools** — run #${XIAOMI_RUN}, commit ${XIAOMI_SHA}
-
-          The release is assembled completely as a draft and becomes GitHub **Latest** only after every required artifact and checksum has been uploaded.
-          EOF
+          {
+            echo "Rolling snapshot of the latest successful product builds in twojstar/twojstar."
+            echo
+            echo "### Source provenance"
+            while IFS=$'\t' read -r product workflow run_id sha; do
+              printf -- '- **%s** - %s run #%s, commit `%s`\n' "$product" "$workflow" "$run_id" "$sha"
+            done < assets/ROLLING-PROVENANCE.tsv
+            echo
+            echo "The release is assembled as a complete draft and becomes GitHub Latest only after every required asset and checksum has been uploaded."
+          } > release-notes.md
 
           cleanup_draft() {
-            gh release delete "$tag" --repo "$GH_REPO" --cleanup-tag --yes >/dev/null 2>&1 || true
+            if [ "$published" -eq 0 ]; then
+              gh release delete "$tag" --repo "$GH_REPO" --cleanup-tag --yes >/dev/null 2>&1 || true
+            fi
           }
-          trap cleanup_draft ERR
+          trap cleanup_draft ERR INT TERM
 
           gh release create "$tag" --repo "$GH_REPO" --draft \
             --target main --title "twojstar · rolling" --notes-file release-notes.md
           gh release upload "$tag" --repo "$GH_REPO" assets/*
           gh release edit "$tag" --repo "$GH_REPO" --draft=false --latest
-          trap - ERR
+          published=1
+          trap - ERR INT TERM
 
           gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
-            --jq '.[] | select(.tag_name | test("^rolling-[0-9]+-[0-9]+$")) | [.id, .tag_name] | @tsv' |
+            --jq '.[] | select((.tag_name | test("^rolling-[0-9]+-[0-9]+$|^benches-[0-9a-f]{12}$")) and .tag_name != "'"$tag"'") | [.id, .tag_name] | @tsv' |
             while IFS=$'\t' read -r release_id old_tag; do
               [ -n "$release_id" ] || continue
-              [ "$old_tag" = "$tag" ] && continue
-              echo "Removing superseded rolling release $old_tag."
+              echo "Removing superseded release $old_tag."
               gh api --method DELETE "repos/$GH_REPO/releases/$release_id"
               gh api --method DELETE "repos/$GH_REPO/git/refs/tags/$old_tag" || true
             done

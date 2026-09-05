@@ -30,4 +30,4 @@ Files stay in the browser and the application has no telemetry. On WebMCP-capabl
 - [Concise LLM guide](https://docbench.travny.workers.dev/llms.txt)
 - [Full LLM guide](https://docbench.travny.workers.dev/llms-full.txt)
 - [Source](https://github.com/twojstar/twojstar/tree/main/benches/docbench)
-- [Portable builds](https://github.com/twojstar/twojstar/releases/tag/benches-portable-latest)
+- [Portable builds](https://github.com/twojstar/twojstar/releases/latest)

@@ -25,5 +25,5 @@ On browser hosts implementing WebMCP, Doc Bench exposes `read_document`, `set_do
 - [Markdown application page](https://docbench.travny.workers.dev/index.md)
 - [Application](https://docbench.travny.workers.dev/)
 - [Source](https://github.com/twojstar/twojstar/tree/main/benches/docbench)
-- [Portable builds](https://github.com/twojstar/twojstar/releases/tag/benches-portable-latest)
+- [Portable builds](https://github.com/twojstar/twojstar/releases/latest)
 - [TRAVNY hub](https://trfny.com/)
