@@ -1,0 +1,72 @@
+plugins {
+    id 'application'
+    id 'org.jetbrains.kotlin.jvm' version '2.4.10'
+}
+
+repositories { mavenCentral() }
+
+def javafxVersion = '21.0.12'
+def javafxModules = ['base', 'graphics', 'controls', 'fxml']
+def platformClassifiers = [
+    'windows-x64': 'win',
+    'linux-x64': 'linux',
+    'linux-arm64': 'linux-aarch64',
+    'macos-x64': 'mac',
+    'macos-arm64': 'mac-aarch64',
+]
+
+def platformConfigs = [:]
+platformClassifiers.each { artifactName, classifier ->
+    def suffix = artifactName.split('-').collect { it.capitalize() }.join()
+    platformConfigs[artifactName] = configurations.create("javafx${suffix}")
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-javafx:1.11.0"
+    javafxModules.each { module ->
+        compileOnly "org.openjfx:javafx-$module:$javafxVersion:linux"
+    }
+    platformClassifiers.each { artifactName, classifier ->
+        javafxModules.each { module ->
+            add(platformConfigs[artifactName].name, "org.openjfx:javafx-$module:$javafxVersion:$classifier")
+        }
+    }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+kotlin {
+    compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21 }
+}
+
+application { mainClass = 'Main' }
+
+def platformJarTasks = []
+platformClassifiers.each { artifactName, classifier ->
+    def suffix = artifactName.split('-').collect { it.capitalize() }.join()
+    def platformConfiguration = platformConfigs[artifactName]
+
+    platformJarTasks << tasks.register("jar${suffix}", Jar) {
+        archiveBaseName.set('XiaomiADBFastbootTools')
+        archiveClassifier.set(artifactName)
+        manifest {
+            attributes 'Main-Class': 'Main', 'Enable-Native-Access': 'ALL-UNNAMED'
+        }
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA',
+                'META-INF/versions/**/module-info.class', 'module-info.class'
+        from sourceSets.main.output
+        from {
+            (configurations.runtimeClasspath + platformConfiguration)
+                .collect { it.isDirectory() ? it : zipTree(it) }
+        }
+    }
+}
+
+tasks.register('platformJars') { dependsOn platformJarTasks }
+tasks.named('jar') { enabled = false }
+tasks.named('assemble') { dependsOn 'platformJars' }
