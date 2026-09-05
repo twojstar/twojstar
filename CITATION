@@ -13,12 +13,13 @@ authors:
   - name: chatgpt-codex-connector[bot]
   - name: gptomek[bot]
   - name: claudiusz69[bot]
+  - name: kanarek-companion[bot]
   - name: devin-ai-integration[bot]
   - name: stepsecurity-app[bot]
   - name: deepsource-io[bot]
   - name: sourcery-ai[bot]
   - name: coderabbitai[bot]
-  - name: kanarek-companion[bot]
+  - name: mergify[bot]
 identifiers:
   - type: url
     value: 'https://github.com/twojstar'
