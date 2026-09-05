@@ -33,6 +33,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Set up .NET
@@ -90,16 +91,45 @@ jobs:
             Copy-Item -LiteralPath $source -Destination (Join-Path $settingsXamlStage $name)
           }
 
-          $runNumber = [int64]"${{ github.run_number }}"
-          $runAttempt = [int64]"${{ github.run_attempt }}"
-          $minor = 2 + [math]::Floor(($runNumber - 1) / 65535)
-          $build = (($runNumber - 1) % 65535) + 1
-
-          if ($minor -gt 65535 -or $runAttempt -gt 65535) {
-            throw "GitHub run number cannot be represented as an MSIX version."
+          # run_number is monotonic only for one workflow identity and resets if that
+          # workflow is recreated. Git history is the persistent epoch: recreating the
+          # workflow requires a new commit, so the commit-count segment still advances.
+          # PR builds use the base commit count so they cannot outrank the merged build.
+          $versionRef = if ("${{ github.event_name }}" -eq "pull_request") {
+            "${{ github.event.pull_request.base.sha }}"
+          }
+          else {
+            "HEAD"
+          }
+          $commitCountText = git rev-list --count $versionRef
+          if ($LASTEXITCODE -ne 0) {
+            throw "Cannot derive the Git commit count for MSIX versioning."
           }
 
-          $packageVersion = "0.$minor.$build.$runAttempt"
+          $commitCount = [uint64]$commitCountText.Trim()
+          $runNumber = [uint64]"${{ github.run_number }}"
+          $runAttempt = [uint64]"${{ github.run_attempt }}"
+          if ($runNumber -lt 1 -or $runNumber -gt 0xFFFFF) {
+            throw "GitHub run number cannot be represented in the MSIX version."
+          }
+          if ($runAttempt -lt 1 -or $runAttempt -gt 16) {
+            throw "GitHub run attempt cannot be represented in the MSIX version."
+          }
+
+          # 24 bits per persistent Git epoch + 20 bits for run_number + 4 bits for
+          # run_attempt. The legacy floor guarantees an upgrade from old 0.2.133.1 builds.
+          $legacyFloor = [uint64]0x000200850001 # 0.2.133.1
+          $serial = $legacyFloor + 1 + `
+            ($commitCount * [uint64]0x1000000) + `
+            ($runNumber * [uint64]16) + ($runAttempt - 1)
+          if ($serial -gt [uint64]0xFFFFFFFFFFFF) {
+            throw "Repository history cannot be represented in the MSIX version."
+          }
+
+          $minor = [uint16](($serial -shr 32) -band 0xFFFF)
+          $build = [uint16](($serial -shr 16) -band 0xFFFF)
+          $revision = [uint16]($serial -band 0xFFFF)
+          $packageVersion = "0.$minor.$build.$revision"
           Write-Host "Packaging Feedboard $packageVersion"
 
           [xml]$manifest = Get-Content -LiteralPath $manifestPath -Raw
