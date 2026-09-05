@@ -1164,15 +1164,21 @@ class MainController : Initializable {
     }
 
     private suspend fun findSecondSpaceUser(): String? {
-        val users = Command.exec(mutableListOf("adb", "shell", "pm", "list", "users"))
-        val parsed = Regex("""UserInfo\{(\d+):([^:}]*)""").findAll(users)
-            .map { it.groupValues[1] to it.groupValues[2] }
-            .filter { (id, _) -> id != "0" }
-            .toList()
-        return parsed.firstOrNull { (_, name) ->
-            name.contains("xspace", ignoreCase = true) ||
-                name.contains("second space", ignoreCase = true)
-        }?.first ?: parsed.firstOrNull { (id, _) -> id == "999" }?.first
+        val verboseUsers = Command.exec(mutableListOf("adb", "shell", "cmd", "user", "list", "-v"))
+        val secondaryUsers = verboseUsers.lineSequence().mapNotNull { line ->
+            val id = Regex("""\bid=(\d+)""").find(line)?.groupValues?.get(1) ?: return@mapNotNull null
+            val type = Regex("""\btype=([^,\s)]+)""").find(line)?.groupValues?.get(1) ?: return@mapNotNull null
+            id.takeIf { it != "0" && it != "999" && type.endsWith("full.SECONDARY") }
+        }.distinct().toList()
+        if (secondaryUsers.size == 1) return secondaryUsers.single()
+
+        // Older Android versions do not expose user types through `cmd user list -v`.
+        // In that case accept the conventional Second Space ID only when it exists,
+        // and explicitly reject Xiaomi's separate XSpace / Dual Apps profile (999).
+        val legacyUsers = Command.exec(mutableListOf("adb", "shell", "pm", "list", "users"))
+        return Regex("""UserInfo\{10:([^:}]*)""").find(legacyUsers)
+            ?.takeUnless { it.groupValues[1].contains("xspace", ignoreCase = true) }
+            ?.let { "10" }
     }
 
     @FXML
