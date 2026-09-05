@@ -21,7 +21,7 @@
     "hls.js": "1.7.1"
   },
   "devDependencies": {
-    "wrangler": "^4",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "wrangler": "^4.128.0"
   }
 }
