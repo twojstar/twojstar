@@ -84,6 +84,12 @@ function normalizeEol(text) {
   return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
 
+function sanitizeXmlForPreview(text) {
+  return text
+    .replace(/<\?[\s\S]*?\?>/g, "")
+    .replace(/<!DOCTYPE[\s\S]*?>/gi, "");
+}
+
 function applyEol(text, kind) {
   const normalized = normalizeEol(text);
   if (kind === "CRLF") return normalized.replace(/\n/g, "\r\n");
@@ -112,15 +118,15 @@ async function readTextFile(file) {
 
 function updateMeta() {
   const lines = editor.value.split("\n").length;
-  const mixed = state.mixedEol ? `Mixed → ${eolSelect.value}` : eolSelect.value;
+  const mixed = state.mixedEol ? `Mixed â†’ ${eolSelect.value}` : eolSelect.value;
   const bom = state.bom ? "UTF-8 BOM" : "UTF-8";
-  const linked = state.handle ? " · linked file" : "";
-  encodingLabel.textContent = `${bom} · ${mixed}`;
-  detailStatus.textContent = `${bom} · ${mixed} · ${lines} line${lines === 1 ? "" : "s"}${linked}`;
+  const linked = state.handle ? " Â· linked file" : "";
+  encodingLabel.textContent = `${bom} Â· ${mixed}`;
+  detailStatus.textContent = `${bom} Â· ${mixed} Â· ${lines} line${lines === 1 ? "" : "s"}${linked}`;
 }
 
 function updateSaveButton() {
-  saveButton.textContent = state.handle || !nativeSaveSupported ? "Save" : "Save as…";
+  saveButton.textContent = state.handle || !nativeSaveSupported ? "Save" : "Save asâ€¦";
   saveButton.title = state.handle
     ? `Save directly to ${state.filename}`
     : nativeSaveSupported
@@ -163,7 +169,7 @@ function parseXmlError(error) {
 function renderParseError(error) {
   setPreviewMode("error", "Parse error");
   const position = error?.position || null;
-  const at = position ? ` · ${position.line}:${position.column}` : "";
+  const at = position ? ` Â· ${position.line}:${position.column}` : "";
   setStatus("bad", `Invalid${at}`);
   const message = document.createElement("p");
   message.className = "preview-error-message";
@@ -327,7 +333,7 @@ function renderYamlTree(source) {
     metaNode.className = "tree-meta";
     const count = node.items.length;
     const kind = node.kind === "sequence" ? "Sequence" : "Mapping";
-    metaNode.textContent = `${kind}(${count})${node.anchor ? ` · &${node.anchor}` : ""}`;
+    metaNode.textContent = `${kind}(${count})${node.anchor ? ` Â· &${node.anchor}` : ""}`;
     summary.append(keyNode, metaNode);
     details.append(summary);
 
@@ -822,7 +828,7 @@ function renderMarkdown() {
   if (budget.truncated) appendMarkdownLimit(fragment);
   setPreviewMode("markdown", "Markdown preview");
   preview.replaceChildren(fragment);
-  setStatus("neutral", budget.truncated ? "Rendered � truncated" : "Rendered Markdown");
+  setStatus("neutral", budget.truncated ? "Rendered · truncated" : "Rendered Markdown");
 }
 
 function renderEnhancedPreview() {
@@ -851,7 +857,7 @@ function renderEnhancedPreview() {
     }
     setPreviewMode("tree", "JSON tree");
     preview.replaceChildren(tree);
-    setStatus("good", "Valid · tree");
+    setStatus("good", "Valid Â· tree");
     updateMeta();
     return;
   }
@@ -862,7 +868,7 @@ function renderEnhancedPreview() {
       if (!tree) throw new Error("YAML AST runtime is unavailable.");
       setPreviewMode("tree", "YAML tree");
       preview.replaceChildren(tree);
-      setStatus("good", "Valid · tree");
+      setStatus("good", "Valid Â· tree");
     } catch (error) {
       const mark = error?.mark;
       renderParseError({
@@ -874,7 +880,7 @@ function renderEnhancedPreview() {
     return;
   }
   if (format === "xml") {
-    const doc = new DOMParser().parseFromString(editor.value, "application/xml");
+    const doc = new DOMParser().parseFromString(sanitizeXmlForPreview(editor.value), "application/xml");
     const parserError = xmlParserError(doc);
     if (parserError) {
       renderParseError(parseXmlError(parserError));
@@ -883,7 +889,7 @@ function renderEnhancedPreview() {
     }
     setPreviewMode("tree", "XML tree");
     preview.replaceChildren(renderXmlTree(doc));
-    setStatus("good", "Valid · tree");
+    setStatus("good", "Valid Â· tree");
     updateMeta();
   }
 }
@@ -975,7 +981,7 @@ async function writeHandle(handle, snapshot) {
   filenameLabel.textContent = state.filename;
   updateMeta();
   updateSaveButton();
-  flashSaveState("Saved ✓");
+  flashSaveState("Saved âœ“");
 }
 
 async function chooseSaveHandle(snapshot) {
@@ -1000,12 +1006,12 @@ async function saveDocument() {
       return;
     }
     downloadDocument(snapshot);
-    flashSaveState("Downloaded ✓");
+    flashSaveState("Downloaded âœ“");
   } catch (error) {
     if (error?.name === "AbortError" || error?.name === "StaleDocumentError") return;
     if (!linkedHandle && ["TypeError", "SecurityError", "NotAllowedError"].includes(error?.name)) {
       downloadDocument(snapshot);
-      flashSaveState("Downloaded ✓");
+      flashSaveState("Downloaded âœ“");
       return;
     }
     setStatus("bad", "Save failed");
