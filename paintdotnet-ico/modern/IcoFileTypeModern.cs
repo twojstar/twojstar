@@ -1,5 +1,4 @@
 using PaintDotNet;
-using PaintDotNet.AppModel;
 using PaintDotNet.FileTypes;
 using PaintDotNet.Imaging;
 using PaintDotNet.PropertySystem;
@@ -10,13 +9,11 @@ using DrawingPixelFormat = System.Drawing.Imaging.PixelFormat;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using System.Windows.Forms;
 
 namespace Travny.PaintDotNetIco;
 
 public sealed class IcoFileTypeModern : PropertyBasedFileType, IPluginSupportInfoProvider
 {
-    private readonly IUISynchronizationContext uiContext;
     public IcoFileTypeModern(IFileTypeHost host)
         : base(host, "Windows Icon", FileTypeOptions.Create() with
         {
@@ -27,8 +24,6 @@ public sealed class IcoFileTypeModern : PropertyBasedFileType, IPluginSupportInf
             SupportsCancellationExceptions = true
         })
     {
-        uiContext = (IUISynchronizationContext?)host.Services.GetService(typeof(IUISynchronizationContext))
-            ?? throw new InvalidOperationException("Paint.NET did not provide a UI synchronization context.");
     }
     public IPluginSupportInfo GetPluginSupportInfo() => new PluginSupportInfo();
 
@@ -38,46 +33,17 @@ public sealed class IcoFileTypeModern : PropertyBasedFileType, IPluginSupportInf
     protected override PropertyBasedFileTypeSaver OnCreatePropertyBasedSaver() =>
         new Saver(this);
 
-    private FrameSelectionChoice ShowFrameSelection(IReadOnlyList<IcoFrame> frames, int defaultIndex)
-    {
-        FrameSelectionChoice? choice = null;
-        uiContext.Send(_ =>
-        {
-            using var dialog = new FrameSelectionDialog(frames, defaultIndex);
-            if (dialog.ShowDialog() == DialogResult.OK)
-            {
-                choice = new FrameSelectionChoice(dialog.SelectedIndex, dialog.OpenAll);
-            }
-        }, null);
-
-        return choice ?? throw new OperationCanceledException("ICO loading cancelled.");
-    }
-
     private sealed class Loader : PropertyBasedFileTypeLoader
     {
-        private readonly IcoFileTypeModern fileType;
-
         public Loader(IcoFileTypeModern fileType) : base(fileType)
         {
-            this.fileType = fileType;
         }
 
         protected override IFileTypeDocument OnLoad(IPropertyBasedFileTypeLoadContext context)
         {
             using IcoDocument icon = IcoDecoder.Read(context.Input);
             IReadOnlyList<IcoFrame> frames = icon.GetDecodableFrames();
-            if (frames.Count == 1)
-            {
-                return CreateDocument(context, icon, new[] { frames[0] });
-            }
-
-            int defaultIndex = icon.FindDefaultFrameIndex(frames);
-            FrameSelectionChoice choice = fileType.ShowFrameSelection(frames, defaultIndex);
-
-            IReadOnlyList<IcoFrame> selected = choice.OpenAll
-                ? frames
-                : new[] { frames[choice.SelectedIndex] };
-            return CreateDocument(context, icon, selected);
+            return CreateDocument(context, icon, frames);
         }
     }
     private static IFileTypeDocument CreateDocument(

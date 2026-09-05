@@ -28,9 +28,10 @@ internal static class Program
         int[] expectedSizes = { 16, 32, 256 };
         Assert(document.Frames.Select(frame => frame.Width).SequenceEqual(expectedSizes),
             "Encoded frame widths differ from requested sizes.");
-        Assert(document.FindDefaultFrameIndex() == 2, "Largest decodable frame was not selected by default.");
+        var decodableFrames = document.GetDecodableFrames();
+        Assert(decodableFrames.Count == 3, "Not all encoded frames are decodable.");
 
-        foreach (IcoFrame frame in document.Frames)
+        foreach (IcoFrame frame in decodableFrames)
         {
             Assert(document.CanDecode(frame), $"Frame {frame.Index} is not decodable.");
             using Bitmap decoded = document.Decode(frame);
