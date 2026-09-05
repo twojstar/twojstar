@@ -1,0 +1,39 @@
+name: Import Bench history
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/import-benches.yml
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone source history
+        run: |
+          git clone --no-tags https://github.com/trvny/trvny.git source
+
+      - name: Filter Bench history
+        working-directory: source
+        run: |
+          python -m pip install --disable-pip-version-check git-filter-repo
+          git filter-repo --path benches/ --force
+
+      - name: Attach target history and push migration branch
+        working-directory: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add target "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch target main:target-main
+          git checkout -b migration/benches-history
+          git merge --allow-unrelated-histories --no-edit target-main
+          git rm .github/workflows/import-benches.yml
+          git commit -m "chore: remove one-time Bench importer"
+          git push target HEAD:refs/heads/migration/benches-history --force
