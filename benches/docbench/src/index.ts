@@ -1,4 +1,3 @@
-// Cloudflare Builds push-event smoke marker.
 const SECURITY_HEADERS: Record<string, string> = {
   "content-security-policy": [
     "default-src 'self'",
