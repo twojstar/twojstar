@@ -20,8 +20,9 @@ jobs:
           fetch-depth: 0
 
       - name: Update migrated references
-        shell: python
+        shell: bash
         run: |
+          python - <<'PY'
           from pathlib import Path
 
           replacements = {
@@ -48,39 +49,40 @@ jobs:
           if marker not in text:
               text = text.rstrip() + """
 
-## Migration and license
+          ## Migration and license
 
-This workspace was extracted from [`trvny/trvny`](https://github.com/trvny/trvny)
-with its filtered `benches/` Git history preserved. Active development now lives
-in [`twojstar/twojstar`](https://github.com/twojstar/twojstar).
+          This workspace was extracted from [`trvny/trvny`](https://github.com/trvny/trvny)
+          with its filtered `benches/` Git history preserved. Active development now lives
+          in [`twojstar/twojstar`](https://github.com/twojstar/twojstar).
 
-The migrated Bench workspace remains licensed under [ISC](LICENSE). The root
-workshop repository may use a different license for other components.
-"""
+          The migrated Bench workspace remains licensed under [ISC](LICENSE). The root
+          workshop repository may use a different license for other components.
+          """
               readme.write_text(text, encoding="utf-8")
 
           Path("README.md").write_text("""# twojstar
 
-Organization workshop for shared tools, experiments, Workers, and projects that
-benefit from one maintained home instead of another tiny repository.
+          Organization workshop for shared tools, experiments, Workers, and projects that
+          benefit from one maintained home instead of another tiny repository.
 
-## Bench family
+          ## Bench family
 
-The first migrated workspace is [`benches/`](benches/):
+          The first migrated workspace is [`benches/`](benches/):
 
-- [Codebench](benches/codebench/) · https://codebench.trfny.com
-- [Docbench](benches/docbench/) · https://docbench.travny.workers.dev
-- [Streambench](benches/streambench/) · https://streambench.trfny.com
+          - [Codebench](benches/codebench/) · https://codebench.trfny.com
+          - [Docbench](benches/docbench/) · https://docbench.travny.workers.dev
+          - [Streambench](benches/streambench/) · https://streambench.trfny.com
 
-The Bench workspace was extracted from [`trvny/trvny`](https://github.com/trvny/trvny)
-with its filtered Git history preserved. Its existing Cloudflare Workers remain
-separate deployments and keep their current public endpoints.
+          The Bench workspace was extracted from [`trvny/trvny`](https://github.com/trvny/trvny)
+          with its filtered Git history preserved. Its existing Cloudflare Workers remain
+          separate deployments and keep their current public endpoints.
 
-## License
+          ## License
 
-The repository-level license is [Apache-2.0](LICENSE). Migrated Bench code keeps
-its original [ISC license](benches/LICENSE).
-""", encoding="utf-8")
+          The repository-level license is [Apache-2.0](LICENSE). Migrated Bench code keeps
+          its original [ISC license](benches/LICENSE).
+          """, encoding="utf-8")
+          PY
 
       - name: Commit migration cleanup
         run: |
