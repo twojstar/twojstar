@@ -190,6 +190,7 @@ class MainController : Initializable {
     private var image: File? = null
     private var romDirectory: File? = null
     private val antiRollbackMutex = Mutex()
+    private val secondSpaceMutex = Mutex()
 
     private suspend fun setPanels(mode: Mode?) {
         withContext(Dispatchers.Main) {
@@ -1164,39 +1165,49 @@ class MainController : Initializable {
     }
 
     private suspend fun findSecondSpaceUser(): String? {
-        val verboseUsers = Command.exec(mutableListOf("adb", "shell", "cmd", "user", "list", "-v"))
-        val secondaryUsers = verboseUsers.lineSequence().mapNotNull { line ->
-            val id = Regex("""\bid=(\d+)""").find(line)?.groupValues?.get(1) ?: return@mapNotNull null
-            val type = Regex("""\btype=([^,\s)]+)""").find(line)?.groupValues?.get(1) ?: return@mapNotNull null
-            id.takeIf { it != "0" && it != "999" && type.endsWith("full.SECONDARY") }
-        }.distinct().toList()
-        if (secondaryUsers.size == 1) return secondaryUsers.single()
+        // MIUI / HyperOS Security and Launcher components use Xiaomi's
+        // `second_user_id` setting to identify Second Space. Prefer that
+        // vendor-specific marker over Android's generic full.SECONDARY type,
+        // which is also used by ordinary multi-user profiles.
+        val candidates = listOf("secure", "global", "system").mapNotNull { namespace ->
+            Command.exec(
+                mutableListOf("adb", "shell", "settings", "--user", "0", "get", namespace, "second_user_id")
+            ).trim().toIntOrNull()
+        }.filter { it > 0 && it != 999 }.distinct()
+        if (candidates.size != 1) return null
 
-        // Older Android versions do not expose user types through `cmd user list -v`.
-        // In that case accept the conventional Second Space ID only when it exists,
-        // and explicitly reject Xiaomi's separate XSpace / Dual Apps profile (999).
-        val legacyUsers = Command.exec(mutableListOf("adb", "shell", "pm", "list", "users"))
-        return Regex("""UserInfo\{10:([^:}]*)""").find(legacyUsers)
-            ?.takeUnless { it.groupValues[1].contains("xspace", ignoreCase = true) }
-            ?.let { "10" }
+        val candidate = candidates.single().toString()
+        val users = Command.exec(mutableListOf("adb", "shell", "pm", "list", "users"))
+        val match = Regex("""UserInfo\{$candidate:([^:}]*)""").find(users) ?: return null
+        return candidate.takeUnless { match.groupValues[1].contains("xspace", ignoreCase = true) }
     }
 
     @FXML
     private fun secondSpaceButtonPressed(event: ActionEvent) {
+        val secondSpaceRequested = secondSpaceButton.isSelected
+        secondSpaceButton.isDisable = true
         GlobalScope.launch {
-            if (Device.checkADB()) {
-                val requestedUser = if (secondSpaceButton.isSelected) findSecondSpaceUser() else "0"
-                if (requestedUser == null) {
-                    withContext(Dispatchers.Main) {
-                        secondSpaceButton.isSelected = false
-                        outputTextArea.text = "ERROR: Second Space user profile not found."
+            try {
+                secondSpaceMutex.withLock {
+                    if (!Device.checkADB()) {
+                        checkDevice()
+                        return@withLock
                     }
-                    return@launch
+                    val requestedUser = if (secondSpaceRequested) findSecondSpaceUser() else "0"
+                    if (requestedUser == null) {
+                        withContext(Dispatchers.Main) {
+                            secondSpaceButton.isSelected = false
+                            outputTextArea.text = "ERROR: Second Space user profile not found."
+                        }
+                        return@withLock
+                    }
+                    AppManager.apply {
+                        user = requestedUser
+                        createTables()
+                    }
                 }
-                AppManager.apply {
-                    user = requestedUser
-                    createTables()
-                }
+            } finally {
+                withContext(Dispatchers.Main) { secondSpaceButton.isDisable = false }
             }
         }
     }

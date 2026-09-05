@@ -18,8 +18,9 @@ object ROMFlasher {
     private suspend fun setupScript(arg: String): File? = withContext(Dispatchers.IO) {
         val extension = if (XiaomiADBFastbootTools.win) "bat" else "sh"
         val source = File(directory, "$arg.$extension")
-        val target = File.createTempFile("xiaomi-adb-flash-", ".$extension", directory)
+        var target: File? = null
         try {
+            target = File.createTempFile("xiaomi-adb-flash-", ".$extension", directory)
             val fastbootPath = "${Command.prefix}fastboot"
             val fastbootToken = if (XiaomiADBFastbootTools.win) {
                 "\"$fastbootPath\""
@@ -35,7 +36,7 @@ object ROMFlasher {
             target.setExecutable(true, false)
             target
         } catch (ex: Exception) {
-            target.delete()
+            target?.delete()
             ex.printStackTrace()
             ex.alert(fatal = false)
             null
