@@ -1,0 +1,134 @@
+---
+name: Paint.NET ICO CI
+
+on: # yamllint disable-line rule:truthy
+  push:
+    branches: [main]
+    paths:
+      - paintdotnet-ico/**
+      - .github/workflows/paintdotnet-ico-ci.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - paintdotnet-ico/**
+      - .github/workflows/paintdotnet-ico-ci.yml
+  workflow_dispatch:
+
+concurrency:
+  group: paintdotnet-ico-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+env:
+  PLUGIN_DIR: paintdotnet-ico
+  PDN_51_URL: https://github.com/paintdotnet/release/releases/download/v5.1.12/paint.net.5.1.12.portable.x64.zip
+  PDN_51_SHA256: d5ae7043f2fb9d365b48dfe243a2aca1c74924de99b04b6445916c95354aefa3
+  PDN_52_URL: https://github.com/paintdotnet/release/releases/download/v5.2-alpha.5.200.9719.1528/paint.net.5.200.9719.1528.portable.x64.zip
+  PDN_52_SHA256: 8a7be1aa650bf09341c2905dcfcc88b662bcf2fb24aff34d8ffc771afc4c88d0
+
+jobs:
+  build:
+    name: Build and package
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+
+      - name: Verify adapter versions
+        shell: pwsh
+        run: |
+          $legacy = [xml](Get-Content "$env:PLUGIN_DIR/PaintDotNetIco.csproj")
+          $modern = [xml](Get-Content "$env:PLUGIN_DIR/PaintDotNetIco.Modern.csproj")
+          $legacyVersion = $legacy.Project.PropertyGroup.Version | Select-Object -First 1
+          $modernVersion = $modern.Project.PropertyGroup.Version | Select-Object -First 1
+          if (-not $legacyVersion -or $legacyVersion -ne $modernVersion) {
+            throw "Adapter versions differ: legacy=$legacyVersion modern=$modernVersion"
+          }
+
+      - name: Download verified Paint.NET SDK binaries
+        shell: pwsh
+        run: |
+          $legacyZip = Join-Path $env:RUNNER_TEMP 'paintdotnet-5.1.zip'
+          $modernZip = Join-Path $env:RUNNER_TEMP 'paintdotnet-5.2.zip'
+          Invoke-WebRequest $env:PDN_51_URL -OutFile $legacyZip
+          Invoke-WebRequest $env:PDN_52_URL -OutFile $modernZip
+          $legacyHash = (Get-FileHash $legacyZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $modernHash = (Get-FileHash $modernZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($legacyHash -ne $env:PDN_51_SHA256) { throw 'Paint.NET 5.1 archive checksum mismatch.' }
+          if ($modernHash -ne $env:PDN_52_SHA256) { throw 'Paint.NET 5.2 archive checksum mismatch.' }
+          Expand-Archive $legacyZip -DestinationPath "$env:RUNNER_TEMP/pdn51"
+          Expand-Archive $modernZip -DestinationPath "$env:RUNNER_TEMP/pdn52"
+          $legacyProbe = Get-ChildItem "$env:RUNNER_TEMP/pdn51" -Recurse -Filter PaintDotNet.Data.dll | Select-Object -First 1
+          $modernProbe = Get-ChildItem "$env:RUNNER_TEMP/pdn52" -Recurse -Filter PaintDotNet.FileTypes.dll | Select-Object -First 1
+          if (-not $legacyProbe -or -not $modernProbe) { throw 'Paint.NET reference assemblies not found.' }
+          "PDN_51_DIR=$($legacyProbe.Directory.FullName)" >> $env:GITHUB_ENV
+          "PDN_52_DIR=$($modernProbe.Directory.FullName)" >> $env:GITHUB_ENV
+
+      - name: Build both adapters
+        working-directory: ${{ env.PLUGIN_DIR }}
+        shell: pwsh
+        run: |
+          dotnet build .\PaintDotNetIco.csproj -c Release -p:PaintDotNetDir="$env:PDN_51_DIR" --nologo
+          dotnet build .\PaintDotNetIco.Modern.csproj -c Release -p:PaintDotNetDir="$env:PDN_52_DIR" --nologo
+
+      - name: Package release assets
+        working-directory: ${{ env.PLUGIN_DIR }}
+        shell: pwsh
+        run: |
+          $dist = Join-Path $PWD 'dist'
+          $package = Join-Path $dist 'package'
+          New-Item "$package/Paint.NET-5.1" -ItemType Directory -Force | Out-Null
+          New-Item "$package/Paint.NET-5.2+" -ItemType Directory -Force | Out-Null
+          $legacyDll = 'bin/Release/net9.0-windows/Travny.PaintDotNet.IcoFileType.dll'
+          $modernDll = 'bin/Release/net10.0-windows/Travny.PaintDotNet.IcoFileType.Modern.dll'
+          Copy-Item $legacyDll "$package/Paint.NET-5.1/"
+          Copy-Item $modernDll "$package/Paint.NET-5.2+/"
+          Copy-Item Install.bat "$package/Install.bat"
+          Copy-Item $legacyDll "$dist/Travny.PaintDotNet.IcoFileType.dll"
+          Copy-Item $modernDll "$dist/Travny.PaintDotNet.IcoFileType.Modern.dll"
+          @'
+          Paint.NET ICO FileType
+
+          Run Install.bat and select your Paint.NET version. It installs per-user to
+          Documents\Paint.NET App Files\FileTypes, which works with Classic and Store builds.
+
+          Portable users: copy the matching DLL from Paint.NET-5.1 or Paint.NET-5.2+
+          to the portable Paint.NET\FileTypes folder. Restart Paint.NET after installation.
+          '@ | Set-Content "$package/INSTALL.txt"
+          Compress-Archive -Path "$package/*" -DestinationPath "$dist/paintdotnet-ico.zip" -CompressionLevel Optimal
+          $assets = @(
+            "$dist/Travny.PaintDotNet.IcoFileType.dll",
+            "$dist/Travny.PaintDotNet.IcoFileType.Modern.dll",
+            "$dist/paintdotnet-ico.zip"
+          )
+          $lines = foreach ($asset in $assets) {
+            $file = Get-Item $asset
+            $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($file.Name)"
+          }
+          $lines | Set-Content "$dist/SHA256SUMS"
+
+      - name: Upload release package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: paintdotnet-ico-release
+          path: |
+            paintdotnet-ico/dist/Travny.PaintDotNet.IcoFileType.dll
+            paintdotnet-ico/dist/Travny.PaintDotNet.IcoFileType.Modern.dll
+            paintdotnet-ico/dist/paintdotnet-ico.zip
+            paintdotnet-ico/dist/SHA256SUMS
+          retention-days: 7

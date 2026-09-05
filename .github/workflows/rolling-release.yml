@@ -7,6 +7,7 @@ on: # yamllint disable-line rule:truthy
       - Benches portable release
       - Feedboard CI
       - Xiaomi ADB Tools CI
+      - Paint.NET ICO CI
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -118,6 +119,20 @@ jobs:
             set_provenance Feedboard feedboard-ci.yml "$run_id" "$sha"
           }
 
+          download_paintdotnet() {
+            local run_id="$1" sha="$2"
+            rm -rf work/paintdotnet-ico
+            mkdir -p work/paintdotnet-ico
+            gh run download "$run_id" --repo "$GH_REPO" --name paintdotnet-ico-release --dir work/paintdotnet-ico
+            rm -f assets/Travny.PaintDotNet.IcoFileType.dll \
+              assets/Travny.PaintDotNet.IcoFileType.Modern.dll assets/paintdotnet-ico.zip
+            for file in Travny.PaintDotNet.IcoFileType.dll Travny.PaintDotNet.IcoFileType.Modern.dll paintdotnet-ico.zip; do
+              test -s "work/paintdotnet-ico/$file"
+              cp "work/paintdotnet-ico/$file" assets/
+            done
+            set_provenance Paint.NET-ICO paintdotnet-ico-ci.yml "$run_id" "$sha"
+          }
+
           download_xiaomi() {
             local run_id="$1" sha="$2"
             rm -rf work/xiaomi
@@ -196,6 +211,7 @@ jobs:
           # pending workflow_run events, so a publisher must never rely only on its trigger.
           reconcile Benches benches-release.yml benches-portable-release download_benches
           reconcile Feedboard feedboard-ci.yml feedboard-msix-x64 download_feedboard
+          reconcile Paint.NET-ICO paintdotnet-ico-ci.yml paintdotnet-ico-release download_paintdotnet
           reconcile Xiaomi-ADB-Tools xiaomi-adb-tools-ci.yml XiaomiADBFastbootTools download_xiaomi
 
           if [ "$updated" -eq 0 ]; then
@@ -206,7 +222,8 @@ jobs:
 
           for file in codebench-portable.html streambench-portable.html docbench-portable.html \
             benches-portable.zip Feedboard.msix Feedboard.cer install-dev-package.ps1 \
-            Feedboard-dev-x64.zip ROLLING-PROVENANCE.tsv XiaomiADBFastbootTools-ASSETS.txt; do
+            Feedboard-dev-x64.zip ROLLING-PROVENANCE.tsv XiaomiADBFastbootTools-ASSETS.txt \
+            Travny.PaintDotNet.IcoFileType.dll Travny.PaintDotNet.IcoFileType.Modern.dll paintdotnet-ico.zip; do
             test -s "assets/$file"
           done
           while IFS= read -r file; do
