@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Streambench</title>
+  <desc id="desc">Neonowy warsztat do streamów IPTV, radia, HLS i playlist M3U</desc>
+  <defs>
+    <linearGradient id="bg" x1="80" y1="20" x2="1120" y2="610" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#182028"/>
+      <stop offset="1" stop-color="#06080b"/>
+    </linearGradient>
+    <linearGradient id="signal" x1="152" y1="178" x2="440" y2="470" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#55e6a5"/>
+      <stop offset="1" stop-color="#52c7ff"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1200" height="630" fill="#06080b"/>
+  <rect x="34" y="34" width="1132" height="562" rx="48" fill="url(#bg)" stroke="#303b46" stroke-width="4"/>
+  <g opacity=".07" stroke="#fff" stroke-width="2">
+    <path d="M70 110h1060M70 174h1060M70 238h1060M70 302h1060M70 366h1060M70 430h1060M70 494h1060"/>
+  </g>
+  <g transform="translate(85 98)">
+    <rect width="420" height="420" rx="96" fill="#090d12" stroke="#33414d" stroke-width="4"/>
+    <path d="M90 105v210" stroke="#55e6a5" stroke-opacity=".28" stroke-width="8" stroke-linecap="round"/>
+    <path d="M116 118 310 210 116 302Z" fill="url(#signal)" filter="url(#glow)"/>
+    <path d="M322 132c45 29 68 55 68 78s-23 49-68 78" fill="none" stroke="#52c7ff" stroke-width="18" stroke-linecap="round" filter="url(#glow)"/>
+    <circle cx="350" cy="70" r="18" fill="#55e6a5"/>
+  </g>
+  <g transform="translate(555 145)" font-family="system-ui, sans-serif">
+    <text x="0" y="95" fill="#f4f7fa" font-size="88" font-weight="800" letter-spacing="-3">Streambench</text>
+    <text x="2" y="165" fill="#55e6a5" font-size="34" font-weight="700">IPTV · RADIO · HLS · M3U</text>
+    <text x="2" y="242" fill="#bdc7d0" font-size="34">Warsztat do odtwarzania,</text>
+    <text x="2" y="288" fill="#bdc7d0" font-size="34">diagnostyki i porządkowania streamów.</text>
+    <rect x="0" y="340" width="480" height="3" fill="#55e6a5" opacity=".45"/>
+    <text x="2" y="390" fill="#7f8c98" font-size="24">streambench.trfny.com</text>
+  </g>
+</svg>

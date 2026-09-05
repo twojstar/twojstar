@@ -1,0 +1,5 @@
+node_modules/
+worker-configuration.d.ts
+public/fonts/
+public/vendor/
+public/portable.html

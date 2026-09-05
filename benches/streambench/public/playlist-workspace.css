@@ -1,0 +1,280 @@
+.source-panel {
+  max-height: 1120px;
+}
+
+.playlist-tools,
+.library-box {
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 1px solid #ffffff1a;
+  border-radius: 12px;
+  background: #0d1115;
+}
+
+.playlist-tools > div:first-child,
+.library-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.playlist-tools strong,
+.library-heading h3 {
+  font-size: 0.9rem;
+}
+
+.library-play strong,
+.library-play span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-play span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.playlist-tools > div:first-child span,
+.library-empty {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.playlist-tools > div:first-child span[data-state="error"] {
+  color: var(--danger);
+}
+
+.compact-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.compact-check input {
+  width: auto;
+  min-height: 0;
+}
+
+.playlist-tool-buttons,
+.library-controls,
+.dialog-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.playlist-tool-buttons button,
+.library-controls button,
+.dialog-actions button {
+  width: auto;
+  margin-top: 10px;
+  flex: 1;
+}
+
+.playlist-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.playlist-entry .entry-action {
+  grid-column: 1;
+}
+
+.entry-tools {
+  grid-column: 2;
+  display: flex;
+  gap: 4px;
+  padding-right: 5px;
+}
+
+.entry-tools button,
+.library-actions button,
+.icon-button {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid #ffffff1a;
+  background: #171c22;
+  color: var(--text);
+}
+
+.library-controls button {
+  flex: 0 1 auto;
+  margin: 0;
+}
+
+.dialog-actions button {
+  flex: 0 1 auto;
+  min-width: 150px;
+}
+
+.entry-tools button:hover,
+.library-actions button:hover {
+  color: var(--accent);
+}
+
+.library-box {
+  margin-top: 14px;
+}
+
+.library-box.panel {
+  margin-bottom: 0;
+  padding: 18px;
+  border-color: var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+}
+
+.library-heading h3 {
+  margin: 3px 0 0;
+}
+
+.library-controls {
+  align-items: center;
+  margin-top: 10px;
+}
+
+.library-controls select {
+  flex: 1 1 220px;
+}
+
+.library-empty {
+  margin: 12px 0 0;
+}
+
+.library-entries {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+}
+
+.library-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-top: 1px solid #ffffff12;
+}
+
+.library-play {
+  position: relative;
+  min-height: 0;
+  padding: 12px 38px 12px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.library-play::after {
+  content: "▶";
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  color: var(--accent);
+  font-size: 0.75rem;
+  transform: translateY(-50%);
+}
+
+.library-play:hover,
+.library-play:focus-visible {
+  background: #55e6a514;
+}
+
+.library-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.edit-dialog {
+  width: min(620px, calc(100% - 24px));
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.edit-dialog::backdrop {
+  background: #000b;
+}
+
+.edit-dialog form {
+  padding: 18px;
+}
+
+.dialog-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.dialog-heading h2 {
+  margin: 3px 0 0;
+  font-size: 1.15rem;
+}
+
+.edit-dialog label {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.edit-dialog label input {
+  display: block;
+  margin-top: 5px;
+  color: var(--text);
+}
+
+.edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 10px;
+}
+
+.dialog-actions {
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.icon-button {
+  font-size: 1.2rem;
+}
+
+@media (max-width: 620px) {
+  .playlist-entry {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .entry-tools {
+    grid-column: 1;
+    justify-content: flex-end;
+    padding: 0 6px 7px;
+  }
+
+  .edit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .playlist-tool-buttons,
+  .dialog-actions {
+    flex-direction: column;
+  }
+
+  .library-controls {
+    flex-wrap: wrap;
+  }
+
+  .library-controls select {
+    flex-basis: 100%;
+  }
+}

@@ -1,0 +1,162 @@
+---
+name: Benches portable release
+
+on: # yamllint disable-line rule:truthy
+  push:
+    branches: [main]
+    paths:
+      - benches/**
+      - .github/workflows/benches-release.yml
+  pull_request:
+    paths:
+      - benches/**
+      - .github/workflows/benches-release.yml
+  workflow_dispatch:
+
+concurrency:
+  group: benches-portable-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  build:
+    name: Build and validate
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-slim
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: benches/package-lock.json
+
+      - name: Install Bench dependencies
+        working-directory: benches
+        run: npm ci
+
+      - name: Check Codebench
+        working-directory: benches
+        run: npm run check:codebench
+
+      - name: Check Streambench
+        working-directory: benches
+        run: npm run check:streambench
+
+      - name: Check Docbench
+        working-directory: benches
+        run: npm run check:docbench
+
+      - name: Package portable builds
+        run: |
+          mkdir -p dist
+          cp benches/codebench/public/portable.html dist/codebench-portable.html
+          cp benches/streambench/public/portable.html dist/streambench-portable.html
+          cp benches/docbench/public/portable.html dist/docbench-portable.html
+          cat > dist/README.txt <<'EOF'
+          Benches portable builds
+
+          codebench-portable.html
+            Fully self-contained Codebench build.
+
+          streambench-portable.html
+            Single-file Streambench frontend. Public catalogs, metadata and
+            constrained relay features still use https://streambench.travny.workers.dev.
+
+          docbench-portable.html
+            Fully self-contained Docbench document workspace.
+          EOF
+          (
+            cd dist
+            zip -9 benches-portable.zip \
+              codebench-portable.html \
+              streambench-portable.html \
+              docbench-portable.html \
+              README.txt
+            sha256sum \
+              codebench-portable.html \
+              streambench-portable.html \
+              docbench-portable.html \
+              benches-portable.zip > SHA256SUMS
+          )
+
+      - name: Upload release package
+        uses: actions/upload-artifact@v7
+        with:
+          name: benches-portable-release
+          path: dist/
+          retention-days: 1
+
+  release:
+    name: Publish release
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-slim
+    timeout-minutes: 20
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release package
+        uses: actions/download-artifact@v8
+        with:
+          name: benches-portable-release
+          path: dist
+
+      - name: Publish rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="benches-portable-latest"
+
+          cat > release-notes.md <<EOF
+          Portable single-file builds of Codebench, Streambench and Docbench.
+
+          Rolling release built from \`${GITHUB_SHA}\`.
+          Streambench's public catalogs, metadata and constrained relay continue
+          to use the hosted Streambench backend.
+          EOF
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/$tag" \
+              -f sha="$GITHUB_SHA" \
+              -F force=true
+            gh release edit "$tag" \
+              --title "Benches Portable · rolling" \
+              --notes-file release-notes.md
+          else
+            gh release create "$tag" \
+              --draft \
+              --target "$GITHUB_SHA" \
+              --title "Benches Portable · rolling" \
+              --notes-file release-notes.md
+          fi
+
+          gh release upload "$tag" \
+            dist/codebench-portable.html \
+            dist/streambench-portable.html \
+            dist/docbench-portable.html \
+            dist/benches-portable.zip \
+            dist/SHA256SUMS \
+            --clobber
+          gh release edit "$tag" --draft=false --latest
+
+          gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
+            --jq '.[] | select(.tag_name | test("^benches-[0-9a-f]{12}$")) | [.id, .tag_name] | @tsv' |
+            while IFS=$'\t' read -r release_id old_tag; do
+              [ -n "$release_id" ] || continue
+              echo "Removing superseded release $old_tag."
+              gh api --method DELETE "repos/$GH_REPO/releases/$release_id"
+              gh api --method DELETE "repos/$GH_REPO/git/refs/tags/$old_tag" || true
+            done

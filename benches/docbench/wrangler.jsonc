@@ -1,0 +1,23 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "docbench",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-24",
+  "preview_urls": false,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.01,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 0.01,
+      "persist": false,
+      "invocation_logs": false
+    }
+  }
+}

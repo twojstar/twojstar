@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noEmitOnError": true,
+    "rootDir": "client",
+    "outDir": "public",
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["client/**/*.ts"],
+  "exclude": [
+    "client/app.ts",
+    "client/playlist-import.ts",
+    "client/playlist-workspace.ts",
+    "client/source-workspace.ts",
+    "client/webmcp.ts"
+  ]
+}

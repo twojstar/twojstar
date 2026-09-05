@@ -1,0 +1,140 @@
+@media (max-width: 840px) {
+  body {
+    scroll-padding-top: 76px;
+  }
+
+  .hero {
+    margin-bottom: 18px;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.35rem, 11vw, 3.8rem);
+  }
+
+  body[data-has-playlist="true"] .hero {
+    display: none;
+  }
+
+  .mobile-workspace-nav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0 0 12px;
+    padding: 7px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: #0b0d10e8;
+    backdrop-filter: blur(14px);
+  }
+
+  .mobile-workspace-nav button {
+    min-height: 42px;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.76rem;
+  }
+
+  .mobile-workspace-nav button[aria-pressed="true"] {
+    background: #55e6a51c;
+    color: var(--text);
+  }
+
+  .mobile-workspace-nav .mobile-count {
+    display: inline-grid;
+    min-width: 20px;
+    height: 20px;
+    place-items: center;
+    margin-left: 4px;
+    padding: 0 5px;
+    border-radius: 99px;
+    background: #171c22;
+    font-size: 0.65rem;
+  }
+
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .player-panel,
+  .source-panel {
+    min-height: 0;
+  }
+
+  .source-panel {
+    max-height: none;
+  }
+
+  .playlist-entries {
+    max-height: none;
+  }
+
+  .tools-panel {
+    margin-top: 12px;
+  }
+
+  .tools-panel > .tools-summary {
+    display: none;
+  }
+
+  .tools-content {
+    padding: 0;
+  }
+
+  .tools-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .source-tools {
+    grid-row: auto;
+  }
+
+  body[data-mobile-view="player"] .source-panel,
+  body[data-mobile-view="player"] .source-dock,
+  body[data-mobile-view="player"] .library-panel,
+  body[data-mobile-view="player"] .tools-panel {
+    display: none;
+  }
+
+  body[data-mobile-view="playlist"] .player-panel,
+  body[data-mobile-view="playlist"] .source-dock,
+  body[data-mobile-view="playlist"] .tools-panel {
+    display: none;
+  }
+
+  body[data-mobile-view="tools"] .workspace,
+  body[data-mobile-view="tools"] .library-panel {
+    display: none;
+  }
+
+  body[data-mobile-view="tools"] .source-dock,
+  body[data-mobile-view="tools"] .tools-panel {
+    display: block;
+  }
+
+  body:not([data-has-playlist="true"]) .source-dock {
+    display: block;
+  }
+}
+
+@media (max-width: 620px) {
+  .source-dock .provider-controls,
+  .tools-panel .provider-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .source-dock .provider-controls button,
+  .tools-panel .provider-controls button {
+    grid-column: auto;
+  }
+}
+
+@media (min-width: 841px) {
+  .mobile-workspace-nav {
+    display: none;
+  }
+}
