@@ -94,9 +94,9 @@ npm run check
 
 ## Deploy via Cloudflare Workers Builds
 
-This project lives in the `trvny/trvny` monorepo under `benches/streambench/`.
+This project lives in the `twojstar/twojstar` workshop under `benches/streambench/`.
 
-1. In Cloudflare Workers & Pages create a Worker by importing `trvny/trvny`.
+1. In Cloudflare Workers & Pages create a Worker by importing `twojstar/twojstar`.
 2. Set the Worker name to `streambench` and root directory to `benches`.
 3. Use `npm run build:streambench` as the build command.
 4. Use `npm run deploy:streambench` as the deploy command.
