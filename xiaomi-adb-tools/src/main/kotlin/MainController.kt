@@ -1191,12 +1191,17 @@ class MainController : Initializable {
                 secondSpaceMutex.withLock {
                     if (!Device.checkADB()) {
                         checkDevice()
-                        return@withLock
+                        if (Device.mode != Mode.ADB) {
+                            withContext(Dispatchers.Main) {
+                                secondSpaceButton.isSelected = AppManager.user != "0"
+                            }
+                            return@withLock
+                        }
                     }
                     val requestedUser = if (secondSpaceRequested) findSecondSpaceUser() else "0"
                     if (requestedUser == null) {
                         withContext(Dispatchers.Main) {
-                            secondSpaceButton.isSelected = false
+                            secondSpaceButton.isSelected = AppManager.user != "0"
                             outputTextArea.text = "ERROR: Second Space user profile not found."
                         }
                         return@withLock
