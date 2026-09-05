@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <RootNamespace>Feedboard</RootNamespace>
+    <AssemblyName>Feedboard.WidgetProvider</AssemblyName>
+    <Platforms>x86;x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <UseWinUI>false</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\Square44x44Logo.png" />
+    <Content Include="Assets\Square150x150Logo.png" />
+    <Content Include="Assets\StoreLogo.png" />
+    <Content Include="Assets\WidgetPreview.png" />
+    <Content Include="$(SettingsPackageDir)\**\*"
+             Exclude="$(SettingsPackageDir)\_xaml\**\*"
+             Link="Settings\%(RecursiveDir)%(Filename)%(Extension)"
+             Condition="'$(SettingsPackageDir)' != ''" />
+    <Content Include="$(SettingsPackageDir)\_xaml\*.xbf"
+             Link="%(Filename)%(Extension)"
+             Condition="'$(SettingsPackageDir)' != ''" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Feedboard.Core\Feedboard.Core.csproj" />
+  </ItemGroup>
+
+  <Target Name="ValidateSettingsPackagePayload" BeforeTargets="_ComputeAppxPackagePayload" Condition="'$(GenerateAppxPackageOnBuild)' == 'true'">
+    <Error Condition="'$(SettingsPackageDir)' == ''" Text="SettingsPackageDir must point to the published Feedboard.Settings payload when generating the Feedboard MSIX." />
+    <Error Condition="!Exists('$(SettingsPackageDir)\Feedboard.Settings.exe')" Text="SettingsPackageDir does not contain Feedboard.Settings.exe. Publish Feedboard.Settings before generating the Feedboard MSIX." />
+    <Error Condition="!Exists('$(SettingsPackageDir)\_xaml\App.xbf')" Text="SettingsPackageDir does not contain App.xbf. Stage compiled Settings XAML before generating the Feedboard MSIX." />
+    <Error Condition="!Exists('$(SettingsPackageDir)\_xaml\MainWindow.xbf')" Text="SettingsPackageDir does not contain MainWindow.xbf. Stage compiled Settings XAML before generating the Feedboard MSIX." />
+  </Target>
+
+  <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <ProjectCapability Include="Msix" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+  </PropertyGroup>
+</Project>

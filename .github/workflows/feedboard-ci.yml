@@ -1,0 +1,245 @@
+---
+name: Feedboard CI
+
+on: # yamllint disable-line rule:truthy
+  push:
+    branches: [main]
+    paths:
+      - feedboard/**
+      - .github/workflows/feedboard-ci.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - feedboard/**
+      - .github/workflows/feedboard-ci.yml
+  workflow_dispatch:
+
+concurrency:
+  group: feedboard-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+
+      - name: Build signed x64 development MSIX
+        shell: pwsh
+        run: |
+          $project = "feedboard\src\Feedboard.WidgetProvider\Feedboard.WidgetProvider.csproj"
+          $settingsProject = "feedboard\src\Feedboard.Settings\Feedboard.Settings.csproj"
+          $manifestPath = "feedboard\src\Feedboard.WidgetProvider\Package.appxmanifest"
+          $buildDir = Join-Path $env:GITHUB_WORKSPACE "feedboard\artifacts\msix-build"
+          $artifactDir = Join-Path $env:GITHUB_WORKSPACE "feedboard\artifacts\msix"
+          $settingsStage = Join-Path $env:GITHUB_WORKSPACE "feedboard\artifacts\settings-stage"
+          $settingsXamlStage = Join-Path $settingsStage "_xaml"
+          $pfxPath = Join-Path $env:RUNNER_TEMP "feedboard-dev.pfx"
+          $cerPath = Join-Path $artifactDir "Feedboard.cer"
+          New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
+          New-Item -ItemType Directory -Path $artifactDir -Force | Out-Null
+          New-Item -ItemType Directory -Path $settingsStage -Force | Out-Null
+          New-Item -ItemType Directory -Path $settingsXamlStage -Force | Out-Null
+
+          & "feedboard\tools\materialize-widget-preview.ps1"
+
+          dotnet publish $settingsProject `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            --output $settingsStage `
+            -p:WindowsPackageType=None `
+            -p:WindowsAppSDKSelfContained=false `
+            -p:WindowsAppSdkBootstrapInitialize=false `
+            -p:WindowsAppSdkDeploymentManagerInitialize=false `
+            -p:WindowsAppSdkUndockedRegFreeWinRTInitialize=false
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          # dotnet publish with WindowsPackageType=None omits compiled WinUI XAML
+          # from the publish directory. The secondary packaged app still loads
+          # App.xaml/MainWindow.xaml through package-root ms-appx URIs, so stage
+          # their generated XBF files at the root of the final MSIX.
+          $settingsObj = Join-Path $env:GITHUB_WORKSPACE "feedboard\src\Feedboard.Settings\obj\Release\net8.0-windows10.0.19041.0\win-x64"
+          foreach ($name in @("App.xbf", "MainWindow.xbf")) {
+            $source = Join-Path $settingsObj $name
+            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+              throw "Compiled Settings XAML was not generated at the expected path: $source"
+            }
+            Write-Host "Staging Settings XAML: $source"
+            Copy-Item -LiteralPath $source -Destination (Join-Path $settingsXamlStage $name)
+          }
+
+          $runNumber = [int64]"${{ github.run_number }}"
+          $runAttempt = [int64]"${{ github.run_attempt }}"
+          $minor = 2 + [math]::Floor(($runNumber - 1) / 65535)
+          $build = (($runNumber - 1) % 65535) + 1
+
+          if ($minor -gt 65535 -or $runAttempt -gt 65535) {
+            throw "GitHub run number cannot be represented as an MSIX version."
+          }
+
+          $packageVersion = "0.$minor.$build.$runAttempt"
+          Write-Host "Packaging Feedboard $packageVersion"
+
+          [xml]$manifest = Get-Content -LiteralPath $manifestPath -Raw
+          $manifest.Package.Identity.Version = $packageVersion
+          $xmlSettings = [System.Xml.XmlWriterSettings]::new()
+          $xmlSettings.Encoding = [System.Text.UTF8Encoding]::new($false)
+          $xmlSettings.Indent = $true
+          $xmlWriter = [System.Xml.XmlWriter]::Create($manifestPath, $xmlSettings)
+          try {
+            $manifest.Save($xmlWriter)
+          }
+          finally {
+            $xmlWriter.Dispose()
+          }
+
+          $publisher = [string]$manifest.Package.Identity.Publisher
+          $certificate = New-SelfSignedCertificate `
+            -Type Custom `
+            -Subject $publisher `
+            -KeySpec Signature `
+            -KeyExportPolicy Exportable `
+            -KeyLength 2048 `
+            -HashAlgorithm SHA256 `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -KeyUsage DigitalSignature `
+            -TextExtension @(
+              "2.5.29.37={text}1.3.6.1.5.5.7.3.3",
+              "2.5.29.19={text}"
+            ) `
+            -FriendlyName "Feedboard CI development signing certificate"
+
+          $passwordText = [guid]::NewGuid().ToString("N")
+          $password = ConvertTo-SecureString -String $passwordText -Force -AsPlainText
+          Export-PfxCertificate -Cert $certificate -FilePath $pfxPath -Password $password | Out-Null
+          Export-Certificate -Cert $certificate -FilePath $cerPath | Out-Null
+
+          try {
+            msbuild $project `
+              /restore `
+              /p:Configuration=Release `
+              /p:Platform=x64 `
+              /p:RuntimeIdentifier=win-x64 `
+              /p:SettingsPackageDir="$settingsStage" `
+              /p:UapAppxPackageBuildMode=SideloadOnly `
+              /p:AppxBundle=Never `
+              /p:AppxPackageSigningEnabled=true `
+              /p:PackageCertificateKeyFile="$pfxPath" `
+              /p:PackageCertificatePassword="$passwordText" `
+              /p:AppxPackageDir="$buildDir\" `
+              /p:GenerateAppxPackageOnBuild=true
+
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+          }
+          finally {
+            Remove-Item -LiteralPath $pfxPath -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -Force -ErrorAction SilentlyContinue
+          }
+
+          $mainPackages = @(
+            Get-ChildItem $buildDir -Recurse -File -Filter *.msix |
+              Where-Object { $_.FullName -notmatch '[\\/]Dependencies[\\/]' }
+          )
+          if ($mainPackages.Count -ne 1) {
+            throw "Expected exactly one main MSIX package, found $($mainPackages.Count)."
+          }
+
+          $makeAppx = Get-ChildItem "$env:USERPROFILE\.nuget\packages\microsoft.windows.sdk.buildtools" -Recurse -File -Filter MakeAppx.exe |
+            Where-Object { $_.FullName -match '[\\/]x64[\\/]MakeAppx\.exe$' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $makeAppx) {
+            throw "MakeAppx.exe was not found in the restored Windows SDK BuildTools package."
+          }
+
+          $unpackDir = Join-Path $env:RUNNER_TEMP "feedboard-msix-unpacked"
+          & $makeAppx unpack /p $mainPackages[0].FullName /d $unpackDir /o | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          $settingsDir = Join-Path $unpackDir "Settings"
+          foreach ($required in @(
+            "Feedboard.Settings.exe",
+            "Feedboard.Settings.dll",
+            "Feedboard.Settings.deps.json",
+            "Feedboard.Settings.runtimeconfig.json",
+            "coreclr.dll"
+          )) {
+            if (-not (Test-Path (Join-Path $settingsDir $required))) {
+              throw "MSIX is missing settings runtime file: Settings\$required"
+            }
+          }
+
+          foreach ($forbidden in @("CoreMessagingXP.dll", "Microsoft.UI.Xaml.dll")) {
+            if (Test-Path (Join-Path $settingsDir $forbidden)) {
+              throw "Settings unexpectedly contains Windows App SDK runtime file: Settings\$forbidden"
+            }
+          }
+
+          foreach ($requiredXaml in @("App.xbf", "MainWindow.xbf")) {
+            if (-not (Test-Path (Join-Path $unpackDir $requiredXaml))) {
+              throw "MSIX is missing package-root Settings XAML: $requiredXaml"
+            }
+          }
+
+          Copy-Item $mainPackages[0].FullName (Join-Path $artifactDir "Feedboard.msix")
+
+          foreach ($arch in @("x86", "x64")) {
+            $sourceDir = Join-Path $mainPackages[0].Directory.FullName "Dependencies\$arch"
+            $dependencies = @(
+              Get-ChildItem $sourceDir -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Extension -in ".appx", ".msix" }
+            )
+
+            if ($dependencies.Count -eq 0) {
+              throw "No $arch dependency packages were produced."
+            }
+
+            $targetDir = Join-Path $artifactDir "Dependencies\$arch"
+            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+            $dependencies | Copy-Item -Destination $targetDir
+          }
+
+          Copy-Item "feedboard\tools\install-dev-package.ps1" $artifactDir
+
+      - name: Attest development artifact provenance
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: |
+            feedboard/artifacts/msix/Feedboard.msix
+            feedboard/artifacts/msix/Feedboard.cer
+            feedboard/artifacts/msix/install-dev-package.ps1
+
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: feedboard-msix-x64
+          path: feedboard/artifacts/msix/
+          if-no-files-found: error
+          retention-days: 7
