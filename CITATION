@@ -7,6 +7,7 @@ authors:
   - name: claude
   - name: chatgpt
   - name: codex
+  - name: Copilot
   - name: actions-user
   - name: github-actions[bot]
   - name: dependabot[bot]
