@@ -33,5 +33,5 @@ On browser hosts that implement WebMCP, the application exposes `read_code_state
 
 - [Markdown application page](https://codebench.trfny.com/index.md)
 - [Application](https://codebench.trfny.com/)
-- [Source](https://github.com/trvny/trvny/tree/main/benches/codebench)
+- [Source](https://github.com/twojstar/twojstar/tree/main/benches/codebench)
 - [TRAVNY hub](https://trfny.com/)
