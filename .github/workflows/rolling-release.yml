@@ -28,16 +28,15 @@ jobs:
       contents: write
 
     steps:
-      - name: Assemble rolling snapshot
+      - name: Reconcile rolling snapshot
+        id: assemble
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TRIGGER_WORKFLOW: ${{ github.event.workflow_run.name }}
-          TRIGGER_RUN: ${{ github.event.workflow_run.id }}
-          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           mkdir -p assets work
+          updated=0
 
           latest_run() {
             local workflow="$1"
@@ -50,6 +49,22 @@ jobs:
               exit 1
             fi
             printf '%s\n' "$result"
+          }
+
+          artifact_available() {
+            local run_id="$1" artifact="$2"
+            gh api "repos/$GH_REPO/actions/runs/$run_id/artifacts?per_page=100" \
+              --jq '.artifacts[] | select(.expired == false) | .name' | grep -Fxq "$artifact"
+          }
+
+          current_run() {
+            local product="$1"
+            if [ ! -f assets/ROLLING-PROVENANCE.tsv ]; then
+              printf '0\n'
+              return
+            fi
+            awk -F '\t' -v product="$product" '$1 == product { print $3; found=1 } END { if (!found) print 0 }' \
+              assets/ROLLING-PROVENANCE.tsv
           }
 
           set_provenance() {
@@ -101,54 +116,85 @@ jobs:
             rm -rf work/xiaomi
             mkdir -p work/xiaomi
             gh run download "$run_id" --repo "$GH_REPO" --name XiaomiADBFastbootTools --dir work/xiaomi
-            rm -f assets/XiaomiADBFastbootTools-*.jar
-            find work/xiaomi -maxdepth 1 -type f -name 'XiaomiADBFastbootTools-*.jar' -print -quit | grep -q .
-            cp work/xiaomi/XiaomiADBFastbootTools-*.jar assets/
+            test -s work/xiaomi/XiaomiADBFastbootTools-ASSETS.txt
+            rm -f assets/XiaomiADBFastbootTools-*.jar assets/XiaomiADBFastbootTools-ASSETS.txt
+            copied=0
+            while IFS= read -r file; do
+              [ -n "$file" ] || continue
+              case "$file" in
+                XiaomiADBFastbootTools-*.jar) ;;
+                *) echo "Unexpected Xiaomi artifact in manifest: $file" >&2; exit 1 ;;
+              esac
+              test -s "work/xiaomi/$file"
+              cp "work/xiaomi/$file" assets/
+              copied=$((copied + 1))
+            done < work/xiaomi/XiaomiADBFastbootTools-ASSETS.txt
+            [ "$copied" -gt 0 ]
+            cp work/xiaomi/XiaomiADBFastbootTools-ASSETS.txt assets/
             set_provenance Xiaomi-ADB-Tools xiaomi-adb-tools-ci.yml "$run_id" "$sha"
           }
 
-          seed_all() {
-            local run_id sha
-            IFS=$'\t' read -r run_id sha < <(latest_run benches-release.yml)
-            download_benches "$run_id" "$sha"
-            IFS=$'\t' read -r run_id sha < <(latest_run feedboard-ci.yml)
-            download_feedboard "$run_id" "$sha"
-            IFS=$'\t' read -r run_id sha < <(latest_run xiaomi-adb-tools-ci.yml)
-            download_xiaomi "$run_id" "$sha"
+          reconcile() {
+            local product="$1" workflow="$2" artifact="$3" downloader="$4"
+            local run_id sha published_run
+            IFS=$'\t' read -r run_id sha < <(latest_run "$workflow")
+            published_run="$(current_run "$product")"
+            if [ "$published_run" -ge "$run_id" ]; then
+              echo "$product is already at run $published_run (latest successful: $run_id)."
+              return
+            fi
+            if ! artifact_available "$run_id" "$artifact"; then
+              if [ "$published_run" -gt 0 ]; then
+                echo "Latest $product artifact from run $run_id is unavailable; preserving published run $published_run."
+                return
+              fi
+              echo "No downloadable $product artifact is available to seed the rolling snapshot." >&2
+              exit 1
+            fi
+            "$downloader" "$run_id" "$sha"
+            updated=1
           }
 
           previous_tag="$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name 2>/dev/null || true)"
           if [[ "$previous_tag" =~ ^rolling-[0-9]+-[0-9]+$ ]]; then
             gh release download "$previous_tag" --repo "$GH_REPO" --dir assets
             rm -f assets/SHA256SUMS
-            if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-              seed_all
-            else
-              case "$TRIGGER_WORKFLOW" in
-                "Benches portable release") download_benches "$TRIGGER_RUN" "$TRIGGER_SHA" ;;
-                "Feedboard CI") download_feedboard "$TRIGGER_RUN" "$TRIGGER_SHA" ;;
-                "Xiaomi ADB Tools CI") download_xiaomi "$TRIGGER_RUN" "$TRIGGER_SHA" ;;
-                *) echo "Unsupported triggering workflow: $TRIGGER_WORKFLOW" >&2; exit 1 ;;
-              esac
-            fi
           else
-            echo "No unified rolling snapshot exists yet; seeding all products."
-            seed_all
+            previous_tag=""
+            rm -rf assets/*
+            echo "No unified rolling snapshot exists yet; seeding from current CI artifacts."
+          fi
+
+          # Reconcile every product on every surviving run. GitHub concurrency may coalesce
+          # pending workflow_run events, so a publisher must never rely only on its trigger.
+          reconcile Benches benches-release.yml benches-portable-release download_benches
+          reconcile Feedboard feedboard-ci.yml feedboard-msix-x64 download_feedboard
+          reconcile Xiaomi-ADB-Tools xiaomi-adb-tools-ci.yml XiaomiADBFastbootTools download_xiaomi
+
+          if [ "$updated" -eq 0 ]; then
+            echo "No newer downloadable product build needs publishing."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
           for file in codebench-portable.html streambench-portable.html docbench-portable.html \
             benches-portable.zip Feedboard.msix Feedboard.cer install-dev-package.ps1 \
-            Feedboard-dev-x64.zip ROLLING-PROVENANCE.tsv; do
+            Feedboard-dev-x64.zip ROLLING-PROVENANCE.tsv XiaomiADBFastbootTools-ASSETS.txt; do
             test -s "assets/$file"
           done
-          find assets -maxdepth 1 -type f -name 'XiaomiADBFastbootTools-*.jar' -print -quit | grep -q .
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            test -s "assets/$file"
+          done < assets/XiaomiADBFastbootTools-ASSETS.txt
 
           (
             cd assets
-            find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS
+            find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\0' | sort -z | xargs -0 sha256sum > SHA256SUMS
           )
+          echo "publish=true" >> "$GITHUB_OUTPUT"
 
       - name: Publish atomic Latest release
+        if: steps.assemble.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
