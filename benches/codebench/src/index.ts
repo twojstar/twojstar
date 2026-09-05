@@ -1,4 +1,3 @@
-// Cloudflare Builds push-event smoke marker.
 import { favicon16Response } from "./favicon-16.js";
 import { faviconResponse } from "./favicons.js";
 
