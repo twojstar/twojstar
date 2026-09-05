@@ -86,6 +86,17 @@ jobs:
             rm -f "$tmp"
           }
 
+          cleanup_legacy_feedboard_assets() {
+            local file
+            for file in Feedboard.msix Feedboard.cer install-dev-package.ps1 \
+              install-feedboard.ps1 Install-Feedboard.cmd Feedboard-dev-x64.zip; do
+              if [ -e "assets/$file" ]; then
+                rm -f "assets/$file"
+                updated=1
+              fi
+            done
+          }
+
           download_benches() {
             local run_id="$1" sha="$2"
             rm -rf work/benches
@@ -105,16 +116,25 @@ jobs:
             rm -rf work/feedboard
             mkdir -p work/feedboard
             gh run download "$run_id" --repo "$GH_REPO" --name feedboard-msix-x64 --dir work/feedboard
-            rm -f assets/Feedboard.msix assets/Feedboard.cer assets/install-dev-package.ps1 assets/Feedboard-dev-x64.zip
-            for file in Feedboard.msix Feedboard.cer install-dev-package.ps1; do
+            rm -f assets/Feedboard.msix assets/Feedboard.cer assets/install-dev-package.ps1 \
+              assets/install-feedboard.ps1 assets/Install-Feedboard.cmd \
+              assets/Feedboard-dev-x64.zip assets/Feedboard-x64.zip
+            for file in Feedboard.msix Feedboard.cer install-feedboard.ps1 Install-Feedboard.cmd; do
               test -s "work/feedboard/$file"
-              cp "work/feedboard/$file" assets/
             done
-            test -d work/feedboard/Dependencies
+            for arch in x86 x64; do
+              dependency_dir="work/feedboard/Dependencies/$arch"
+              test -d "$dependency_dir"
+              if ! find "$dependency_dir" -maxdepth 1 -type f \
+                \( -name '*.appx' -o -name '*.msix' \) -print -quit | grep -q .; then
+                echo "Feedboard artifact is missing $arch dependency packages." >&2
+                exit 1
+              fi
+            done
             (
               cd work/feedboard
-              zip -9 -r ../../assets/Feedboard-dev-x64.zip \
-                Feedboard.msix Feedboard.cer install-dev-package.ps1 Dependencies
+              zip -9 -r ../../assets/Feedboard-x64.zip \
+                Feedboard.msix Feedboard.cer install-feedboard.ps1 Install-Feedboard.cmd Dependencies
             )
             set_provenance Feedboard feedboard-ci.yml "$run_id" "$sha"
           }
@@ -207,6 +227,8 @@ jobs:
             echo "No unified rolling snapshot exists yet; seeding from current CI artifacts."
           fi
 
+          cleanup_legacy_feedboard_assets
+
           # Reconcile every product on every surviving run. GitHub concurrency may coalesce
           # pending workflow_run events, so a publisher must never rely only on its trigger.
           reconcile Benches benches-release.yml benches-portable-release download_benches
@@ -221,8 +243,7 @@ jobs:
           fi
 
           for file in codebench-portable.html streambench-portable.html docbench-portable.html \
-            benches-portable.zip Feedboard.msix Feedboard.cer install-dev-package.ps1 \
-            Feedboard-dev-x64.zip ROLLING-PROVENANCE.tsv XiaomiADBFastbootTools-ASSETS.txt \
+            benches-portable.zip Feedboard-x64.zip ROLLING-PROVENANCE.tsv XiaomiADBFastbootTools-ASSETS.txt \
             Travny.PaintDotNet.IcoFileType.dll Travny.PaintDotNet.IcoFileType.Modern.dll paintdotnet-ico.zip; do
             test -s "assets/$file"
           done
@@ -254,6 +275,9 @@ jobs:
             while IFS=$'\t' read -r product workflow run_id sha; do
               printf -- '- **%s** - %s run #%s, commit `%s`\n' "$product" "$workflow" "$run_id" "$sha"
             done < assets/ROLLING-PROVENANCE.tsv
+            echo
+            echo "### Feedboard"
+            echo "Download \`Feedboard-x64.zip\`, extract it, and double-click \`Install-Feedboard.cmd\`."
             echo
             echo "The release is assembled as a complete draft and becomes GitHub Latest only after every required asset and checksum has been uploaded."
           } > release-notes.md

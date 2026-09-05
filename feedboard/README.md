@@ -2,7 +2,7 @@
 
 A local-first RSS/Atom/JSON Feed reader for the Windows 11 Widgets Board.
 
-> Status: working development prototype. The packaged provider, WinUI settings app, feed parser, local state, OPML plumbing and adaptive-card renderer are implemented. For same-repository builds, CI produces an attested, locally signed x64 MSIX development artifact, and the package has passed a real Windows 11 install/picker/render/resize smoke test.
+> Status: working development prototype. The packaged provider, WinUI settings app, feed parser, local state, OPML plumbing and adaptive-card renderer are implemented. CI produces an attested x64 sideload bundle, and the package has passed a real Windows 11 install/picker/render/resize smoke test.
 
 ## Goal
 
@@ -58,28 +58,13 @@ Feed definitions are stored in `%LOCALAPPDATA%\Feedboard\feeds.json`.
 
 ## MSIX package
 
-`Feedboard CI` is the single maintained Feedboard workflow. It publishes the self-contained WinUI settings app, packages it with the x64 provider as a single-project MSIX, and uploads a `feedboard-msix-x64` artifact for each relevant PR/push. CI assigns a monotonically increasing development package version, includes the x86/x64 Windows App Runtime dependencies needed by the x64 package, and signs the MSIX with a fresh self-signed development certificate. Only the public `Feedboard.cer` is uploaded; the temporary private signing key is deleted on the runner.
+`Feedboard CI` is the single maintained Feedboard workflow. It publishes the self-contained WinUI settings app, packages it with the x64 provider as a single-project MSIX, bundles the x86/x64 Windows App Runtime dependencies, and signs the package with a fresh self-signed sideload certificate. The temporary private signing key is deleted on the runner.
 
-For same-repository builds, GitHub also publishes Sigstore-backed artifact attestations for `Feedboard.msix`, `Feedboard.cer`, and the install helper. The helper refuses to trust the development certificate unless those attestations verify against `twojstar/twojstar`.
+The GitHub **Latest** release exposes one Feedboard download: `Feedboard-x64.zip`. Extract it and double-click `Install-Feedboard.cmd`. The GitHub sideload path requires an authenticated GitHub CLI (`gh auth login`) so the installer can verify the published artifact attestations before it trusts `Feedboard.cer` in `LocalMachine\TrustedPeople`; it then installs the bundled dependencies and Feedboard.
 
-The install helper is intended for same-repository builds. Fork PR artifacts are still useful for CI validation, but they are not attested by this workflow and will fail the install helper's provenance verification.
+A raw GitHub-built `Feedboard.msix` cannot be installed by double-clicking on a clean machine because Windows requires a trusted signing chain. The sideload installer handles that trust step automatically. A genuinely certificate-free end-user install requires Microsoft Store signing or another publicly trusted code-signing route.
 
-To smoke-test a same-repository build on Windows 11:
-
-1. Install and sign in to GitHub CLI (`gh`) so artifact provenance can be verified.
-2. Download and unzip the `feedboard-msix-x64` workflow artifact from a successful same-repository `Feedboard CI` run.
-3. From the directory containing the package run:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install-dev-package.ps1
-```
-
-4. Approve the administrator prompt. The helper verifies its own provenance, then verifies `Feedboard.msix` and `Feedboard.cer`, confirms that the certificate matches the package signature, imports the public certificate into `LocalMachine\TrustedPeople`, installs the bundled Windows App Runtime dependencies, and installs Feedboard.
-5. Open the Widgets Board, choose **Add widgets**, and look for Feedboard.
-
-The development package has been verified on Windows 11: Feedboard installs, appears in the widget picker, renders live headlines, reacts to small/medium/large size changes, preserves per-widget selection/read state, expands articles in place, and keeps the provider running without a visible console window.
-
-The certificate is a development-only trust anchor for this CI artifact. Remove it from `LocalMachine\TrustedPeople` when the build is no longer needed. Production/Store packaging will use a stable publisher identity and a publicly trusted signing route instead.
+The package has been verified on Windows 11: Feedboard installs, appears in the widget picker, renders live headlines, reacts to small/medium/large size changes, preserves per-widget selection/read state, expands articles in place, and keeps the provider running without a visible console window.
 
 ### Local package build
 
@@ -91,7 +76,7 @@ Requirements:
 - Windows App SDK 2.4.x
 - a package-signing certificate whose subject exactly matches `CN=Feedboard Development`, or a corresponding local manifest publisher override
 
-The CI workflow is the reference packaging path because it creates the temporary development signing certificate, package, and provenance attestations together.
+The CI workflow is the reference packaging path because it creates the temporary sideload signing certificate, package, installer bundle, and provenance attestations together.
 
 ## Phase 1 complete
 

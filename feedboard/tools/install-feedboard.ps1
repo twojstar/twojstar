@@ -1,8 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$PackagePath,
-    [string]$CertificatePath,
-    [string]$GitHubCliPath
+    [string]$CertificatePath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,25 +21,9 @@ if ($CertificatePath) {
     $CertificatePath = (Resolve-Path -LiteralPath $CertificatePath).Path
 }
 
-if ($GitHubCliPath) {
-    $GitHubCliPath = (Resolve-Path -LiteralPath $GitHubCliPath).Path
-}
-else {
-    $ghCommand = Get-Command gh.exe -ErrorAction SilentlyContinue
-    if (-not $ghCommand) {
-        throw 'GitHub CLI (gh.exe) is required to verify Feedboard artifact provenance before trusting its development certificate.'
-    }
-    $GitHubCliPath = $ghCommand.Source
-}
-
-Write-Host 'Verifying installer provenance with GitHub...'
-& $GitHubCliPath attestation verify $PSCommandPath --repo $attestationRepo
-if ($LASTEXITCODE -ne 0) {
-    throw 'GitHub artifact attestation verification failed for install-dev-package.ps1.'
-}
 
 if (-not (Test-IsAdministrator)) {
-    Write-Host 'Feedboard development MSIX needs administrator privileges to trust its local test certificate.'
+    Write-Host 'Feedboard needs administrator privileges once to trust its GitHub release signing certificate.'
     Write-Host 'Requesting elevation...'
 
     $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
@@ -50,8 +33,6 @@ if (-not (Test-IsAdministrator)) {
     if ($CertificatePath) {
         $arguments += " -CertificatePath `"$CertificatePath`""
     }
-    $arguments += " -GitHubCliPath `"$GitHubCliPath`""
-
     $elevated = Start-Process -FilePath powershell.exe -Verb RunAs -ArgumentList $arguments -Wait -PassThru
     exit $elevated.ExitCode
 }
@@ -120,14 +101,24 @@ if ($CertificatePath) {
 else {
     $certificatePathCandidate = Join-Path $mainPackage.Directory.FullName 'Feedboard.cer'
     if (-not (Test-Path -LiteralPath $certificatePathCandidate)) {
-        throw "Development signing certificate not found: $certificatePathCandidate"
+        throw "Feedboard signing certificate not found: $certificatePathCandidate"
     }
     $certificate = Get-Item -LiteralPath $certificatePathCandidate
 }
 
-Write-Host 'Verifying package and certificate provenance with GitHub...'
-foreach ($subject in @($mainPackage.FullName, $certificate.FullName)) {
-    & $GitHubCliPath attestation verify $subject --repo $attestationRepo
+$ghCommand = Get-Command gh.exe -ErrorAction SilentlyContinue
+if (-not $ghCommand) {
+    throw 'GitHub CLI (gh.exe) is required to verify Feedboard before trusting its signing certificate.'
+}
+
+& $ghCommand.Source auth status --hostname github.com *> $null
+if ($LASTEXITCODE -ne 0) {
+    throw 'GitHub CLI must be authenticated (`gh auth login`) before Feedboard can trust its signing certificate.'
+}
+
+Write-Host 'Verifying GitHub artifact attestations...'
+foreach ($subject in @($mainPackage.FullName, $certificate.FullName, $PSCommandPath)) {
+    & $ghCommand.Source attestation verify $subject --repo $attestationRepo
     if ($LASTEXITCODE -ne 0) {
         throw "GitHub artifact attestation verification failed for '$subject'."
     }
@@ -146,7 +137,7 @@ if ($signature.SignerCertificate.Thumbprint -ne $artifactCertificate.Thumbprint)
 $trustedCertificatePath = "Cert:\LocalMachine\TrustedPeople\$($artifactCertificate.Thumbprint)"
 $certificateWasTrusted = Test-Path -LiteralPath $trustedCertificatePath
 if (-not $certificateWasTrusted) {
-    Write-Host "Trusting attested Feedboard development certificate $($artifactCertificate.Thumbprint)..."
+    Write-Host "Trusting Feedboard release certificate $($artifactCertificate.Thumbprint)..."
     Import-Certificate -FilePath $certificate.FullName -CertStoreLocation 'Cert:\LocalMachine\TrustedPeople' | Out-Null
 }
 
