@@ -25,7 +25,7 @@ public static class WidgetCardRenderer
             ? null
             : new HashSet<string>(state.ReadArticleIds, StringComparer.Ordinal);
         var articleLimit = size == WidgetSize.Large && state.ExpandedArticleId is null && feedErrorLabels.Count == 0
-            ? 6
+            ? 7
             : profile.ArticleLimit;
         var visibleArticles = articles
             .OrderBy(article => state.ExpandedArticleId == article.Id ? 0 : 1)
@@ -35,7 +35,7 @@ public static class WidgetCardRenderer
             .ToList();
         var body = new JsonArray
         {
-            Header(updatedAt, profile.CompactHeader)
+            Header(updatedAt)
         };
 
         if (visibleArticles.Count == 0)
@@ -54,19 +54,6 @@ public static class WidgetCardRenderer
                     profile.CompactRows,
                     profile.TitleLines,
                     profile.SummaryLines));
-            }
-
-            if (profile.ShowInteractionHint)
-            {
-                body.Add(new JsonObject
-                {
-                    ["type"] = "TextBlock",
-                    ["text"] = "Tap a headline for details · tap again to open",
-                    ["size"] = "Small",
-                    ["isSubtle"] = true,
-                    ["wrap"] = true,
-                    ["spacing"] = "Small"
-                });
             }
         }
 
@@ -160,7 +147,7 @@ public static class WidgetCardRenderer
         };
     }
 
-    private static JsonObject Header(DateTimeOffset updatedAt, bool compact) => new()
+    private static JsonObject Header(DateTimeOffset updatedAt) => new()
     {
         ["type"] = "ColumnSet",
         ["spacing"] = "None",
@@ -170,46 +157,6 @@ public static class WidgetCardRenderer
             {
                 ["type"] = "Column",
                 ["width"] = "stretch",
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["type"] = "TextBlock",
-                        ["text"] = "Feedboard",
-                        ["weight"] = "Bolder",
-                        ["size"] = compact ? "Default" : "Medium",
-                        ["wrap"] = true
-                    }
-                }
-            },
-            new JsonObject
-            {
-                ["type"] = "Column",
-                ["width"] = "auto",
-                ["verticalContentAlignment"] = "Center",
-                ["items"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["type"] = "ActionSet",
-                        ["spacing"] = "None",
-                        ["actions"] = new JsonArray
-                        {
-                            new JsonObject
-                            {
-                                ["type"] = "Action.Execute",
-                                ["verb"] = "refresh",
-                                ["title"] = "Refresh",
-                                ["tooltip"] = "Refresh feeds now"
-                            }
-                        }
-                    }
-                }
-            },
-            new JsonObject
-            {
-                ["type"] = "Column",
-                ["width"] = "auto",
                 ["verticalContentAlignment"] = "Center",
                 ["items"] = new JsonArray
                 {
@@ -217,8 +164,35 @@ public static class WidgetCardRenderer
                     {
                         ["type"] = "TextBlock",
                         ["text"] = updatedAt.LocalDateTime.ToString("HH:mm"),
+                        ["horizontalAlignment"] = "Right",
                         ["isSubtle"] = true,
-                        ["size"] = "Small"
+                        ["size"] = "Small",
+                        ["spacing"] = "None"
+                    }
+                }
+            },
+            new JsonObject
+            {
+                ["type"] = "Column",
+                ["width"] = "auto",
+                ["verticalContentAlignment"] = "Center",
+                ["spacing"] = "Small",
+                ["selectAction"] = new JsonObject
+                {
+                    ["type"] = "Action.Execute",
+                    ["verb"] = "refresh",
+                    ["title"] = "Refresh feeds now",
+                    ["tooltip"] = "Refresh feeds now"
+                },
+                ["items"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["type"] = "TextBlock",
+                        ["text"] = "↻",
+                        ["size"] = "Medium",
+                        ["horizontalAlignment"] = "Center",
+                        ["spacing"] = "None"
                     }
                 }
             }
@@ -358,18 +332,16 @@ public static class WidgetCardRenderer
     private sealed record LayoutProfile(
         int ArticleLimit,
         bool ShowThumbnails,
-        bool CompactHeader,
         bool CompactRows,
-        bool ShowInteractionHint,
         int TitleLines,
         int SummaryLines)
     {
         public static LayoutProfile For(WidgetSize size) => size switch
         {
-            WidgetSize.Small => new LayoutProfile(2, false, true, true, false, 2, 1),
-            WidgetSize.Medium => new LayoutProfile(3, true, false, false, false, 2, 2),
-            WidgetSize.Large => new LayoutProfile(5, true, false, false, true, 2, 4),
-            _ => new LayoutProfile(3, true, false, false, false, 2, 2)
+            WidgetSize.Small => new LayoutProfile(2, false, true, 2, 1),
+            WidgetSize.Medium => new LayoutProfile(3, true, false, 2, 2),
+            WidgetSize.Large => new LayoutProfile(5, true, false, 2, 4),
+            _ => new LayoutProfile(3, true, false, 2, 2)
         };
     }
 }
