@@ -8,7 +8,11 @@ import java.nio.channels.Channels
 class Downloader(val link: String, val target: File, val progressLabel: Label) {
 
     private val url = URI(link).toURL()
-    private val size = url.openConnection().contentLengthLong.toFloat()
+    private fun connection() = url.openConnection().apply {
+        connectTimeout = 15_000
+        readTimeout = 30_000
+    }
+    private val size = connection().contentLengthLong.toFloat()
     private var startTime = 0L
     val progress: Float
         get() = (target.length() / size) * 100f
@@ -19,7 +23,7 @@ class Downloader(val link: String, val target: File, val progressLabel: Label) {
         startTime = System.currentTimeMillis()
         val job = scope.launch(Dispatchers.IO) {
             FileOutputStream(target).use { output ->
-                Channels.newChannel(url.openStream()).use { input ->
+                Channels.newChannel(connection().getInputStream()).use { input ->
                     output.channel.transferFrom(input, 0, Long.MAX_VALUE)
                 }
             }

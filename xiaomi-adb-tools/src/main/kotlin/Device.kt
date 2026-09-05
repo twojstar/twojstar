@@ -46,14 +46,8 @@ object Device {
                                 .let {
                                     !("not found" in it || "Unknown command" in it)
                                 }
-                        disabler = "enabled" in Command.exec(
-                            mutableListOf(
-                                "adb",
-                                "shell",
-                                "pm",
-                                "enable",
-                                "com.android.settings"
-                            )
+                        disabler = "disable-user" in Command.exec(
+                            mutableListOf("adb", "shell", "pm", "help")
                         )
                         dpi = try {
                             Command.exec(mutableListOf("adb", "shell", "wm", "density")).substringAfterLast(':')

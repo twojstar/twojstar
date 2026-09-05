@@ -403,9 +403,9 @@ class MainController : Initializable {
             "Russia Stable"
         )
 
-        uninstallerTableView.columns.setAll(uncheckTableColumn, unappTableColumn, unpackageTableColumn)
+        uninstallerTableView.columns.setAll(uncheckTableColumn, unappTableColumn, unpackageTableColumn, unvettedTableColumn)
         reinstallerTableView.columns.setAll(recheckTableColumn, reappTableColumn, repackageTableColumn)
-        disablerTableView.columns.setAll(discheckTableColumn, disappTableColumn, dispackageTableColumn)
+        disablerTableView.columns.setAll(discheckTableColumn, disappTableColumn, dispackageTableColumn, disvettedTableColumn)
         enablerTableView.columns.setAll(encheckTableColumn, enappTableColumn, enpackageTableColumn)
 
         Command.outputTextArea = outputTextArea

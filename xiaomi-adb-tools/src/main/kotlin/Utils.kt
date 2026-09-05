@@ -87,6 +87,8 @@ fun getLink(version: String, codename: String): String? {
     fun getLocation(codename: String, ending: String, region: String): String? {
         (URI("https://update.miui.com/updates/v1/fullromdownload.php?d=$codename$ending&b=F&r=$region&n=").toURL().openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
+            connectTimeout = 10_000
+            readTimeout = 10_000
             setRequestProperty("Referer", "https://en.miui.com/a-234.html")
             instanceFollowRedirects = false
             try {

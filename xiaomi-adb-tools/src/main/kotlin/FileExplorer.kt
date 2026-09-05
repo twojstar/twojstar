@@ -64,77 +64,64 @@ class FileExplorer(val statusTextField: TextField, val statusProgressBar: Progre
         }
     }
 
-    private suspend fun exec(command: MutableList<String>) {
-        withContext(Dispatchers.Main) {
-            statusTextField.text = ""
-        }
+    private suspend fun exec(command: MutableList<String>): Boolean {
+        withContext(Dispatchers.Main) { statusTextField.text = "" }
         command[0] = prefix + command[0]
-        withContext(Dispatchers.IO) {
-            Scanner(startProcess(command).inputStream, "UTF-8").useDelimiter("").use { scanner ->
+        return withContext(Dispatchers.IO) {
+            val process = startProcess(command, redirectErrorStream = true)
+            Scanner(process.inputStream, "UTF-8").useDelimiter("").use { scanner ->
                 while (scanner.hasNextLine()) {
                     val output = scanner.nextLine()
                     withContext(Dispatchers.Main) {
                         if ('%' in output) {
                             statusProgressBar.progress = output.substringBefore('%').trim('[', ' ').toInt() / 100.0
                             statusTextField.text = output
-                        } else if ((command[1] == "shell" && command[2] in output) || "adb" in output)
+                        } else if ((command[1] == "shell" && command[2] in output) || "adb" in output) {
                             statusTextField.text = "ERROR: ${output.substringAfterLast(':').trim()}"
+                        }
                     }
                 }
             }
+            process.waitFor() == 0
         }
+    }
+
+    private suspend fun finish(success: Boolean) = withContext(Dispatchers.Main) {
+        if (success) statusTextField.text = "Done!"
+        else if (!statusTextField.text.startsWith("ERROR:")) statusTextField.text = "ERROR: command failed"
+        statusProgressBar.progress = 0.0
     }
 
     suspend fun pull(selected: List<AndroidFile>, to: File) {
-        if (selected.isEmpty()) {
-            exec(mutableListOf("adb", "pull", path, to.absolutePath))
-        } else {
-            selected.forEach {
-                exec(mutableListOf("adb", "pull", path + it.name, to.absolutePath))
-            }
-        }
-        withContext(Dispatchers.Main) {
-            statusTextField.text = "Done!"
-            statusProgressBar.progress = 0.0
-        }
+        var success = true
+        if (selected.isEmpty()) success = exec(mutableListOf("adb", "pull", path, to.absolutePath))
+        else selected.forEach { success = exec(mutableListOf("adb", "pull", path + it.name, to.absolutePath)) && success }
+        finish(success)
     }
 
     suspend fun push(selected: List<File>) {
-        selected.forEach {
-            exec(mutableListOf("adb", "push", it.absolutePath, path))
-        }
-        withContext(Dispatchers.Main) {
-            statusTextField.text = "Done!"
-            statusProgressBar.progress = 0.0
-        }
+        var success = true
+        selected.forEach { success = exec(mutableListOf("adb", "push", it.absolutePath, path)) && success }
+        finish(success)
     }
 
     suspend fun delete(selected: List<AndroidFile>) {
+        var success = true
         selected.forEach {
-            if (it.dir)
-                exec(mutableListOf("adb", "shell", "rm", "-rf", (path + it.name).escape()))
-            else exec(mutableListOf("adb", "shell", "rm", "-f", (path + it.name).escape()))
+            val command = if (it.dir)
+                mutableListOf("adb", "shell", "rm", "-rf", (path + it.name).escape())
+            else mutableListOf("adb", "shell", "rm", "-f", (path + it.name).escape())
+            success = exec(command) && success
         }
-        withContext(Dispatchers.Main) {
-            statusTextField.text = "Done!"
-            statusProgressBar.progress = 0.0
-        }
+        finish(success)
     }
 
     suspend fun mkdir(name: String) {
-        exec(mutableListOf("adb", "shell", "mkdir", (path + name).escape()))
-        withContext(Dispatchers.Main) {
-            statusTextField.text = "Done!"
-            statusProgressBar.progress = 0.0
-        }
+        finish(exec(mutableListOf("adb", "shell", "mkdir", (path + name).escape())))
     }
 
     suspend fun rename(selected: AndroidFile, to: String) {
-        exec(mutableListOf("adb", "shell", "mv", (path + selected.name).escape(), (path + to).escape()))
-        withContext(Dispatchers.Main) {
-            statusTextField.text = "Done!"
-            statusProgressBar.progress = 0.0
-        }
+        finish(exec(mutableListOf("adb", "shell", "mv", (path + selected.name).escape(), (path + to).escape())))
     }
 
 }
