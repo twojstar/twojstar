@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "weather",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-14",
+  "compatibility_flags": ["nodejs_compat"],
+  "preview_urls": false,
+  "assets": { "directory": "./public" },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 0.01,
+      "persist": true,
+      "invocation_logs": false
+    }
+  },
+
+  "triggers": {
+    "crons": [
+      "0 */2 * * *",
+      "0 5 * * *"
+    ]
+  },
+
+  "kv_namespaces": [
+    {
+      "binding": "WEATHER_KV",
+      "id": "d1b80a523eb2464b8501a15b6b40f85d"
+    }
+  ]
+}
