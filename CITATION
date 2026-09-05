@@ -17,13 +17,13 @@ authors:
   - name: stepsecurity-app[bot]
   - name: deepsource-io[bot]
   - name: sourcery-ai[bot]
-  - name: coderabbitai[bot
+  - name: coderabbitai[bot]
   - name: kanarek-companion[bot]
 identifiers:
   - type: url
     value: 'https://github.com/twojstar'
 repository-code: 'https://github.com/twojstar/twojstar'
-url: 'https://travny.pages.dev/'
+url: 'https://trfny.com/'
 license: ISC
 version: 0.0.0
 date-released: '2026-07-29'
