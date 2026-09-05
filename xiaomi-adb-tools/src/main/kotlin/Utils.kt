@@ -16,6 +16,7 @@ import java.io.StringWriter
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
+import java.security.MessageDigest
 
 enum class Mode {
     ADB, FASTBOOT, AUTH, RECOVERY, ADB_ERROR, FASTBOOT_ERROR
@@ -43,7 +44,20 @@ fun runScript(file: File, redirectErrorStream: Boolean = false) = if (XiaomiADBF
 else ProcessBuilder("sh", file.absolutePath).directory(file.parentFile)
     .redirectErrorStream(redirectErrorStream).start()
 
-suspend fun Exception.alert() {
+fun File.sha256(): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    inputStream().buffered().use { input ->
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            digest.update(buffer, 0, count)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+}
+
+suspend fun Exception.alert(fatal: Boolean = true) {
     val stringWriter = StringWriter()
     val printWriter = PrintWriter(stringWriter)
     this.printStackTrace(printWriter)
@@ -66,7 +80,7 @@ suspend fun Exception.alert() {
             isResizable = false
             showAndWait()
         }
-        Platform.exit()
+        if (fatal) Platform.exit()
     }
 }
 

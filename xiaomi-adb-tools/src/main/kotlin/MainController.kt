@@ -18,6 +18,8 @@ import javafx.scene.layout.VBox
 import javafx.scene.text.Font
 import javafx.stage.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.awt.Desktop
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
@@ -187,6 +189,7 @@ class MainController : Initializable {
 
     private var image: File? = null
     private var romDirectory: File? = null
+    private val antiRollbackMutex = Mutex()
 
     private suspend fun setPanels(mode: Mode?) {
         withContext(Dispatchers.Main) {
@@ -444,19 +447,14 @@ class MainController : Initializable {
                     }.let { it to label }
                 }
                 try {
-                    when {
-                        XiaomiADBFastbootTools.win -> Downloader(
-                            "https://dl.google.com/android/repository/platform-tools-latest-windows.zip",
-                            archive, downloadLabel
-                        ).start()
-                        XiaomiADBFastbootTools.linux -> Downloader(
-                            "https://dl.google.com/android/repository/platform-tools-latest-linux.zip",
-                            archive, downloadLabel
-                        ).start()
-                        else -> Downloader(
-                            "https://dl.google.com/android/repository/platform-tools-latest-darwin.zip",
-                            archive, downloadLabel
-                        ).start()
+                    val (archiveName, expectedSha256) = when {
+                        XiaomiADBFastbootTools.win -> "platform-tools_r37.0.1-win.zip" to "45f4d63113e895ebde0c90f194099a4676b6ac653bd28d54314a9e022bbc1a99"
+                        XiaomiADBFastbootTools.linux -> "platform-tools_r37.0.1-linux.zip" to "d230f13842f60f782a8645f9c813f8f845bf36089ea7289f28c48f17979313f1"
+                        else -> "platform-tools_r37.0.1-darwin.zip" to "ee39ad5967e95c2a07f04dbcbde96b1a0c916ba376096db5d2f498b7727a5d1d"
+                    }
+                    Downloader("https://dl.google.com/android/repository/$archiveName", archive, downloadLabel).start()
+                    require(archive.sha256().equals(expectedSha256, ignoreCase = true)) {
+                        "Platform Tools 37.0.1 checksum verification failed."
                     }
                     withContext(Dispatchers.Main) { downloadLabel.text = "Unzipping..." }
                     val extractionRoot = XiaomiADBFastbootTools.dir.canonicalFile
@@ -750,27 +748,25 @@ class MainController : Initializable {
     @FXML
     private fun antirbButtonPressed(event: ActionEvent) {
         GlobalScope.launch {
-            if (Device.checkFastboot()) {
-                File(XiaomiADBFastbootTools.dir, "dummy.img").apply {
-                    writeBytes(ByteArray(8192))
-                    withContext(Dispatchers.Main) {
-                        if ("FAILED" in Command.exec(mutableListOf("fastboot", "oem", "ignore", "anti"))) {
-                            if ("FAILED" in Command.exec(
-                                    mutableListOf(
-                                        "fastboot",
-                                        "flash",
-                                        "antirbpass",
-                                        "dummy.img"
-                                    )
-                                )
-                            ) {
-                                outputTextArea.text = "Couldn't disable anti-rollback safeguard!"
-                            } else outputTextArea.text = "Anti-rollback safeguard disabled!"
-                        } else outputTextArea.text = "Anti-rollback safeguard disabled!"
+            antiRollbackMutex.withLock {
+                if (Device.checkFastboot()) {
+                    val dummy = File.createTempFile("antirb-", ".img", XiaomiADBFastbootTools.dir)
+                    try {
+                        dummy.writeBytes(ByteArray(8192))
+                        val ignore = Command.exec(mutableListOf("fastboot", "oem", "ignore", "anti"))
+                        val result = if ("FAILED" in ignore)
+                            Command.exec(mutableListOf("fastboot", "flash", "antirbpass", dummy.absolutePath))
+                        else ignore
+                        withContext(Dispatchers.Main) {
+                            outputTextArea.text = if ("FAILED" in result)
+                                "Couldn't disable anti-rollback safeguard!"
+                            else "Anti-rollback safeguard disabled!"
+                        }
+                    } finally {
+                        dummy.delete()
                     }
-                    delete()
-                }
-            } else checkDevice()
+                } else checkDevice()
+            }
         }
     }
 
@@ -817,7 +813,7 @@ class MainController : Initializable {
                         outputTextArea.text = "ERROR: Space found in the pathname!"
                         null
                     }
-                    "images" in dir.list()!! -> {
+                    "images" in (dir.list() ?: emptyArray()) -> {
                         romLabel.text = dir.name
                         outputTextArea.text = "Fastboot ROM found!"
                         dir.listFiles()?.forEach {
