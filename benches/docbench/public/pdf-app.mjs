@@ -214,9 +214,17 @@ function mergeAppendedOutlines(oldSourceCount, oldOutline) {
   ];
 }
 
-async function openFiles(files, append) {
+let openFilesTail = Promise.resolve();
+
+function openFiles(files, append) {
   const selected = [...files];
-  if (!selected.length) return;
+  if (!selected.length) return Promise.resolve();
+  const operation = openFilesTail.then(() => openFilesSerial(selected, append));
+  openFilesTail = operation.catch(() => undefined);
+  return operation;
+}
+
+async function openFilesSerial(selected, append) {
   setStatus("Opening PDF…");
 
   const newSources = [];
