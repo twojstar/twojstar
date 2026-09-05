@@ -68,7 +68,7 @@ public static class WidgetCustomizationRenderer
             {
                 var source = sources[index];
                 var isSelected = selected is null || selected.Contains(source.StableId);
-                body.Add(FeedRow(source, index, isSelected));
+                body.Add(FeedRow(source, isSelected));
             }
 
             if (totalPages > 1)
@@ -95,7 +95,7 @@ public static class WidgetCustomizationRenderer
         }.ToJsonString(JsonOptions);
     }
 
-    private static JsonObject FeedRow(FeedSource source, int index, bool isSelected) => new()
+    private static JsonObject FeedRow(FeedSource source, bool isSelected) => new()
     {
         ["type"] = "ColumnSet",
         ["separator"] = true,
@@ -125,7 +125,7 @@ public static class WidgetCustomizationRenderer
                     new JsonObject
                     {
                         ["type"] = "ActionSet",
-                        ["actions"] = new JsonArray { Execute($"customize:toggle:{index}", isSelected ? "On" : "Off") }
+                        ["actions"] = new JsonArray { Execute($"customize:toggle:{source.StableId}", isSelected ? "On" : "Off") }
                     }
                 }
             }

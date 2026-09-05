@@ -89,6 +89,7 @@ public sealed class FeedWidget : IDisposable
         }
         if (!entered) return;
 
+        var refreshSucceeded = false;
         try
         {
             await UpdateRefreshIntervalAsync(refreshToken);
@@ -99,6 +100,7 @@ public sealed class FeedWidget : IDisposable
                 _customizationSources = allSources.Where(source => source.Enabled).ToList();
                 _customizationSourcesLoaded = true;
                 _customizationLoadFailed = false;
+                ClampCustomizationPageLocked();
             }
             var sources = allSources;
             MigrateLegacyFeedSelection();
@@ -135,6 +137,7 @@ public sealed class FeedWidget : IDisposable
                 }
             }
 
+            refreshSucceeded = true;
             PushCurrentCard();
         }
         catch (OperationCanceledException) when (refreshToken.IsCancellationRequested)
@@ -160,7 +163,7 @@ public sealed class FeedWidget : IDisposable
         {
             lock (_lifecycleGate)
             {
-                if (!_disposed) _lastRefreshCompletedAt = DateTimeOffset.UtcNow;
+                if (!_disposed && refreshSucceeded) _lastRefreshCompletedAt = DateTimeOffset.UtcNow;
             }
             _refreshGate.Release();
         }
@@ -185,6 +188,8 @@ public sealed class FeedWidget : IDisposable
             if (_disposed) return;
             MigrateLegacyFeedSelectionLocked();
             _customizationPage = 0;
+            _customizationLoadFailed = false;
+            if (_customizationSources.Count == 0) _customizationSourcesLoaded = false;
             _isCustomizing = true;
         }
 
@@ -282,15 +287,15 @@ public sealed class FeedWidget : IDisposable
                 PushCustomizationCard();
                 return;
             }
-            if (args.Verb.StartsWith(customizeTogglePrefix, StringComparison.Ordinal) &&
-                int.TryParse(args.Verb[customizeTogglePrefix.Length..], out var index))
+            if (args.Verb.StartsWith(customizeTogglePrefix, StringComparison.Ordinal))
             {
+                var feedId = args.Verb[customizeTogglePrefix.Length..];
                 var changed = false;
                 lock (_stateGate)
                 {
-                    if (index >= 0 && index < _customizationSources.Count)
+                    if (_customizationSources.Any(source => string.Equals(source.StableId, feedId, StringComparison.Ordinal)))
                     {
-                        ToggleCustomizationSourceLocked(_customizationSources[index].StableId);
+                        ToggleCustomizationSourceLocked(feedId);
                         changed = true;
                     }
                 }

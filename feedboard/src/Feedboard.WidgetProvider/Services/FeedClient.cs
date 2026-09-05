@@ -78,11 +78,21 @@ public sealed partial class FeedClient
             FeedCache.TryGetValue(source.Url, out var cached);
             if (cached?.LastSuccessAt is { } lastSuccess && lastSuccess > requestStartedAt)
             {
-                return ApplyCustomTitle(source, cached.Articles);
+                var cachedArticles = discoverRichIcon
+                    ? await EnrichFallbackIconsAsync(source.Url, cached.Articles, cancellationToken)
+                    : cached.Articles;
+                if (!ReferenceEquals(cachedArticles, cached.Articles))
+                    FeedCache[source.Url] = cached with { Articles = cachedArticles };
+                return ApplyCustomTitle(source, cachedArticles);
             }
             if (cached?.RetryAfter is { } retryAfter && retryAfter > DateTimeOffset.UtcNow)
             {
-                return ApplyCustomTitle(source, cached.Articles);
+                var cachedArticles = discoverRichIcon
+                    ? await EnrichFallbackIconsAsync(source.Url, cached.Articles, cancellationToken)
+                    : cached.Articles;
+                if (!ReferenceEquals(cachedArticles, cached.Articles))
+                    FeedCache[source.Url] = cached with { Articles = cachedArticles };
+                return ApplyCustomTitle(source, cachedArticles);
             }
 
             try
@@ -98,7 +108,15 @@ public sealed partial class FeedClient
                         source.Url,
                         cached with { FailureCount = 0, RetryAfter = null, LastSuccessAt = DateTimeOffset.UtcNow },
                         (_, current) => current with { FailureCount = 0, RetryAfter = null, LastSuccessAt = DateTimeOffset.UtcNow });
-                    return ApplyCustomTitle(source, updated.Articles);
+                    var updatedArticles = discoverRichIcon
+                        ? await EnrichFallbackIconsAsync(source.Url, updated.Articles, cancellationToken)
+                        : updated.Articles;
+                    if (!ReferenceEquals(updatedArticles, updated.Articles))
+                    {
+                        updated = updated with { Articles = updatedArticles };
+                        FeedCache[source.Url] = updated;
+                    }
+                    return ApplyCustomTitle(source, updatedArticles);
                 }
 
                 response.EnsureSuccessStatusCode();
@@ -149,17 +167,8 @@ public sealed partial class FeedClient
                     .Take(MaxCachedArticlesPerFeed)
                     .ToList();
 
-                var fallbackIcon = FaviconFrom(parseSource.Url);
-                if (discoverRichIcon && articles.Any(article => string.Equals(article.FaviconUrl, fallbackIcon, StringComparison.OrdinalIgnoreCase)))
-                {
-                    var discoveredIcon = await GetSiteIconAsync(parseSource.Url, cancellationToken);
-                    if (!string.IsNullOrWhiteSpace(discoveredIcon))
-                    {
-                        articles = articles.Select(article => string.Equals(article.FaviconUrl, fallbackIcon, StringComparison.OrdinalIgnoreCase)
-                            ? article with { FaviconUrl = discoveredIcon }
-                            : article).ToList();
-                    }
-                }
+                if (discoverRichIcon)
+                    articles = await EnrichFallbackIconsAsync(parseSource.Url, articles, cancellationToken);
 
                 FeedCache[source.Url] = new FeedCacheEntry(
                     articles,
@@ -202,6 +211,24 @@ public sealed partial class FeedClient
         var delayMinutes = Math.Min(5 * (1 << (failures - 1)), 60);
         return new FeedCacheEntry(articles, current?.ETag, current?.LastModified, failures,
             DateTimeOffset.UtcNow.AddMinutes(delayMinutes), current?.LastSuccessAt);
+    }
+
+    private static async Task<IReadOnlyList<FeedArticle>> EnrichFallbackIconsAsync(
+        string feedUrl,
+        IReadOnlyList<FeedArticle> articles,
+        CancellationToken cancellationToken)
+    {
+        var fallbackIcon = FaviconFrom(feedUrl);
+        if (!articles.Any(article => string.Equals(article.FaviconUrl, fallbackIcon, StringComparison.OrdinalIgnoreCase)))
+            return articles;
+
+        var discoveredIcon = await GetSiteIconAsync(feedUrl, cancellationToken);
+        if (string.IsNullOrWhiteSpace(discoveredIcon) || string.Equals(discoveredIcon, fallbackIcon, StringComparison.OrdinalIgnoreCase))
+            return articles;
+
+        return articles.Select(article => string.Equals(article.FaviconUrl, fallbackIcon, StringComparison.OrdinalIgnoreCase)
+            ? article with { FaviconUrl = discoveredIcon }
+            : article).ToList();
     }
 
     private static string? TryGetOrigin(string feedUrl)
