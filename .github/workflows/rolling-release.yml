@@ -1,0 +1,141 @@
+---
+name: Unified rolling release
+
+on: # yamllint disable-line rule:truthy
+  workflow_run:
+    workflows:
+      - Benches portable release
+      - Feedboard CI
+      - Xiaomi ADB Tools CI
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: unified-rolling-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish complete snapshot
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-slim
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+
+    steps:
+      - name: Assemble latest successful product artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          latest_run() {
+            local workflow="$1"
+            local result
+            result="$(gh api --method GET "repos/$GH_REPO/actions/workflows/$workflow/runs" \
+              -f branch=main -f status=success -F per_page=1 \
+              --jq '.workflow_runs[0] | "\(.id)\t\(.head_sha)"')"
+            if [ -z "$result" ] || [ "$result" = $'null\tnull' ]; then
+              echo "No successful main run found for $workflow." >&2
+              exit 1
+            fi
+            printf '%s\n' "$result"
+          }
+
+          IFS=$'\t' read -r BENCH_RUN BENCH_SHA < <(latest_run benches-release.yml)
+          IFS=$'\t' read -r FEEDBOARD_RUN FEEDBOARD_SHA < <(latest_run feedboard-ci.yml)
+          IFS=$'\t' read -r XIAOMI_RUN XIAOMI_SHA < <(latest_run xiaomi-adb-tools-ci.yml)
+
+          mkdir -p work/benches work/feedboard work/xiaomi assets
+          gh run download "$BENCH_RUN" --repo "$GH_REPO" --name benches-portable-release --dir work/benches
+          gh run download "$FEEDBOARD_RUN" --repo "$GH_REPO" --name feedboard-msix-x64 --dir work/feedboard
+          gh run download "$XIAOMI_RUN" --repo "$GH_REPO" --name XiaomiADBFastbootTools --dir work/xiaomi
+
+          for file in codebench-portable.html streambench-portable.html docbench-portable.html benches-portable.zip; do
+            test -s "work/benches/$file"
+            cp "work/benches/$file" assets/
+          done
+          for file in Feedboard.msix Feedboard.cer install-dev-package.ps1; do
+            test -s "work/feedboard/$file"
+            cp "work/feedboard/$file" assets/
+          done
+          test -d work/feedboard/Dependencies
+          (
+            cd work/feedboard
+            zip -9 -r ../../assets/Feedboard-dev-x64.zip \
+              Feedboard.msix Feedboard.cer install-dev-package.ps1 Dependencies
+          )
+
+          jar_count="$(find work/xiaomi -maxdepth 1 -type f -name 'XiaomiADBFastbootTools-*.jar' | wc -l | tr -d ' ')"
+          if [ "$jar_count" -ne 5 ]; then
+            echo "Expected 5 Xiaomi platform JARs, found $jar_count." >&2
+            exit 1
+          fi
+          cp work/xiaomi/XiaomiADBFastbootTools-*.jar assets/
+
+          (
+            cd assets
+            sha256sum * > SHA256SUMS
+          )
+
+          {
+            echo "BENCH_RUN=$BENCH_RUN"
+            echo "BENCH_SHA=$BENCH_SHA"
+            echo "FEEDBOARD_RUN=$FEEDBOARD_RUN"
+            echo "FEEDBOARD_SHA=$FEEDBOARD_SHA"
+            echo "XIAOMI_RUN=$XIAOMI_RUN"
+            echo "XIAOMI_SHA=$XIAOMI_SHA"
+          } >> "$GITHUB_ENV"
+
+      - name: Publish atomic Latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="rolling-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          cat > release-notes.md <<EOF
+          Rolling snapshot of the latest successful main builds in twojstar/twojstar.
+
+          ### Included
+          - **Benches Portable** — run #${BENCH_RUN}, commit ${BENCH_SHA}
+          - **Feedboard** — run #${FEEDBOARD_RUN}, commit ${FEEDBOARD_SHA}
+          - **Xiaomi ADB Tools** — run #${XIAOMI_RUN}, commit ${XIAOMI_SHA}
+
+          The release is assembled completely as a draft and becomes GitHub **Latest** only after every required artifact and checksum has been uploaded.
+          EOF
+
+          cleanup_draft() {
+            gh release delete "$tag" --repo "$GH_REPO" --cleanup-tag --yes >/dev/null 2>&1 || true
+          }
+          trap cleanup_draft ERR
+
+          gh release create "$tag" --repo "$GH_REPO" --draft \
+            --target main --title "twojstar · rolling" --notes-file release-notes.md
+          gh release upload "$tag" --repo "$GH_REPO" assets/*
+          gh release edit "$tag" --repo "$GH_REPO" --draft=false --latest
+          trap - ERR
+
+          gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
+            --jq '.[] | select(.tag_name | test("^rolling-[0-9]+-[0-9]+$")) | [.id, .tag_name] | @tsv' |
+            while IFS=$'\t' read -r release_id old_tag; do
+              [ -n "$release_id" ] || continue
+              [ "$old_tag" = "$tag" ] && continue
+              echo "Removing superseded rolling release $old_tag."
+              gh api --method DELETE "repos/$GH_REPO/releases/$release_id"
+              gh api --method DELETE "repos/$GH_REPO/git/refs/tags/$old_tag" || true
+            done
+
+          for legacy in benches-portable-latest feedboard-latest; do
+            if gh release view "$legacy" --repo "$GH_REPO" >/dev/null 2>&1; then
+              echo "Removing legacy rolling release $legacy."
+              gh release delete "$legacy" --repo "$GH_REPO" --cleanup-tag --yes
+            fi
+          done
