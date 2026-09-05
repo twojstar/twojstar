@@ -20,6 +20,7 @@ public sealed class FeedWidget : IDisposable
     private readonly CancellationTokenSource _disposeCts = new();
     private readonly object _lifecycleGate = new();
     private readonly object _stateGate = new();
+    private readonly object _publishGate = new();
 
     private IReadOnlyList<FeedArticle> _articles = Array.Empty<FeedArticle>();
     private IReadOnlyList<FeedSource> _customizationSources = Array.Empty<FeedSource>();
@@ -30,6 +31,10 @@ public sealed class FeedWidget : IDisposable
     private Timer? _timer;
     private TimeSpan _refreshInterval = TimeSpan.FromMinutes(AppSettingsStore.DefaultRefreshIntervalMinutes);
     private DateTimeOffset _updatedAt = DateTimeOffset.Now;
+    private DateTimeOffset _lastRefreshCompletedAt = DateTimeOffset.MinValue;
+    private int _customizationPage;
+    private bool _customizationSourcesLoaded;
+    private bool _customizationLoadFailed;
     private bool _isCustomizing;
     private volatile bool _disposed;
 
@@ -46,7 +51,8 @@ public sealed class FeedWidget : IDisposable
         lock (_lifecycleGate)
         {
             if (_disposed) return;
-            _timer ??= new Timer(_ => RefreshTimerCallback(), null, TimeSpan.Zero, _refreshInterval);
+            var dueTime = NextRefreshDelayLocked(DateTimeOffset.UtcNow);
+            _timer ??= new Timer(_ => RefreshTimerCallback(), null, dueTime, _refreshInterval);
         }
     }
 
@@ -84,10 +90,20 @@ public sealed class FeedWidget : IDisposable
         }
         if (!entered) return;
 
+        var refreshSucceeded = false;
         try
         {
             await UpdateRefreshIntervalAsync(refreshToken);
-            var sources = await _store.LoadAsync(refreshToken);
+            var allSources = await _store.LoadAsync(refreshToken);
+            _client.PruneCache(allSources);
+            lock (_stateGate)
+            {
+                _customizationSources = allSources.Where(source => source.Enabled).ToList();
+                _customizationSourcesLoaded = true;
+                _customizationLoadFailed = false;
+                ClampCustomizationPageLocked();
+            }
+            var sources = allSources;
             MigrateLegacyFeedSelection();
             IReadOnlyList<string>? selectedFeedIds;
             lock (_stateGate)
@@ -122,6 +138,7 @@ public sealed class FeedWidget : IDisposable
                 }
             }
 
+            refreshSucceeded = true;
             PushCurrentCard();
         }
         catch (OperationCanceledException) when (refreshToken.IsCancellationRequested)
@@ -145,6 +162,10 @@ public sealed class FeedWidget : IDisposable
         }
         finally
         {
+            lock (_lifecycleGate)
+            {
+                if (!_disposed && refreshSucceeded) _lastRefreshCompletedAt = DateTimeOffset.UtcNow;
+            }
             _refreshGate.Release();
         }
     }
@@ -161,13 +182,41 @@ public sealed class FeedWidget : IDisposable
         return true;
     }
 
-    public void BeginCustomization() => _ = BeginCustomizationSafelyAsync();
+    public void BeginCustomization()
+    {
+        lock (_stateGate)
+        {
+            if (_disposed) return;
+            MigrateLegacyFeedSelectionLocked();
+            _customizationPage = 0;
+            _customizationLoadFailed = false;
+            if (_customizationSources.Count == 0) _customizationSourcesLoaded = false;
+            _isCustomizing = true;
+        }
 
-    private async Task BeginCustomizationSafelyAsync()
+        // The host expects the customization template during this callback. Publish
+        // cached content (or a tiny loading card) immediately, then refresh the list.
+        PushCustomizationCard();
+        _ = ReloadCustomizationSourcesSafelyAsync();
+    }
+
+    private async Task ReloadCustomizationSourcesSafelyAsync()
     {
         try
         {
-            await BeginCustomizationAsync(_disposeCts.Token);
+            var sources = (await _store.LoadAsync(_disposeCts.Token))
+                .Where(source => source.Enabled)
+                .ToList();
+            var publish = false;
+            lock (_stateGate)
+            {
+                _customizationSources = sources;
+                _customizationSourcesLoaded = true;
+                _customizationLoadFailed = false;
+                ClampCustomizationPageLocked();
+                publish = _isCustomizing;
+            }
+            if (publish) PushCustomizationCard();
         }
         catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
         {
@@ -175,21 +224,15 @@ public sealed class FeedWidget : IDisposable
         catch (Exception ex)
         {
             Trace.TraceError($"Feedboard customization failed: {ex}");
+            var publish = false;
+            lock (_stateGate)
+            {
+                _customizationSourcesLoaded = true;
+                _customizationLoadFailed = _customizationSources.Count == 0;
+                publish = _isCustomizing;
+            }
+            if (publish) PushCustomizationCard();
         }
-    }
-
-    private async Task BeginCustomizationAsync(CancellationToken cancellationToken)
-    {
-        var sources = (await _store.LoadAsync(cancellationToken))
-            .Where(source => source.Enabled)
-            .ToList();
-        lock (_stateGate)
-        {
-            _customizationSources = sources;
-            MigrateLegacyFeedSelectionLocked();
-            _isCustomizing = true;
-        }
-        PushCustomizationCard();
     }
 
     public void UpdateContext(WidgetSize size)
@@ -225,6 +268,7 @@ public sealed class FeedWidget : IDisposable
             if (args.Verb == "customize:done")
             {
                 lock (_stateGate) { _isCustomizing = false; }
+                PushCurrentCard();
                 _ = RefreshAsync(waitForTurn: true, CancellationToken.None);
                 return;
             }
@@ -234,15 +278,25 @@ public sealed class FeedWidget : IDisposable
                 PushCustomizationCard();
                 return;
             }
-            if (args.Verb.StartsWith(customizeTogglePrefix, StringComparison.Ordinal) &&
-                int.TryParse(args.Verb[customizeTogglePrefix.Length..], out var index))
+            if (args.Verb == "customize:page:prev" || args.Verb == "customize:page:next")
             {
+                lock (_stateGate)
+                {
+                    _customizationPage += args.Verb.EndsWith("next", StringComparison.Ordinal) ? 1 : -1;
+                    ClampCustomizationPageLocked();
+                }
+                PushCustomizationCard();
+                return;
+            }
+            if (args.Verb.StartsWith(customizeTogglePrefix, StringComparison.Ordinal))
+            {
+                var feedId = args.Verb[customizeTogglePrefix.Length..];
                 var changed = false;
                 lock (_stateGate)
                 {
-                    if (index >= 0 && index < _customizationSources.Count)
+                    if (_customizationSources.Any(source => string.Equals(source.StableId, feedId, StringComparison.Ordinal)))
                     {
-                        ToggleCustomizationSourceLocked(_customizationSources[index].StableId);
+                        ToggleCustomizationSourceLocked(feedId);
                         changed = true;
                     }
                 }
@@ -292,36 +346,41 @@ public sealed class FeedWidget : IDisposable
 
     public void PushCurrentCard()
     {
-        IReadOnlyList<FeedArticle> articles;
-        IReadOnlyList<string> errors;
-        int visibleFeedCount;
-        WidgetState state;
-        DateTimeOffset updatedAt;
-        WidgetSize size;
-        bool customizing;
-        lock (_stateGate)
+        lock (_publishGate)
         {
-            if (_disposed) return;
-            customizing = _isCustomizing;
-            articles = _articles;
-            errors = _feedErrorLabels;
-            visibleFeedCount = _visibleFeedCount;
-            state = _state;
-            updatedAt = _updatedAt;
-            size = _size;
+            IReadOnlyList<FeedArticle> articles;
+            IReadOnlyList<string> errors;
+            IReadOnlyList<FeedSource> customizationSources;
+            int visibleFeedCount;
+            int customizationPage;
+            WidgetState state;
+            DateTimeOffset updatedAt;
+            WidgetSize size;
+            bool customizing;
+            bool customizationLoading;
+            bool customizationLoadFailed;
+            lock (_stateGate)
+            {
+                if (_disposed) return;
+                customizing = _isCustomizing;
+                articles = _articles;
+                errors = _feedErrorLabels;
+                customizationSources = _customizationSources;
+                visibleFeedCount = _visibleFeedCount;
+                customizationPage = _customizationPage;
+                state = _state;
+                updatedAt = _updatedAt;
+                size = _size;
+                customizationLoading = !_customizationSourcesLoaded;
+                customizationLoadFailed = _customizationLoadFailed;
+            }
+
+            var template = customizing
+                ? WidgetCustomizationRenderer.Render(
+                    customizationSources, state, customizationPage, customizationLoading, customizationLoadFailed)
+                : WidgetCardRenderer.Render(articles, errors, visibleFeedCount, state, updatedAt, size);
+            UpdateWidget(template, state);
         }
-        if (customizing)
-        {
-            PushCustomizationCard();
-            return;
-        }
-        var options = new WidgetUpdateRequestOptions(_id)
-        {
-            Template = WidgetCardRenderer.Render(articles, errors, visibleFeedCount, state, updatedAt, size),
-            Data = "{}",
-            CustomState = JsonSerializer.Serialize(state)
-        };
-        WidgetManager.GetDefault().UpdateWidget(options);
     }
 
     public void Dispose()
@@ -387,34 +446,62 @@ public sealed class FeedWidget : IDisposable
 
     private void PushCustomizationCard()
     {
-        IReadOnlyList<FeedSource> sources;
-        WidgetState state;
-        lock (_stateGate)
+        lock (_publishGate)
         {
-            if (_disposed) return;
-            sources = _customizationSources;
-            state = _state;
+            IReadOnlyList<FeedSource> sources;
+            WidgetState state;
+            int page;
+            bool isLoading;
+            bool loadFailed;
+            lock (_stateGate)
+            {
+                if (_disposed || !_isCustomizing) return;
+                sources = _customizationSources;
+                state = _state;
+                page = _customizationPage;
+                isLoading = !_customizationSourcesLoaded;
+                loadFailed = _customizationLoadFailed;
+            }
+            UpdateWidget(
+                WidgetCustomizationRenderer.Render(sources, state, page, isLoading, loadFailed),
+                state);
         }
+    }
+
+    private void UpdateWidget(string template, WidgetState state)
+    {
         var options = new WidgetUpdateRequestOptions(_id)
         {
-            Template = WidgetCustomizationRenderer.Render(sources, state),
+            Template = template,
             Data = "{}",
             CustomState = JsonSerializer.Serialize(state)
         };
         WidgetManager.GetDefault().UpdateWidget(options);
     }
 
+    private void ClampCustomizationPageLocked()
+    {
+        var totalPages = Math.Max(1, (_customizationSources.Count + WidgetCustomizationRenderer.PageSize - 1) / WidgetCustomizationRenderer.PageSize);
+        _customizationPage = Math.Clamp(_customizationPage, 0, totalPages - 1);
+    }
+
     private async Task UpdateRefreshIntervalAsync(CancellationToken cancellationToken)
     {
         var settings = await _settingsStore.LoadAsync(cancellationToken);
         var nextInterval = TimeSpan.FromMinutes(settings.RefreshIntervalMinutes);
-        if (nextInterval == _refreshInterval) return;
-
-        _refreshInterval = nextInterval;
         lock (_lifecycleGate)
         {
-            _timer?.Change(_refreshInterval, _refreshInterval);
+            if (nextInterval == _refreshInterval) return;
+            _refreshInterval = nextInterval;
+            _timer?.Change(NextRefreshDelayLocked(DateTimeOffset.UtcNow), _refreshInterval);
         }
+    }
+
+    private TimeSpan NextRefreshDelayLocked(DateTimeOffset now)
+    {
+        if (_lastRefreshCompletedAt == DateTimeOffset.MinValue) return TimeSpan.Zero;
+        var elapsed = now - _lastRefreshCompletedAt;
+        return elapsed >= _refreshInterval ? TimeSpan.Zero : _refreshInterval - elapsed;
     }
 
     private void RefreshTimerCallback()
