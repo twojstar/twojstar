@@ -1,0 +1,53 @@
+<Window
+    x:Class="Feedboard.Settings.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Feedboard settings">
+  <Grid Padding="24" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="12">
+    <StackPanel>
+      <TextBlock Text="Feedboard" FontSize="28" FontWeight="SemiBold" />
+      <TextBlock Text="Feeds, OPML and local widget settings" Opacity="0.7" />
+    </StackPanel>
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <TextBox x:Name="FeedUrlBox" PlaceholderText="Website or feed URL" />
+      <Button Grid.Column="1" Content="Add feed" Click="AddFeed_Click" />
+    </Grid>
+    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+      <TextBlock Text="Refresh every" VerticalAlignment="Center" />
+      <ComboBox x:Name="RefreshIntervalBox" Width="150" SelectionChanged="RefreshInterval_SelectionChanged">
+        <ComboBoxItem Content="5 minutes" Tag="5" />
+        <ComboBoxItem Content="15 minutes" Tag="15" />
+        <ComboBoxItem Content="30 minutes" Tag="30" />
+        <ComboBoxItem Content="60 minutes" Tag="60" />
+      </ComboBox>
+    </StackPanel>
+    <ListView x:Name="FeedsList" Grid.Row="3" ItemsSource="{x:Bind Feeds}">
+      <ListView.ItemTemplate>
+        <DataTemplate x:DataType="local:FeedRow" xmlns:local="using:Feedboard.Settings">
+          <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="12" Padding="4,8">
+            <ToggleSwitch IsOn="{x:Bind Enabled, Mode=OneWay}" Toggled="Enabled_Toggled" />
+            <StackPanel Grid.Column="1">
+              <TextBlock Text="{x:Bind DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+              <TextBlock Text="{x:Bind Url}" Opacity="0.65" TextTrimming="CharacterEllipsis" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{x:Bind HealthText, Mode=OneWay}" Opacity="0.65" />
+                <TextBlock Text="{x:Bind LastCheckedText, Mode=OneWay}" Opacity="0.5" />
+              </StackPanel>
+              <TextBlock Text="{x:Bind LastError, Mode=OneWay}" Opacity="0.65" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <Button Grid.Column="2" Content="Test" Click="TestFeed_Click" />
+            <Button Grid.Column="3" Content="Edit URL" Click="EditFeedUrl_Click" />
+            <Button Grid.Column="4" Content="Rename" Click="RenameFeed_Click" />
+            <Button Grid.Column="5" Content="Remove" Click="RemoveFeed_Click" />
+          </Grid>
+        </DataTemplate>
+      </ListView.ItemTemplate>
+    </ListView>
+    <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="8">
+      <Button Content="Import OPML" Click="ImportOpml_Click" />
+      <Button Content="Export OPML" Click="ExportOpml_Click" />
+      <Button Content="Refresh status" Click="RefreshStatus_Click" />
+      <TextBlock x:Name="StatusText" VerticalAlignment="Center" Margin="8,0,0,0" />
+    </StackPanel>
+  </Grid>
+</Window>
