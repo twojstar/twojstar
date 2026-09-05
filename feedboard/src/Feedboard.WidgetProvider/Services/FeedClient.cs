@@ -322,7 +322,7 @@ public sealed partial class FeedClient
     private static HttpClient CreateHttpClient()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Feedboard/0.1 (+https://github.com/trvny/trvny)");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Feedboard/0.1 (+https://github.com/twojstar/twojstar)");
         client.DefaultRequestHeaders.Accept.ParseAdd("application/feed+json"); client.DefaultRequestHeaders.Accept.ParseAdd("application/json"); client.DefaultRequestHeaders.Accept.ParseAdd("application/rss+xml"); client.DefaultRequestHeaders.Accept.ParseAdd("application/atom+xml"); client.DefaultRequestHeaders.Accept.ParseAdd("application/xml"); client.DefaultRequestHeaders.Accept.ParseAdd("text/xml");
         return client;
     }

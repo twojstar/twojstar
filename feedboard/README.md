@@ -60,9 +60,9 @@ Feed definitions are stored in `%LOCALAPPDATA%\Feedboard\feeds.json`.
 
 `Feedboard CI` is the single maintained Feedboard workflow. It publishes the self-contained WinUI settings app, packages it with the x64 provider as a single-project MSIX, and uploads a `feedboard-msix-x64` artifact for each relevant PR/push. CI assigns a monotonically increasing development package version, includes the x86/x64 Windows App Runtime dependencies needed by the x64 package, and signs the MSIX with a fresh self-signed development certificate. Only the public `Feedboard.cer` is uploaded; the temporary private signing key is deleted on the runner.
 
-For same-repository builds, GitHub also publishes Sigstore-backed artifact attestations for `Feedboard.msix`, `Feedboard.cer`, and the install helper. The helper refuses to trust the development certificate unless those attestations verify against `trvny/trvny`.
+For same-repository builds, GitHub also publishes Sigstore-backed artifact attestations for `Feedboard.msix`, `Feedboard.cer`, and the install helper. The helper refuses to trust the development certificate unless those attestations verify against `twojstar/twojstar`.
 
-Successful `main` builds also refresh the [Feedboard rolling release](https://github.com/trvny/trvny/releases/tag/feedboard-latest). Its `Feedboard-dev-x64.zip` contains the same attested development package, dependencies and install helper behind a stable download page instead of a short-lived Actions artifact URL.
+Successful `main` builds also refresh the [Feedboard rolling release](https://github.com/twojstar/twojstar/releases/tag/feedboard-latest). Its `Feedboard-dev-x64.zip` contains the same attested development package, dependencies and install helper behind a stable download page instead of a short-lived Actions artifact URL.
 
 The install helper is therefore intended for same-repository builds. Fork PR artifacts are still useful for CI validation, but they are not attested by this workflow and will fail the install helper's provenance verification.
 
