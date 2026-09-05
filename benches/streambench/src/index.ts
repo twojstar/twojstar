@@ -60,9 +60,33 @@ async function readPlaylist(response: Response): Promise<PlaylistReadResult> {
     return { error: json({ error: "provider_playlist_too_large" }, 413) };
   }
 
-  const bytes = await response.arrayBuffer();
-  if (bytes.byteLength > MAX_PLAYLIST_BYTES) {
-    return { error: json({ error: "provider_playlist_too_large" }, 413) };
+  const reader = response.body?.getReader();
+  if (!reader) return { error: json({ error: "invalid_provider_playlist" }, 502) };
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value?.byteLength) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_PLAYLIST_BYTES) {
+        await reader.cancel();
+        return { error: json({ error: "provider_playlist_too_large" }, 413) };
+      }
+      chunks.push(value);
+    }
+  } catch {
+    await reader.cancel().catch(() => undefined);
+    return { error: json({ error: "provider_playlist_unavailable" }, 502) };
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
   }
 
   const body = new TextDecoder().decode(bytes);
