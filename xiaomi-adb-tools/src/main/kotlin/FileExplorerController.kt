@@ -49,30 +49,29 @@ class FileExplorerController : Initializable {
             if (!pathTextField.text.endsWith('/'))
                 pathTextField.text += '/'
             fileExplorer.path = pathTextField.text
-            listView.items = fileExplorer.getFiles()
-            listView.refresh()
+            GlobalScope.launch { loadList() }
         }
         fileExplorer = FileExplorer(statusTextField, progressBar)
         pathTextField.text = fileExplorer.path
         listView.apply {
             selectionModel.selectionMode = SelectionMode.MULTIPLE
             setCellFactory { FileListCell() }
-            items = fileExplorer.getFiles()
-            refresh()
         }
+        GlobalScope.launch { loadList() }
     }
 
-    private fun loadList() {
-        pathTextField.text = fileExplorer.path
-        listView.items = fileExplorer.getFiles()
-        listView.refresh()
+    private suspend fun loadList() {
+        val items = fileExplorer.getFiles()
+        withContext(Dispatchers.Main) {
+            pathTextField.text = fileExplorer.path
+            listView.items = items
+            listView.refresh()
+        }
     }
 
     private suspend fun navigate(where: String) {
         fileExplorer.navigate(where)
-        withContext(Dispatchers.Main) {
-            loadList()
-        }
+        loadList()
     }
 
     @FXML
