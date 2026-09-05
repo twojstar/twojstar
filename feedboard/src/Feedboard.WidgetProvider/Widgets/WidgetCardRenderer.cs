@@ -75,24 +75,42 @@ public static class WidgetCardRenderer
 
     private static JsonObject EmptyState(int feedErrorCount, int visibleFeedCount, WidgetSize size)
     {
+        var isLoading = visibleFeedCount < 0;
         var noFeeds = visibleFeedCount == 0;
         var allFeedsRetrying = visibleFeedCount > 0 && feedErrorCount >= visibleFeedCount;
-        var title = noFeeds
-            ? "Your Feedboard is empty"
-            : allFeedsRetrying
-                ? "Feeds are taking a break"
-                : "No headlines right now";
-        var detail = noFeeds
-            ? size == WidgetSize.Small
+        string title;
+        string detail;
+        string icon;
+        if (isLoading)
+        {
+            title = "Loading headlines";
+            detail = size == WidgetSize.Small ? "Fetching your feeds…" : "Fetching your feeds in the background.";
+            icon = "↻";
+        }
+        else if (noFeeds)
+        {
+            title = "Your Feedboard is empty";
+            detail = size == WidgetSize.Small
                 ? "Add a feed in Feedboard."
-                : "Add or import a feed in the Feedboard app to start seeing headlines here."
-            : allFeedsRetrying
-                ? size == WidgetSize.Small
-                    ? "We'll retry automatically."
-                    : "Cached headlines aren't available yet. Feedboard will retry automatically."
-                : size == WidgetSize.Small
-                    ? "Check back after the next refresh."
-                    : "Your feeds are configured and healthy. Check back after the next refresh.";
+                : "Add or import a feed in the Feedboard app to start seeing headlines here.";
+            icon = "◌";
+        }
+        else if (allFeedsRetrying)
+        {
+            title = "Feeds are taking a break";
+            detail = size == WidgetSize.Small
+                ? "We'll retry automatically."
+                : "Cached headlines aren't available yet. Feedboard will retry automatically.";
+            icon = "⚠";
+        }
+        else
+        {
+            title = "No headlines right now";
+            detail = size == WidgetSize.Small
+                ? "Check back after the next refresh."
+                : "Your feeds are configured and healthy. Check back after the next refresh.";
+            icon = "◌";
+        }
 
         return new JsonObject
         {
@@ -103,7 +121,7 @@ public static class WidgetCardRenderer
                 new JsonObject
                 {
                     ["type"] = "TextBlock",
-                    ["text"] = allFeedsRetrying ? "⚠" : "◌",
+                    ["text"] = icon,
                     ["size"] = "Large",
                     ["horizontalAlignment"] = "Center",
                     ["spacing"] = "Small"
@@ -177,22 +195,22 @@ public static class WidgetCardRenderer
                 ["width"] = "auto",
                 ["verticalContentAlignment"] = "Center",
                 ["spacing"] = "Small",
-                ["selectAction"] = new JsonObject
-                {
-                    ["type"] = "Action.Execute",
-                    ["verb"] = "refresh",
-                    ["title"] = "Refresh feeds now",
-                    ["tooltip"] = "Refresh feeds now"
-                },
                 ["items"] = new JsonArray
                 {
                     new JsonObject
                     {
-                        ["type"] = "TextBlock",
-                        ["text"] = "↻",
-                        ["size"] = "Medium",
-                        ["horizontalAlignment"] = "Center",
-                        ["spacing"] = "None"
+                        ["type"] = "ActionSet",
+                        ["spacing"] = "None",
+                        ["actions"] = new JsonArray
+                        {
+                            new JsonObject
+                            {
+                                ["type"] = "Action.Execute",
+                                ["verb"] = "refresh",
+                                ["title"] = "↻",
+                                ["tooltip"] = "Refresh feeds now"
+                            }
+                        }
                     }
                 }
             }

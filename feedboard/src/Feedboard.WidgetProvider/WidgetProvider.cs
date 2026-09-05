@@ -32,7 +32,8 @@ public sealed class WidgetProvider : IWidgetProvider
             Widgets[widgetContext.Id] = widget;
         }
 
-        widget.RefreshAsync().GetAwaiter().GetResult();
+        widget.PushCurrentCard();
+        _ = widget.RefreshAsync();
     }
 
     public void DeleteWidget(string widgetId, string _) => RemoveAndDispose(widgetId);
@@ -51,7 +52,7 @@ public sealed class WidgetProvider : IWidgetProvider
         RecoverRunningWidgets();
         if (Widgets.TryGetValue(customizationRequestedArgs.WidgetContext.Id, out var widget))
         {
-            widget.BeginCustomizationAsync().GetAwaiter().GetResult();
+            widget.BeginCustomization();
         }
     }
 
