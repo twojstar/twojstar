@@ -43,24 +43,7 @@ public sealed class IcoFileType : PropertyBasedFileType
     {
         using IcoDocument icon = IcoDecoder.Read(input);
         IReadOnlyList<IcoFrame> frames = icon.GetDecodableFrames();
-
-        if (frames.Count == 1)
-        {
-            return CreateDocument(icon, frames, skipInvalid: false);
-        }
-
-        int defaultIndex = icon.FindDefaultFrameIndex(frames);
-        FrameSelectionChoice choice = FrameSelectionDialog.ShowOnStaThread(frames, defaultIndex);
-
-        if (choice.OpenAll)
-        {
-            return CreateDocument(icon, frames, skipInvalid: true);
-        }
-
-        return CreateDocument(
-            icon,
-            new[] { frames[choice.SelectedIndex] },
-            skipInvalid: false);
+        return CreateDocument(icon, frames, skipInvalid: false);
     }
 
     private static Document CreateDocument(

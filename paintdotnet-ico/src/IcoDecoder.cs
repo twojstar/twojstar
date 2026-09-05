@@ -40,22 +40,6 @@ internal sealed class IcoDocument : IDisposable
     public IReadOnlyList<IcoFrame> GetDecodableFrames() =>
         Frames.Where(CanDecode).ToArray();
 
-    public int FindDefaultFrameIndex(IReadOnlyList<IcoFrame>? frames = null)
-    {
-        IReadOnlyList<IcoFrame> candidates = frames ?? Frames;
-        foreach ((IcoFrame frame, int index) in candidates
-                     .Select((frame, index) => (frame, index))
-                     .OrderByDescending(item => item.frame.Score))
-        {
-            if (CanDecode(frame))
-            {
-                return index;
-            }
-        }
-
-        throw new InvalidDataException("ICO contains no decodable images.");
-    }
-
     public bool CanDecode(IcoFrame frame)
     {
         var key = (frame.DataOffset, frame.DataLength);
