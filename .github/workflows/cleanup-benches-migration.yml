@@ -1,0 +1,92 @@
+name: Prepare Bench migration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/cleanup-benches-migration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout migration branch
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: migration/benches-history
+          fetch-depth: 0
+
+      - name: Update migrated references
+        shell: python
+        run: |
+          from pathlib import Path
+
+          replacements = {
+              "https://github.com/trvny/trvny/tree/main/benches": "https://github.com/twojstar/twojstar/tree/main/benches",
+              "https://github.com/trvny/trvny/releases/tag/benches-portable-latest": "https://github.com/twojstar/twojstar/releases/tag/benches-portable-latest",
+              "trvny-benches": "twojstar-benches",
+          }
+          for path in Path("benches").rglob("*"):
+              if not path.is_file():
+                  continue
+              try:
+                  text = path.read_text(encoding="utf-8")
+              except (UnicodeDecodeError, OSError):
+                  continue
+              updated = text
+              for old, new in replacements.items():
+                  updated = updated.replace(old, new)
+              if updated != text:
+                  path.write_text(updated, encoding="utf-8")
+
+          readme = Path("benches/README.md")
+          text = readme.read_text(encoding="utf-8")
+          marker = "## Migration and license"
+          if marker not in text:
+              text = text.rstrip() + """
+
+## Migration and license
+
+This workspace was extracted from [`trvny/trvny`](https://github.com/trvny/trvny)
+with its filtered `benches/` Git history preserved. Active development now lives
+in [`twojstar/twojstar`](https://github.com/twojstar/twojstar).
+
+The migrated Bench workspace remains licensed under [ISC](LICENSE). The root
+workshop repository may use a different license for other components.
+"""
+              readme.write_text(text, encoding="utf-8")
+
+          Path("README.md").write_text("""# twojstar
+
+Organization workshop for shared tools, experiments, Workers, and projects that
+benefit from one maintained home instead of another tiny repository.
+
+## Bench family
+
+The first migrated workspace is [`benches/`](benches/):
+
+- [Codebench](benches/codebench/) · https://codebench.trfny.com
+- [Docbench](benches/docbench/) · https://docbench.travny.workers.dev
+- [Streambench](benches/streambench/) · https://streambench.trfny.com
+
+The Bench workspace was extracted from [`trvny/trvny`](https://github.com/trvny/trvny)
+with its filtered Git history preserved. Its existing Cloudflare Workers remain
+separate deployments and keep their current public endpoints.
+
+## License
+
+The repository-level license is [Apache-2.0](LICENSE). Migrated Bench code keeps
+its original [ISC license](benches/LICENSE).
+""", encoding="utf-8")
+
+      - name: Commit migration cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md benches
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: finish Bench migration references"
+          git push origin HEAD:migration/benches-history
