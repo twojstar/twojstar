@@ -24,9 +24,15 @@ public static class WidgetCardRenderer
         var readIds = state.ReadArticleIds is null
             ? null
             : new HashSet<string>(state.ReadArticleIds, StringComparer.Ordinal);
-        var articleLimit = size == WidgetSize.Large && state.ExpandedArticleId is null && feedErrorLabels.Count == 0
-            ? 7
-            : profile.ArticleLimit;
+        var articleLimit = profile.ArticleLimit;
+        if (size == WidgetSize.Large && state.ExpandedArticleId is null)
+        {
+            articleLimit = 6;
+            if (feedErrorLabels.Count == 0)
+            {
+                articleLimit = 7;
+            }
+        }
         var visibleArticles = articles
             .OrderBy(article => state.ExpandedArticleId == article.Id ? 0 : 1)
             .ThenBy(article => readIds?.Contains(article.Id) == true ? 1 : 0)
@@ -160,7 +166,8 @@ public static class WidgetCardRenderer
             ["text"] = text,
             ["size"] = "Small",
             ["isSubtle"] = true,
-            ["wrap"] = true,
+            ["wrap"] = false,
+            ["maxLines"] = 1,
             ["spacing"] = "Small"
         };
     }
