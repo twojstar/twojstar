@@ -72,7 +72,7 @@ async function readPlaylist(response: Response): Promise<PlaylistReadResult> {
       if (!value?.byteLength) continue;
       totalBytes += value.byteLength;
       if (totalBytes > MAX_PLAYLIST_BYTES) {
-        await reader.cancel();
+        await reader.cancel().catch(() => undefined);
         return { error: json({ error: "provider_playlist_too_large" }, 413) };
       }
       chunks.push(value);
