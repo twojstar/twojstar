@@ -13,6 +13,8 @@ import type {
 } from "./types";
 import { reconcileWarnings } from "./warnings";
 
+// Cloudflare Builds push-trigger smoke marker.
+
 const SITE_ORIGIN = "https://weather.trfny.com";
 const SITE_HOST = new URL(SITE_ORIGIN).hostname;
 const WORKERS_HOST = "weather.travny.workers.dev";
