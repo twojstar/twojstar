@@ -5,7 +5,7 @@
   "description": "Browser-based IPTV, radio and stream tester.",
   "scripts": {
     "build:client": "tsc -p tsconfig.client.json && tsc -p tsconfig.client-orchestrators.json",
-    "build": "npm run build:client && node scripts/vendor.mjs && node scripts/portable.mjs",
+    "build": "npm run build:client && node ../scripts/sync-i18n.mjs streambench && node scripts/vendor.mjs && node scripts/portable.mjs",
     "typecheck": "wrangler types && tsc --noEmit",
     "check": "npm run build && npm run typecheck && npm run check:syntax && npm run test:raw && wrangler deploy --dry-run",
     "check:syntax": "node scripts/syntax-check.mjs",
