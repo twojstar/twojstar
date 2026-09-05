@@ -1,6 +1,6 @@
 # [weather-feed](https://weather.travny.workers.dev)
 
-[![Weather](https://github.com/trvny/trvny/actions/workflows/weather-ci.yml/badge.svg)](https://github.com/trvny/trvny/actions/workflows/weather-ci.yml)
+[![Weather](https://github.com/twojstar/twojstar/actions/workflows/weather-ci.yml/badge.svg)](https://github.com/twojstar/twojstar/actions/workflows/weather-ci.yml)
 
 Multi-source weather aggregator for **Kościelec (Chrzanów)**,
 50.14 N / 19.42 E, served as an Atom feed of changes rather than a firehose
