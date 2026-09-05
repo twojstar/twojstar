@@ -40,7 +40,7 @@ fun startProcess(command: List<String?>, redirectErrorStream: Boolean = false) =
 fun runScript(file: File, redirectErrorStream: Boolean = false) = if (XiaomiADBFastbootTools.win)
     ProcessBuilder("cmd.exe", "/c", file.absolutePath).directory(XiaomiADBFastbootTools.dir)
         .redirectErrorStream(redirectErrorStream).start()
-else ProcessBuilder("sh", "-c", file.absolutePath).directory(XiaomiADBFastbootTools.dir)
+else ProcessBuilder("sh", file.absolutePath).directory(XiaomiADBFastbootTools.dir)
     .redirectErrorStream(redirectErrorStream).start()
 
 suspend fun Exception.alert() {

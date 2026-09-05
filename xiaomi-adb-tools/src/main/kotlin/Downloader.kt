@@ -1,12 +1,9 @@
 import javafx.scene.control.Label
 import kotlinx.coroutines.*
 import java.io.File
-import java.io.FileOutputStream
 import java.net.URI
-import java.nio.channels.Channels
 
 class Downloader(val link: String, val target: File, val progressLabel: Label) {
-
     private val url = URI(link).toURL()
     private fun connection() = url.openConnection().apply {
         connectTimeout = 15_000
@@ -14,29 +11,26 @@ class Downloader(val link: String, val target: File, val progressLabel: Label) {
     }
     private val size = connection().contentLengthLong.toFloat()
     private var startTime = 0L
-    val progress: Float
-        get() = (target.length() / size) * 100f
-    val speed: Float
-        get() = target.length() / ((System.currentTimeMillis() - startTime) / 1000.0f)
+    val progress: Float get() = if (size > 0) (target.length() / size) * 100f else 0f
+    val speed: Float get() = target.length() / ((System.currentTimeMillis() - startTime).coerceAtLeast(1) / 1000.0f)
 
-    suspend fun start(scope: CoroutineScope = GlobalScope) {
+    suspend fun start() = coroutineScope {
         startTime = System.currentTimeMillis()
-        val job = scope.launch(Dispatchers.IO) {
-            FileOutputStream(target).use { output ->
-                Channels.newChannel(connection().getInputStream()).use { input ->
-                    output.channel.transferFrom(input, 0, Long.MAX_VALUE)
-                }
+        val download = async(Dispatchers.IO) {
+            connection().getInputStream().use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
             }
         }
-        while (!job.isCompleted) {
-            val speed = speed / 1000f
-            val progress = progress.toString().take(4)
+        while (!download.isCompleted) {
+            val currentSpeed = speed / 1000f
+            val currentProgress = progress.toString().take(4)
             withContext(Dispatchers.Main) {
-                progressLabel.text = if (speed < 1000f)
-                    "$progress %\t${speed.toString().take(5)} KB/s"
-                else "$progress %\t${(speed / 1000f).toString().take(5)} MB/s"
+                progressLabel.text = if (currentSpeed < 1000f)
+                    "$currentProgress %\t${currentSpeed.toString().take(5)} KB/s"
+                else "$currentProgress %\t${(currentSpeed / 1000f).toString().take(5)} MB/s"
             }
             delay(1000)
         }
+        download.await()
     }
 }

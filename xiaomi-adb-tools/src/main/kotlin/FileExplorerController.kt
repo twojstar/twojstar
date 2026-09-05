@@ -34,6 +34,7 @@ class FileExplorerController : Initializable {
     private lateinit var progressBar: ProgressBar
 
     private lateinit var fileExplorer: FileExplorer
+    private var loadGeneration = 0L
 
     override fun initialize(location: URL?, resources: ResourceBundle?) {
         backButton.graphic = ImageView("back.png")
@@ -61,9 +62,12 @@ class FileExplorerController : Initializable {
     }
 
     private suspend fun loadList() {
-        val items = fileExplorer.getFiles()
+        val requestPath = fileExplorer.path
+        val generation = ++loadGeneration
+        val items = fileExplorer.getFiles(requestPath)
         withContext(Dispatchers.Main) {
-            pathTextField.text = fileExplorer.path
+            if (generation != loadGeneration || fileExplorer.path != requestPath) return@withContext
+            pathTextField.text = requestPath
             listView.items = items
             listView.refresh()
         }
@@ -99,7 +103,7 @@ class FileExplorerController : Initializable {
                     DirectoryChooser().apply {
                         title = "Select the destination"
                         showDialog((event.source as Node).scene.window)?.let {
-                            fileExplorer.pull(listView.selectionModel.selectedItems, it)
+                            fileExplorer.pull(listView.selectionModel.selectedItems.toList(), it)
                             loadList()
                         }
                     }
@@ -150,7 +154,7 @@ class FileExplorerController : Initializable {
                             buttonTypes.setAll(yes, no)
                             val result = showAndWait()
                             if (result.get() == yes) {
-                                fileExplorer.delete(listView.selectionModel.selectedItems)
+                                fileExplorer.delete(listView.selectionModel.selectedItems.toList())
                                 loadList()
                             }
                         }
@@ -187,15 +191,15 @@ class FileExplorerController : Initializable {
 
     @FXML
     private fun listViewMouseClicked(event: MouseEvent) {
-        if (event.clickCount > 1)
-            listView.selectionModel.selectedItem.also {
-                if (it.dir)
-                    GlobalScope.launch {
-                        if (Device.checkADB())
-                            navigate(it.name)
-                        else close(event)
-                    }
-            }
+        if (event.clickCount > 1) {
+            val item = listView.selectionModel.selectedItem ?: return
+            if (item.dir)
+                GlobalScope.launch {
+                    if (Device.checkADB())
+                        navigate(item.name)
+                    else close(event)
+                }
+        }
     }
 
     private suspend fun close(event: EventObject) =

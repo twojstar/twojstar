@@ -84,7 +84,7 @@ object Device {
             devices.isNotEmpty() -> {
                 props.clear()
                 Command.exec(mutableListOf("fastboot", "getvar", "all")).trim().lines().forEach {
-                    if (it[0] == '(')
+                    if (it.startsWith("("))
                         props[it.substringAfter(')').substringBeforeLast(':').trim()] =
                             it.substringAfterLast(':').trim()
                 }
@@ -94,7 +94,7 @@ object Device {
                     serial = props["serialno"] ?: props["serial"] ?: ""
                     codename = props["product"] ?: ""
                     bootloader = props["unlocked"]?.contains("yes") ?: false
-                    anti = props["anti"]?.toInt() ?: -1
+                    anti = props["anti"]?.trim()?.toIntOrNull() ?: -1
                     mode = Mode.FASTBOOT
                 }
             }

@@ -445,15 +445,15 @@ class MainController : Initializable {
                                 XiaomiADBFastbootTools.win -> Downloader(
                                     "https://dl.google.com/android/repository/platform-tools-latest-windows.zip",
                                     file, label
-                                ).start(this)
+                                ).start()
                                 XiaomiADBFastbootTools.linux -> Downloader(
                                     "https://dl.google.com/android/repository/platform-tools-latest-linux.zip",
                                     file, label
-                                ).start(this)
+                                ).start()
                                 else -> Downloader(
                                     "https://dl.google.com/android/repository/platform-tools-latest-darwin.zip",
                                     file, label
-                                ).start(this)
+                                ).start()
                             }
                             withContext(Dispatchers.Main) {
                                 label.text = "Unzipping..."
@@ -961,12 +961,19 @@ class MainController : Initializable {
                                     outputTextArea.appendText("Starting download...\n")
                                     downloaderPane.isDisable = true
                                 }
-                                Downloader(link, File(it, link.substringAfterLast('/')), downloadProgress).start(this)
-                                withContext(Dispatchers.Main) {
-                                    progressIndicator.isVisible = false
-                                    outputTextArea.appendText("Download complete!\n\n")
-                                    downloadProgress.text = "100.0%"
-                                    downloaderPane.isDisable = false
+                                try {
+                                    Downloader(link, File(it, link.substringAfterLast('/')), downloadProgress).start()
+                                    withContext(Dispatchers.Main) {
+                                        outputTextArea.appendText("Download complete!\n\n")
+                                        downloadProgress.text = "100.0%"
+                                    }
+                                } catch (ex: Exception) {
+                                    withContext(Dispatchers.Main) { outputTextArea.appendText("Download failed: ${ex.message}\n\n") }
+                                } finally {
+                                    withContext(Dispatchers.Main) {
+                                        progressIndicator.isVisible = false
+                                        downloaderPane.isDisable = false
+                                    }
                                 }
                             } else {
                                 withContext(Dispatchers.Main) {
@@ -1180,47 +1187,45 @@ class MainController : Initializable {
 
     @FXML
     private fun aboutMenuItemPressed(event: ActionEvent) {
-        Alert(AlertType.INFORMATION).apply {
-            initStyle(StageStyle.UTILITY)
-            title = "About"
-            graphic = ImageView("icon.png")
-            headerText =
-                "Xiaomi ADB/Fastboot Tools\nVersion ${XiaomiADBFastbootTools.version}\nCreated by Szaki\n\n" +
-                        "SDK Platform Tools\n${runBlocking {
-                            Command.exec(
-                                mutableListOf(
-                                    "adb",
-                                    "--version"
-                                )
-                            ).lines()[1]
-                        }}"
-            val vb = VBox()
-            vb.alignment = Pos.CENTER
-            val discord = Hyperlink("Xiaomi Community on Discord")
-            discord.onAction = EventHandler {
-                if (XiaomiADBFastbootTools.linux)
-                    Runtime.getRuntime().exec(arrayOf("xdg-open", "https://discord.gg/xiaomi"))
-                else Desktop.getDesktop().browse(URI("https://discord.gg/xiaomi"))
+        GlobalScope.launch {
+            val platformToolsVersion = Command.exec(mutableListOf("adb", "--version"))
+                .lines().getOrNull(1)?.trim().orEmpty().ifEmpty { "unknown" }
+            withContext(Dispatchers.Main) {
+                Alert(AlertType.INFORMATION).apply {
+                    initStyle(StageStyle.UTILITY)
+                    title = "About"
+                    graphic = ImageView("icon.png")
+                    headerText = "Xiaomi ADB/Fastboot Tools\nVersion ${XiaomiADBFastbootTools.version}\nCreated by Szaki\n\n" +
+                        "SDK Platform Tools\n$platformToolsVersion"
+                    val vb = VBox()
+                    vb.alignment = Pos.CENTER
+                    val discord = Hyperlink("Xiaomi Community on Discord")
+                    discord.onAction = EventHandler {
+                        if (XiaomiADBFastbootTools.linux)
+                            Runtime.getRuntime().exec(arrayOf("xdg-open", "https://discord.gg/xiaomi"))
+                        else Desktop.getDesktop().browse(URI("https://discord.gg/xiaomi"))
+                    }
+                    discord.font = Font(15.0)
+                    val twitter = Hyperlink("Szaki on Twitter")
+                    twitter.onAction = EventHandler {
+                        if (XiaomiADBFastbootTools.linux)
+                            Runtime.getRuntime().exec(arrayOf("xdg-open", "https://twitter.com/Szaki_EU"))
+                        else Desktop.getDesktop().browse(URI("https://twitter.com/Szaki_EU"))
+                    }
+                    twitter.font = Font(15.0)
+                    val github = Hyperlink("Repository on GitHub")
+                    github.onAction = EventHandler {
+                        if (XiaomiADBFastbootTools.linux)
+                            Runtime.getRuntime().exec(arrayOf("xdg-open", "https://github.com/op07n/XiaomiADBFastbootTools"))
+                        else Desktop.getDesktop().browse(URI("https://github.com/op07n/XiaomiADBFastbootTools"))
+                    }
+                    github.font = Font(15.0)
+                    vb.children.addAll(discord, twitter, github)
+                    dialogPane.content = vb
+                    isResizable = false
+                    showAndWait()
+                }
             }
-            discord.font = Font(15.0)
-            val twitter = Hyperlink("Szaki on Twitter")
-            twitter.onAction = EventHandler {
-                if (XiaomiADBFastbootTools.linux)
-                    Runtime.getRuntime().exec(arrayOf("xdg-open", "https://twitter.com/Szaki_EU"))
-                else Desktop.getDesktop().browse(URI("https://twitter.com/Szaki_EU"))
-            }
-            twitter.font = Font(15.0)
-            val github = Hyperlink("Repository on GitHub")
-            github.onAction = EventHandler {
-                if (XiaomiADBFastbootTools.linux)
-                    Runtime.getRuntime().exec(arrayOf("xdg-open", "https://github.com/op07n/XiaomiADBFastbootTools"))
-                else Desktop.getDesktop().browse(URI("https://github.com/op07n/XiaomiADBFastbootTools"))
-            }
-            github.font = Font(15.0)
-            vb.children.addAll(discord, twitter, github)
-            dialogPane.content = vb
-            isResizable = false
-            showAndWait()
         }
     }
 }

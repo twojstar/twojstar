@@ -41,10 +41,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      - run: ./gradlew jar
+      - run: ./gradlew platformJars
 
       - uses: actions/upload-artifact@v7
         with:
           name: XiaomiADBFastbootTools
-          path: xiaomi-adb-tools/build/libs/XiaomiADBFastbootTools.jar
+          path: xiaomi-adb-tools/build/libs/XiaomiADBFastbootTools-*.jar
           if-no-files-found: error

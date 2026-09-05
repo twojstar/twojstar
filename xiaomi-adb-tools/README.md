@@ -4,7 +4,7 @@ A JavaFX desktop front-end for `adb` and `fastboot`, aimed at Xiaomi devices: un
 disable system apps, browse device storage, override DPI and resolution, read device
 properties, flash partitions and reboot into any mode.
 
-![](screenshot.png)
+![Xiaomi ADB/Fastboot Tools main window](screenshot.png)
 
 ## Provenance
 
@@ -33,11 +33,11 @@ does the app download `platform-tools` into its own data directory.
 Requires a JDK 21 or newer. `gradlew` is a wrapper, so no separate Gradle install:
 
 ```
-./gradlew jar
+./gradlew platformJars
 ```
 
-The result is a self-contained `build/libs/XiaomiADBFastbootTools.jar` bundling JavaFX for
-Windows, Linux and macOS on both x64 and aarch64. Run it with `java -jar`.
+The build creates separate self-contained JARs for `windows-x64`, `linux-x64`,
+`linux-arm64`, `macos-x64`, and `macos-arm64`. Pick the JAR matching the host and run it with `java -jar`.
 
 **Warning: use the program at your own risk.**
 
@@ -80,7 +80,7 @@ Any current build works: Temurin, Oracle JDK or the `openjdk-21-jre` package of 
 
 **The app on Windows doesn't detect my device even though it's connected and USB debugging is enabled. What could be the issue?**
 
-Windows most likely doesn't recognise your device in ADB mode. Install the universal ADB drivers from [here](http://dl.adbdriver.com/upload/adbdriver.zip), reboot your PC and try again.
+Windows most likely doesn't recognise your device in ADB mode. Install a trusted ADB driver package from the device vendor or [Universal ADB Drivers](https://adb.clockworkmod.com/), verify its publisher or digital signature, reboot your PC and try again.
 
 **Do I need an unlocked bootloader or root access to use the app?**
 

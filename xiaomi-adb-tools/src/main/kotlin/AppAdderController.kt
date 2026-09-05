@@ -39,12 +39,13 @@ class AppAdderController : Initializable {
                 headerText = "Uninstalling apps which aren't listed by default may brick your device."
                 showAndWait()
             }
-            GlobalScope.launch {
-                AppManager.apply {
-                    customApps.writeText(appTextArea.text.trim())
-                    readPotentialApps()
-                    createTables()
-                }
+        }
+        val contents = appTextArea.text.trim()
+        GlobalScope.launch {
+            AppManager.apply {
+                customApps.writeText(contents)
+                readPotentialApps()
+                createTables()
             }
         }
         ((event.source as Node).scene.window as Stage).close()

@@ -54,9 +54,9 @@ class FileExplorer(val statusTextField: TextField, val statusProgressBar: Progre
         } else path += "$where/"
     }
 
-    suspend fun getFiles(): ObservableList<AndroidFile> = withContext(Dispatchers.IO) {
+    suspend fun getFiles(requestPath: String = path): ObservableList<AndroidFile> = withContext(Dispatchers.IO) {
         FXCollections.observableArrayList<AndroidFile>().also { list ->
-            val files = Command.exec(mutableListOf("adb", "shell", "ls", "-l", path))
+            val files = Command.exec(mutableListOf("adb", "shell", "ls", "-l", requestPath))
             files.trim().lines().forEach {
                 if ("ls:" !in it && ':' in it)
                     makeFile(it)?.let { file -> list.add(file) }
@@ -73,8 +73,9 @@ class FileExplorer(val statusTextField: TextField, val statusProgressBar: Progre
                 while (scanner.hasNextLine()) {
                     val output = scanner.nextLine()
                     withContext(Dispatchers.Main) {
-                        if ('%' in output) {
-                            statusProgressBar.progress = output.substringBefore('%').trim('[', ' ').toInt() / 100.0
+                        val progress = Regex("""^\s*\[\s*(\d{1,3})%]""").find(output)
+                        if (progress != null) {
+                            statusProgressBar.progress = progress.groupValues[1].toInt() / 100.0
                             statusTextField.text = output
                         } else if ((command[1] == "shell" && command[2] in output) || "adb" in output) {
                             statusTextField.text = "ERROR: ${output.substringAfterLast(':').trim()}"
