@@ -7,7 +7,6 @@
   function createBenchI18n(options) {
     const {
       baseLanguage,
-      storageKey,
       pairs,
       patterns = {},
       mountSelector = "header",
@@ -21,10 +20,8 @@
       maps.pl.set(en, pl); maps.pl.set(pl, pl);
     }
 
-    const stored = (() => { try { return localStorage.getItem(storageKey); } catch { return null; } })();
-    let language = languages.includes(stored)
-      ? stored
-      : (navigator.languages?.length ? navigator.languages : [navigator.language]).some((item) => /^pl(?:-|$)/i.test(item || "")) ? "pl" : "en";
+    let language = (navigator.languages?.length ? navigator.languages : [navigator.language])
+      .some((item) => /^pl(?:-|$)/i.test(item || "")) ? "pl" : "en";
     let applying = false;
     let switcher = null;
 
@@ -107,7 +104,6 @@
     const setLanguage = (next) => {
       if (!languages.includes(next)) return;
       language = next;
-      try { localStorage.setItem(storageKey, language); } catch { globalThis.__benchI18nStorageUnavailable = true; }
       apply(document.body);
       window.dispatchEvent(new CustomEvent("bench:languagechange", { detail: { language } }));
     };
