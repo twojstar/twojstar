@@ -85,9 +85,9 @@ suspend fun confirm(msg: String = ""): Boolean = withContext(Dispatchers.Main) {
 
 fun getLink(version: String, codename: String): String? {
     fun getLocation(codename: String, ending: String, region: String): String? {
-        (URI("http://update.miui.com/updates/v1/fullromdownload.php?d=$codename$ending&b=F&r=$region&n=").toURL().openConnection() as HttpURLConnection).apply {
+        (URI("https://update.miui.com/updates/v1/fullromdownload.php?d=$codename$ending&b=F&r=$region&n=").toURL().openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
-            setRequestProperty("Referer", "http://en.miui.com/a-234.html")
+            setRequestProperty("Referer", "https://en.miui.com/a-234.html")
             instanceFollowRedirects = false
             try {
                 connect()
@@ -95,7 +95,14 @@ fun getLink(version: String, codename: String): String? {
             } catch (e: IOException) {
                 return null
             }
-            return getHeaderField("Location")
+            val location = getHeaderField("Location") ?: return null
+            return runCatching {
+                val redirect = URI(location)
+                location.takeIf {
+                    redirect.scheme.equals("https", ignoreCase = true) &&
+                        (redirect.host == "miui.com" || redirect.host?.endsWith(".miui.com") == true)
+                }
+            }.getOrNull()
         }
     }
     when (version) {
