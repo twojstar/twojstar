@@ -75,24 +75,31 @@ public static class WidgetCardRenderer
 
     private static JsonObject EmptyState(int feedErrorCount, int visibleFeedCount, WidgetSize size)
     {
+        var isLoading = visibleFeedCount < 0;
         var noFeeds = visibleFeedCount == 0;
         var allFeedsRetrying = visibleFeedCount > 0 && feedErrorCount >= visibleFeedCount;
-        var title = noFeeds
-            ? "Your Feedboard is empty"
-            : allFeedsRetrying
-                ? "Feeds are taking a break"
-                : "No headlines right now";
-        var detail = noFeeds
+        var title = isLoading
+            ? "Loading headlines"
+            : noFeeds
+                ? "Your Feedboard is empty"
+                : allFeedsRetrying
+                    ? "Feeds are taking a break"
+                    : "No headlines right now";
+        var detail = isLoading
             ? size == WidgetSize.Small
-                ? "Add a feed in Feedboard."
-                : "Add or import a feed in the Feedboard app to start seeing headlines here."
-            : allFeedsRetrying
+                ? "Fetching your feeds…"
+                : "Fetching your feeds in the background."
+            : noFeeds
                 ? size == WidgetSize.Small
-                    ? "We'll retry automatically."
-                    : "Cached headlines aren't available yet. Feedboard will retry automatically."
-                : size == WidgetSize.Small
-                    ? "Check back after the next refresh."
-                    : "Your feeds are configured and healthy. Check back after the next refresh.";
+                    ? "Add a feed in Feedboard."
+                    : "Add or import a feed in the Feedboard app to start seeing headlines here."
+                : allFeedsRetrying
+                    ? size == WidgetSize.Small
+                        ? "We'll retry automatically."
+                        : "Cached headlines aren't available yet. Feedboard will retry automatically."
+                    : size == WidgetSize.Small
+                        ? "Check back after the next refresh."
+                        : "Your feeds are configured and healthy. Check back after the next refresh.";
 
         return new JsonObject
         {
@@ -103,7 +110,7 @@ public static class WidgetCardRenderer
                 new JsonObject
                 {
                     ["type"] = "TextBlock",
-                    ["text"] = allFeedsRetrying ? "⚠" : "◌",
+                    ["text"] = isLoading ? "↻" : allFeedsRetrying ? "⚠" : "◌",
                     ["size"] = "Large",
                     ["horizontalAlignment"] = "Center",
                     ["spacing"] = "Small"

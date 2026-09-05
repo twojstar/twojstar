@@ -17,13 +17,14 @@ public sealed class FeedWidget : IDisposable
     private readonly AppSettingsStore _settingsStore = new();
     private readonly FeedClient _client = new();
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
+    private readonly CancellationTokenSource _disposeCts = new();
     private readonly object _lifecycleGate = new();
     private readonly object _stateGate = new();
 
     private IReadOnlyList<FeedArticle> _articles = Array.Empty<FeedArticle>();
     private IReadOnlyList<FeedSource> _customizationSources = Array.Empty<FeedSource>();
     private IReadOnlyList<string> _feedErrorLabels = Array.Empty<string>();
-    private int _visibleFeedCount;
+    private int _visibleFeedCount = -1;
     private WidgetState _state;
     private WidgetSize _size;
     private Timer? _timer;
@@ -41,6 +42,7 @@ public sealed class FeedWidget : IDisposable
 
     public void Activate()
     {
+        PushCurrentCard();
         lock (_lifecycleGate)
         {
             if (_disposed) return;
@@ -67,15 +69,25 @@ public sealed class FeedWidget : IDisposable
     {
         if (_disposed) return;
 
-        var entered = waitForTurn
-            ? await WaitForRefreshTurnAsync(cancellationToken)
-            : await _refreshGate.WaitAsync(0, cancellationToken);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
+        var refreshToken = linkedCts.Token;
+        bool entered;
+        try
+        {
+            entered = waitForTurn
+                ? await WaitForRefreshTurnAsync(refreshToken)
+                : await _refreshGate.WaitAsync(0, refreshToken);
+        }
+        catch (OperationCanceledException) when (refreshToken.IsCancellationRequested)
+        {
+            return;
+        }
         if (!entered) return;
 
         try
         {
-            await UpdateRefreshIntervalAsync(cancellationToken);
-            var sources = await _store.LoadAsync(cancellationToken);
+            await UpdateRefreshIntervalAsync(refreshToken);
+            var sources = await _store.LoadAsync(refreshToken);
             MigrateLegacyFeedSelection();
             IReadOnlyList<string>? selectedFeedIds;
             lock (_stateGate)
@@ -89,7 +101,7 @@ public sealed class FeedWidget : IDisposable
             }
 
             var visibleFeedCount = sources.Count(source => source.Enabled);
-            var articles = await _client.LoadAsync(sources, cancellationToken);
+            var articles = await _client.LoadAsync(sources, refreshToken);
             var errors = _client.GetErrorStatuses(sources)
                 .Select(status => status.FeedUrl)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -112,7 +124,7 @@ public sealed class FeedWidget : IDisposable
 
             PushCurrentCard();
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (refreshToken.IsCancellationRequested)
         {
         }
         catch (Exception ex)
@@ -175,7 +187,7 @@ public sealed class FeedWidget : IDisposable
 
         if (!customizing && args.Verb == "refresh")
         {
-            RefreshAsync(waitForTurn: true, CancellationToken.None).GetAwaiter().GetResult();
+            _ = RefreshAsync(waitForTurn: true, CancellationToken.None);
             return;
         }
 
@@ -184,7 +196,7 @@ public sealed class FeedWidget : IDisposable
             if (args.Verb == "customize:done")
             {
                 lock (_stateGate) { _isCustomizing = false; }
-                RefreshAsync(waitForTurn: true, CancellationToken.None).GetAwaiter().GetResult();
+                _ = RefreshAsync(waitForTurn: true, CancellationToken.None);
                 return;
             }
             if (args.Verb == "customize:all")
@@ -290,19 +302,12 @@ public sealed class FeedWidget : IDisposable
         {
             if (_disposed) return;
             _disposed = true;
+            _disposeCts.Cancel();
             timer = _timer;
             _timer = null;
         }
 
-        if (timer is not null)
-        {
-            using var drained = new ManualResetEvent(false);
-            if (timer.Dispose(drained)) drained.WaitOne();
-        }
-
-        _refreshGate.Wait();
-        _refreshGate.Release();
-        _refreshGate.Dispose();
+        timer?.Dispose();
     }
 
     private void MarkArticleReadLocked(string articleId)
