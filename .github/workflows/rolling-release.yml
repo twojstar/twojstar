@@ -52,9 +52,13 @@ jobs:
           }
 
           artifact_available() {
-            local run_id="$1" artifact="$2"
-            gh api "repos/$GH_REPO/actions/runs/$run_id/artifacts?per_page=100" \
-              --jq '.artifacts[] | select(.expired == false) | .name' | grep -Fxq "$artifact"
+            local run_id="$1" artifact="$2" names
+            if ! names="$(gh api "repos/$GH_REPO/actions/runs/$run_id/artifacts?per_page=100" \
+              --jq '.artifacts[] | select(.expired == false) | .name')"; then
+              echo "Artifact lookup failed for run $run_id." >&2
+              return 2
+            fi
+            grep -Fxq "$artifact" <<< "$names"
           }
 
           current_run() {
@@ -143,7 +147,13 @@ jobs:
               echo "$product is already at run $published_run (latest successful: $run_id)."
               return
             fi
-            if ! artifact_available "$run_id" "$artifact"; then
+            if artifact_available "$run_id" "$artifact"; then
+              :
+            else
+              availability=$?
+              if [ "$availability" -eq 2 ]; then
+                exit 1
+              fi
               if [ "$published_run" -gt 0 ]; then
                 echo "Latest $product artifact from run $run_id is unavailable; preserving published run $published_run."
                 return
