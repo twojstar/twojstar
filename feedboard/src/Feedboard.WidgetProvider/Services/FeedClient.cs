@@ -15,23 +15,26 @@ public sealed partial class FeedClient
 {
     private const int MaxFeedBytes = 2 * 1024 * 1024;
     private const int MaxSiteHtmlBytes = 512 * 1024;
+    private const int MaxFeedConcurrency = 8;
+    private const int MaxCachedArticlesPerFeed = 24;
+    private const int MaxFeedsWithRichIconDiscovery = 32;
     private static readonly TimeSpan BodyTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan SiteIconCacheTtl = TimeSpan.FromHours(24);
     private static readonly HttpClient Http = CreateHttpClient();
     private static readonly ConcurrentDictionary<string, FeedCacheEntry> FeedCache = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> FeedRefreshLocks = new(StringComparer.Ordinal);
     private static readonly ConcurrentDictionary<string, SiteIconCacheEntry> SiteIconCache = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<IReadOnlyList<FeedArticle>> LoadAsync(IEnumerable<FeedSource> sources, CancellationToken cancellationToken = default)
     {
         var enabled = sources.Where(x => x.Enabled).ToList();
-        using var gate = new SemaphoreSlim(8, 8);
-        var tasks = enabled.Select(async source =>
-        {
-            await gate.WaitAsync(cancellationToken);
-            try { return await LoadSingleSafeAsync(source, cancellationToken); }
-            finally { gate.Release(); }
-        });
-        var results = await Task.WhenAll(tasks);
+        var discoverRichIcons = enabled.Count <= MaxFeedsWithRichIconDiscovery;
+        var results = new ConcurrentBag<IReadOnlyList<FeedArticle>>();
+        await Parallel.ForEachAsync(
+            enabled,
+            new ParallelOptions { MaxDegreeOfParallelism = MaxFeedConcurrency, CancellationToken = cancellationToken },
+            async (source, token) => results.Add(await LoadSingleSafeAsync(source, discoverRichIcons, token)));
+
         return results.SelectMany(x => x)
             .GroupBy(x => x.Id, StringComparer.Ordinal)
             .Select(group => group.OrderByDescending(x => x.Published ?? DateTimeOffset.MinValue).First())
@@ -41,97 +44,139 @@ public sealed partial class FeedClient
             .ToList();
     }
 
-    private static async Task<IReadOnlyList<FeedArticle>> LoadSingleSafeAsync(FeedSource source, CancellationToken cancellationToken)
+    public void PruneCache(IEnumerable<FeedSource> sources)
     {
-        var requestStartedAt = DateTimeOffset.UtcNow;
-        FeedCache.TryGetValue(source.Url, out var cached);
-        if (cached?.RetryAfter is { } retryAfter && retryAfter > DateTimeOffset.UtcNow)
+        var activeUrls = sources.Where(source => source.Enabled).Select(source => source.Url).ToHashSet(StringComparer.Ordinal);
+        foreach (var url in FeedCache.Keys)
         {
-            return ApplyCustomTitle(source, cached.Articles);
+            if (!activeUrls.Contains(url)) FeedCache.TryRemove(url, out _);
         }
 
+        var activeOrigins = activeUrls.Select(TryGetOrigin).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var origin in SiteIconCache.Keys)
+        {
+            if (!activeOrigins.Contains(origin)) SiteIconCache.TryRemove(origin, out _);
+        }
+    }
+
+    private static async Task<IReadOnlyList<FeedArticle>> LoadSingleSafeAsync(
+        FeedSource source,
+        bool discoverRichIcon,
+        CancellationToken cancellationToken)
+    {
+        var requestStartedAt = DateTimeOffset.UtcNow;
+        var refreshLock = FeedRefreshLocks.GetOrAdd(source.Url, _ => new SemaphoreSlim(1, 1));
+        await refreshLock.WaitAsync(cancellationToken);
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, source.Url);
-            if (!string.IsNullOrWhiteSpace(cached?.ETag)) request.Headers.IfNoneMatch.ParseAdd(cached.ETag);
-            if (cached?.LastModified is { } lastModified) request.Headers.IfModifiedSince = lastModified;
-
-            using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            if (response.StatusCode == HttpStatusCode.NotModified && cached is not null)
+            FeedCache.TryGetValue(source.Url, out var cached);
+            if (cached?.LastSuccessAt is { } lastSuccess && lastSuccess > requestStartedAt)
             {
-                var updated = FeedCache.AddOrUpdate(
-                    source.Url,
-                    cached with { FailureCount = 0, RetryAfter = null, LastSuccessAt = DateTimeOffset.UtcNow },
-                    (_, current) => current with { FailureCount = 0, RetryAfter = null, LastSuccessAt = DateTimeOffset.UtcNow });
-                return ApplyCustomTitle(source, updated.Articles);
+                return ApplyCustomTitle(source, cached.Articles);
+            }
+            if (cached?.RetryAfter is { } retryAfter && retryAfter > DateTimeOffset.UtcNow)
+            {
+                return ApplyCustomTitle(source, cached.Articles);
             }
 
-            response.EnsureSuccessStatusCode();
-            if (response.Content.Headers.ContentLength is > MaxFeedBytes) return ApplyCustomTitle(source, RegisterFeedFailure(source.Url, requestStartedAt));
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, source.Url);
+                if (!string.IsNullOrWhiteSpace(cached?.ETag)) request.Headers.IfNoneMatch.ParseAdd(cached.ETag);
+                if (cached?.LastModified is { } lastModified) request.Headers.IfModifiedSince = lastModified;
 
-            using var bodyCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            bodyCts.CancelAfter(BodyTimeout);
-            await using var stream = await response.Content.ReadAsStreamAsync(bodyCts.Token);
-            using var buffer = new MemoryStream();
-            var chunk = new byte[16 * 1024];
-            while (true)
-            {
-                var read = await stream.ReadAsync(chunk.AsMemory(0, chunk.Length), bodyCts.Token);
-                if (read == 0) break;
-                if (buffer.Length + read > MaxFeedBytes) return ApplyCustomTitle(source, RegisterFeedFailure(source.Url, requestStartedAt));
-                await buffer.WriteAsync(chunk.AsMemory(0, read), bodyCts.Token);
-            }
-
-            buffer.Position = 0;
-            var finalUrl = response.RequestMessage?.RequestUri?.ToString() ?? source.Url;
-            var parseSource = source with { Url = finalUrl, Title = null };
-            IReadOnlyList<FeedArticle> articles;
-            var mediaType = response.Content.Headers.ContentType?.MediaType;
-            if (string.Equals(mediaType, "application/feed+json", StringComparison.OrdinalIgnoreCase) || string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase))
-            {
-                using var json = await JsonDocument.ParseAsync(buffer, cancellationToken: bodyCts.Token);
-                articles = ParseJsonDocument(parseSource, json.RootElement);
-            }
-            else
-            {
-                try
+                using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                if (response.StatusCode == HttpStatusCode.NotModified && cached is not null)
                 {
-                    articles = ParseDocument(parseSource, XDocument.Load(buffer, LoadOptions.None));
+                    var updated = FeedCache.AddOrUpdate(
+                        source.Url,
+                        cached with { FailureCount = 0, RetryAfter = null, LastSuccessAt = DateTimeOffset.UtcNow },
+                        (_, current) => current with { FailureCount = 0, RetryAfter = null, LastSuccessAt = DateTimeOffset.UtcNow });
+                    return ApplyCustomTitle(source, updated.Articles);
                 }
-                catch (System.Xml.XmlException)
+
+                response.EnsureSuccessStatusCode();
+                if (response.Content.Headers.ContentLength is > MaxFeedBytes)
+                    return ApplyCustomTitle(source, RegisterFeedFailure(source.Url, requestStartedAt));
+
+                using var bodyCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                bodyCts.CancelAfter(BodyTimeout);
+                await using var stream = await response.Content.ReadAsStreamAsync(bodyCts.Token);
+                using var buffer = new MemoryStream();
+                var chunk = new byte[16 * 1024];
+                while (true)
                 {
-                    buffer.Position = 0;
+                    var read = await stream.ReadAsync(chunk.AsMemory(0, chunk.Length), bodyCts.Token);
+                    if (read == 0) break;
+                    if (buffer.Length + read > MaxFeedBytes)
+                        return ApplyCustomTitle(source, RegisterFeedFailure(source.Url, requestStartedAt));
+                    await buffer.WriteAsync(chunk.AsMemory(0, read), bodyCts.Token);
+                }
+
+                buffer.Position = 0;
+                var finalUrl = response.RequestMessage?.RequestUri?.ToString() ?? source.Url;
+                var parseSource = source with { Url = finalUrl, Title = null };
+                IReadOnlyList<FeedArticle> articles;
+                var mediaType = response.Content.Headers.ContentType?.MediaType;
+                if (string.Equals(mediaType, "application/feed+json", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase))
+                {
                     using var json = await JsonDocument.ParseAsync(buffer, cancellationToken: bodyCts.Token);
                     articles = ParseJsonDocument(parseSource, json.RootElement);
                 }
-            }
-
-            var fallbackIcon = FaviconFrom(parseSource.Url);
-            if (articles.Any(article => string.Equals(article.FaviconUrl, fallbackIcon, StringComparison.OrdinalIgnoreCase)))
-            {
-                var discoveredIcon = await GetSiteIconAsync(parseSource.Url, cancellationToken);
-                if (!string.IsNullOrWhiteSpace(discoveredIcon))
+                else
                 {
-                    articles = articles.Select(article => string.Equals(article.FaviconUrl, fallbackIcon, StringComparison.OrdinalIgnoreCase)
-                        ? article with { FaviconUrl = discoveredIcon }
-                        : article).ToList();
+                    try
+                    {
+                        articles = ParseDocument(parseSource, XDocument.Load(buffer, LoadOptions.None));
+                    }
+                    catch (System.Xml.XmlException)
+                    {
+                        buffer.Position = 0;
+                        using var json = await JsonDocument.ParseAsync(buffer, cancellationToken: bodyCts.Token);
+                        articles = ParseJsonDocument(parseSource, json.RootElement);
+                    }
                 }
-            }
 
-            FeedCache[source.Url] = new FeedCacheEntry(
-                articles,
-                response.Headers.ETag?.ToString(),
-                response.Content.Headers.LastModified,
-                FailureCount: 0,
-                RetryAfter: null,
-                LastSuccessAt: DateTimeOffset.UtcNow);
-            return ApplyCustomTitle(source, articles);
+                articles = articles
+                    .OrderByDescending(article => article.Published ?? DateTimeOffset.MinValue)
+                    .Take(MaxCachedArticlesPerFeed)
+                    .ToList();
+
+                var fallbackIcon = FaviconFrom(parseSource.Url);
+                if (discoverRichIcon && articles.Any(article => string.Equals(article.FaviconUrl, fallbackIcon, StringComparison.OrdinalIgnoreCase)))
+                {
+                    var discoveredIcon = await GetSiteIconAsync(parseSource.Url, cancellationToken);
+                    if (!string.IsNullOrWhiteSpace(discoveredIcon))
+                    {
+                        articles = articles.Select(article => string.Equals(article.FaviconUrl, fallbackIcon, StringComparison.OrdinalIgnoreCase)
+                            ? article with { FaviconUrl = discoveredIcon }
+                            : article).ToList();
+                    }
+                }
+
+                FeedCache[source.Url] = new FeedCacheEntry(
+                    articles,
+                    response.Headers.ETag?.ToString(),
+                    response.Content.Headers.LastModified,
+                    FailureCount: 0,
+                    RetryAfter: null,
+                    LastSuccessAt: DateTimeOffset.UtcNow);
+                return ApplyCustomTitle(source, articles);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException or JsonException or FormatException)
+            {
+                Trace.TraceWarning($"Feedboard feed refresh failed for {source.Url}: {ex.Message}");
+                return ApplyCustomTitle(source, RegisterFeedFailure(source.Url, requestStartedAt));
+            }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException or JsonException or FormatException)
+        finally
         {
-            Trace.TraceWarning($"Feedboard feed refresh failed for {source.Url}: {ex.Message}");
-            return ApplyCustomTitle(source, RegisterFeedFailure(source.Url, requestStartedAt));
+            refreshLock.Release();
         }
     }
 
@@ -151,6 +196,13 @@ public sealed partial class FeedClient
         var delayMinutes = Math.Min(5 * (1 << (failures - 1)), 60);
         return new FeedCacheEntry(articles, current?.ETag, current?.LastModified, failures,
             DateTimeOffset.UtcNow.AddMinutes(delayMinutes), current?.LastSuccessAt);
+    }
+
+    private static string? TryGetOrigin(string feedUrl)
+    {
+        return Uri.TryCreate(feedUrl, UriKind.Absolute, out var uri)
+            ? uri.GetLeftPart(UriPartial.Authority) + "/"
+            : null;
     }
 
     private static async Task<string?> GetSiteIconAsync(string feedUrl, CancellationToken cancellationToken)

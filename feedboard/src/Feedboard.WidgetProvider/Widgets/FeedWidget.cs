@@ -30,6 +30,10 @@ public sealed class FeedWidget : IDisposable
     private Timer? _timer;
     private TimeSpan _refreshInterval = TimeSpan.FromMinutes(AppSettingsStore.DefaultRefreshIntervalMinutes);
     private DateTimeOffset _updatedAt = DateTimeOffset.Now;
+    private DateTimeOffset _lastRefreshCompletedAt = DateTimeOffset.MinValue;
+    private int _customizationPage;
+    private bool _customizationSourcesLoaded;
+    private bool _customizationLoadFailed;
     private bool _isCustomizing;
     private volatile bool _disposed;
 
@@ -46,7 +50,8 @@ public sealed class FeedWidget : IDisposable
         lock (_lifecycleGate)
         {
             if (_disposed) return;
-            _timer ??= new Timer(_ => RefreshTimerCallback(), null, TimeSpan.Zero, _refreshInterval);
+            var dueTime = NextRefreshDelayLocked(DateTimeOffset.UtcNow);
+            _timer ??= new Timer(_ => RefreshTimerCallback(), null, dueTime, _refreshInterval);
         }
     }
 
@@ -87,7 +92,15 @@ public sealed class FeedWidget : IDisposable
         try
         {
             await UpdateRefreshIntervalAsync(refreshToken);
-            var sources = await _store.LoadAsync(refreshToken);
+            var allSources = await _store.LoadAsync(refreshToken);
+            _client.PruneCache(allSources);
+            lock (_stateGate)
+            {
+                _customizationSources = allSources.Where(source => source.Enabled).ToList();
+                _customizationSourcesLoaded = true;
+                _customizationLoadFailed = false;
+            }
+            var sources = allSources;
             MigrateLegacyFeedSelection();
             IReadOnlyList<string>? selectedFeedIds;
             lock (_stateGate)
@@ -145,6 +158,10 @@ public sealed class FeedWidget : IDisposable
         }
         finally
         {
+            lock (_lifecycleGate)
+            {
+                if (!_disposed) _lastRefreshCompletedAt = DateTimeOffset.UtcNow;
+            }
             _refreshGate.Release();
         }
     }
@@ -161,13 +178,39 @@ public sealed class FeedWidget : IDisposable
         return true;
     }
 
-    public void BeginCustomization() => _ = BeginCustomizationSafelyAsync();
+    public void BeginCustomization()
+    {
+        lock (_stateGate)
+        {
+            if (_disposed) return;
+            MigrateLegacyFeedSelectionLocked();
+            _customizationPage = 0;
+            _isCustomizing = true;
+        }
 
-    private async Task BeginCustomizationSafelyAsync()
+        // The host expects the customization template during this callback. Publish
+        // cached content (or a tiny loading card) immediately, then refresh the list.
+        PushCustomizationCard();
+        _ = ReloadCustomizationSourcesSafelyAsync();
+    }
+
+    private async Task ReloadCustomizationSourcesSafelyAsync()
     {
         try
         {
-            await BeginCustomizationAsync(_disposeCts.Token);
+            var sources = (await _store.LoadAsync(_disposeCts.Token))
+                .Where(source => source.Enabled)
+                .ToList();
+            var publish = false;
+            lock (_stateGate)
+            {
+                _customizationSources = sources;
+                _customizationSourcesLoaded = true;
+                _customizationLoadFailed = false;
+                ClampCustomizationPageLocked();
+                publish = _isCustomizing;
+            }
+            if (publish) PushCustomizationCard();
         }
         catch (OperationCanceledException) when (_disposeCts.IsCancellationRequested)
         {
@@ -175,21 +218,15 @@ public sealed class FeedWidget : IDisposable
         catch (Exception ex)
         {
             Trace.TraceError($"Feedboard customization failed: {ex}");
+            var publish = false;
+            lock (_stateGate)
+            {
+                _customizationSourcesLoaded = true;
+                _customizationLoadFailed = _customizationSources.Count == 0;
+                publish = _isCustomizing;
+            }
+            if (publish) PushCustomizationCard();
         }
-    }
-
-    private async Task BeginCustomizationAsync(CancellationToken cancellationToken)
-    {
-        var sources = (await _store.LoadAsync(cancellationToken))
-            .Where(source => source.Enabled)
-            .ToList();
-        lock (_stateGate)
-        {
-            _customizationSources = sources;
-            MigrateLegacyFeedSelectionLocked();
-            _isCustomizing = true;
-        }
-        PushCustomizationCard();
     }
 
     public void UpdateContext(WidgetSize size)
@@ -225,12 +262,23 @@ public sealed class FeedWidget : IDisposable
             if (args.Verb == "customize:done")
             {
                 lock (_stateGate) { _isCustomizing = false; }
+                PushCurrentCard();
                 _ = RefreshAsync(waitForTurn: true, CancellationToken.None);
                 return;
             }
             if (args.Verb == "customize:all")
             {
                 lock (_stateGate) { _state = _state with { SelectedFeedUrls = null, SelectedFeedIds = null }; }
+                PushCustomizationCard();
+                return;
+            }
+            if (args.Verb == "customize:page:prev" || args.Verb == "customize:page:next")
+            {
+                lock (_stateGate)
+                {
+                    _customizationPage += args.Verb.EndsWith("next", StringComparison.Ordinal) ? 1 : -1;
+                    ClampCustomizationPageLocked();
+                }
                 PushCustomizationCard();
                 return;
             }
@@ -389,32 +437,50 @@ public sealed class FeedWidget : IDisposable
     {
         IReadOnlyList<FeedSource> sources;
         WidgetState state;
+        int page;
+        bool isLoading;
+        bool loadFailed;
         lock (_stateGate)
         {
             if (_disposed) return;
             sources = _customizationSources;
             state = _state;
+            page = _customizationPage;
+            isLoading = !_customizationSourcesLoaded;
+            loadFailed = _customizationLoadFailed;
         }
         var options = new WidgetUpdateRequestOptions(_id)
         {
-            Template = WidgetCustomizationRenderer.Render(sources, state),
+            Template = WidgetCustomizationRenderer.Render(sources, state, page, isLoading, loadFailed),
             Data = "{}",
             CustomState = JsonSerializer.Serialize(state)
         };
         WidgetManager.GetDefault().UpdateWidget(options);
     }
 
+    private void ClampCustomizationPageLocked()
+    {
+        var totalPages = Math.Max(1, (_customizationSources.Count + WidgetCustomizationRenderer.PageSize - 1) / WidgetCustomizationRenderer.PageSize);
+        _customizationPage = Math.Clamp(_customizationPage, 0, totalPages - 1);
+    }
+
     private async Task UpdateRefreshIntervalAsync(CancellationToken cancellationToken)
     {
         var settings = await _settingsStore.LoadAsync(cancellationToken);
         var nextInterval = TimeSpan.FromMinutes(settings.RefreshIntervalMinutes);
-        if (nextInterval == _refreshInterval) return;
-
-        _refreshInterval = nextInterval;
         lock (_lifecycleGate)
         {
-            _timer?.Change(_refreshInterval, _refreshInterval);
+            if (nextInterval == _refreshInterval) return;
+            _refreshInterval = nextInterval;
+            _timer?.Change(NextRefreshDelayLocked(DateTimeOffset.UtcNow), _refreshInterval);
         }
+    }
+
+    private TimeSpan NextRefreshDelayLocked(DateTimeOffset now)
+    {
+        if (_lastRefreshCompletedAt == DateTimeOffset.MinValue) return TimeSpan.Zero;
+        var elapsed = now - _lastRefreshCompletedAt;
+        return elapsed >= _refreshInterval ? TimeSpan.Zero : _refreshInterval - elapsed;
     }
 
     private void RefreshTimerCallback()
