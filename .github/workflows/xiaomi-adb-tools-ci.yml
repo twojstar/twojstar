@@ -1,0 +1,50 @@
+name: Xiaomi ADB Tools CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "xiaomi-adb-tools/**"
+      - "!xiaomi-adb-tools/**/*.md"
+      - ".github/workflows/xiaomi-adb-tools-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "xiaomi-adb-tools/**"
+      - "!xiaomi-adb-tools/**/*.md"
+      - ".github/workflows/xiaomi-adb-tools-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: xiaomi-adb-tools-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: xiaomi-adb-tools
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - run: ./gradlew jar
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: XiaomiADBFastbootTools
+          path: xiaomi-adb-tools/build/libs/XiaomiADBFastbootTools.jar
+          if-no-files-found: error
