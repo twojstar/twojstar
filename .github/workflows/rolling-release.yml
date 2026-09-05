@@ -122,7 +122,15 @@ jobs:
             for file in Feedboard.msix Feedboard.cer install-feedboard.ps1 Install-Feedboard.cmd; do
               test -s "work/feedboard/$file"
             done
-            test -d work/feedboard/Dependencies
+            for arch in x86 x64; do
+              dependency_dir="work/feedboard/Dependencies/$arch"
+              test -d "$dependency_dir"
+              if ! find "$dependency_dir" -maxdepth 1 -type f \
+                \( -name '*.appx' -o -name '*.msix' \) -print -quit | grep -q .; then
+                echo "Feedboard artifact is missing $arch dependency packages." >&2
+                exit 1
+              fi
+            done
             (
               cd work/feedboard
               zip -9 -r ../../assets/Feedboard-x64.zip \
