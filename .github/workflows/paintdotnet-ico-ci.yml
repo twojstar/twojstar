@@ -85,6 +85,11 @@ jobs:
           dotnet build .\PaintDotNetIco.csproj -c Release -p:PaintDotNetDir="$env:PDN_51_DIR" --nologo
           dotnet build .\PaintDotNetIco.Modern.csproj -c Release -p:PaintDotNetDir="$env:PDN_52_DIR" --nologo
 
+      - name: Smoke test ICO codec
+        working-directory: ${{ env.PLUGIN_DIR }}
+        shell: pwsh
+        run: dotnet run --project .\tests\CodecSmoke\CodecSmoke.csproj -c Release --nologo
+
       - name: Package release assets
         working-directory: ${{ env.PLUGIN_DIR }}
         shell: pwsh
