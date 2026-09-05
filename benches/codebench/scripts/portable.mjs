@@ -27,7 +27,7 @@ const helperScripts = [
   "scanner-details.js",
 ];
 
-const pageScripts = ["webmcp.js"];
+const pageScripts = ["i18n-runtime.js", "i18n.js", "webmcp.js"];
 
 const vendorScripts = [
   "vendor/qr-code-styling.js",

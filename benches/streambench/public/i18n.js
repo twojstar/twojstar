@@ -1,5 +1,5 @@
+"use strict";
 (() => {
-  "use strict";
   const pairs = [
     ["Streambench: IPTV, radio and M3U playlist tester", "Streambench: tester IPTV, radia i playlist M3U"],
     ["Browser workshop for locally testing IPTV streams, radio, HLS and M3U/M3U8 playlists with EPG, metadata and diagnostics.", "Przeglądarkowy warsztat do lokalnego testowania streamów IPTV, radia, HLS oraz playlist M3U i M3U8 z EPG, metadanymi i diagnostyką."],
@@ -190,7 +190,7 @@
       [/^Source: (.+)$/, "Źródło: $1"]
     ]
   };
-  globalThis.BenchI18n = createBenchI18n({
+  globalThis.BenchI18n = globalThis.createBenchI18n({
     baseLanguage: "pl",
     storageKey: "streambench.language.v1",
     pairs,

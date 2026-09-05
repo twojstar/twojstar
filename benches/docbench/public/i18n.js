@@ -1,5 +1,5 @@
+"use strict";
 (() => {
-  "use strict";
   const pairs = [
   ["Doc Bench — Document & PDF Studio", "Doc Bench — studio dokumentów i PDF"],
   ["Local-first browser studio for editing and previewing TXT, Markdown, JSON, YAML and XML, plus merging, organizing and optimizing PDFs without uploads.", "Lokalne studio przeglądarkowe do edycji i podglądu TXT, Markdown, JSON, YAML i XML oraz łączenia, porządkowania i optymalizacji PDF bez wysyłania plików."],
@@ -128,7 +128,7 @@
     [/^Analiza · (\\d+\\+?)$/, "Inspect · $1"]
   ]
 };
-  globalThis.BenchI18n = createBenchI18n({
+  globalThis.BenchI18n = globalThis.createBenchI18n({
     baseLanguage: "en",
     storageKey: "docbench.language.v1",
     pairs,

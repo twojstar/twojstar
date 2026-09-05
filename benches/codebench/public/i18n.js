@@ -1,5 +1,5 @@
+"use strict";
 (() => {
-  "use strict";
   const pairs = [
   ["Code Bench — QR & Barcode Studio", "Code Bench — studio QR i kodów kreskowych"],
   ["QR · Barcode · Studio", "QR · kody kreskowe · studio"],
@@ -178,7 +178,7 @@
     [/^Nie można tego zakodować: (.+)\. Sprawdź wskazówkę formatu powyżej\.$/, "Can't encode that: $1. Check the format hint above."]
   ]
 };
-  globalThis.BenchI18n = createBenchI18n({
+  globalThis.BenchI18n = globalThis.createBenchI18n({
     baseLanguage: "en",
     storageKey: "codebench.language.v1",
     pairs,

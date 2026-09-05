@@ -1,5 +1,5 @@
+"use strict";
 (() => {
-  "use strict";
 
   const TEXT_NODE = globalThis.Node?.TEXT_NODE ?? 3;
   const ELEMENT_NODE = globalThis.Node?.ELEMENT_NODE ?? 1;
@@ -24,9 +24,9 @@
     const stored = (() => { try { return localStorage.getItem(storageKey); } catch { return null; } })();
     let language = languages.includes(stored)
       ? stored
-      : (navigator.languages || [navigator.language]).some((item) => /^pl(?:-|$)/i.test(item || "")) ? "pl" : "en";
+      : (navigator.languages?.length ? navigator.languages : [navigator.language]).some((item) => /^pl(?:-|$)/i.test(item || "")) ? "pl" : "en";
     let applying = false;
-    let switcher;
+    let switcher = null;
 
     const shouldSkip = (node) => {
       const element = node.nodeType === ELEMENT_NODE ? node : node.parentElement;
@@ -34,6 +34,9 @@
       if (element.closest("script,style,textarea,input,pre,code,[data-i18n-skip]")) return true;
       return Boolean(skipSelector && element.closest(skipSelector));
     };
+
+    const shouldSkipAttributes = (element) =>
+      Boolean(element.closest("script,style,[data-i18n-skip]") || (skipSelector && element.closest(skipSelector)));
 
     const translate = (value, target = language) => {
       if (typeof value !== "string" || !value) return value;
@@ -63,8 +66,13 @@
         const after = translate(before);
         if (after !== before) element.setAttribute(name, after);
       }
+      element.querySelectorAll("*").forEach((child) => {
+        if (!shouldSkipAttributes(child)) for (const name of ["placeholder", "title", "aria-label"]) {
+          if (child.hasAttribute(name)) child.setAttribute(name, translate(child.getAttribute(name)));
+        }
+      });
       const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-      let node;
+      let node = null;
       while ((node = walker.nextNode())) {
         if (shouldSkip(node)) continue;
         const after = translate(node.nodeValue);
@@ -99,7 +107,7 @@
     const setLanguage = (next) => {
       if (!languages.includes(next)) return;
       language = next;
-      try { localStorage.setItem(storageKey, language); } catch {}
+      try { localStorage.setItem(storageKey, language); } catch { globalThis.__benchI18nStorageUnavailable = true; }
       apply(document.body);
       window.dispatchEvent(new CustomEvent("bench:languagechange", { detail: { language } }));
     };
@@ -107,7 +115,7 @@
     if (!document.getElementById("bench-i18n-style")) {
       const style = document.createElement("style");
       style.id = "bench-i18n-style";
-      style.textContent = `.bench-language-switcher{display:inline-flex;gap:2px;margin-inline-start:auto;padding:2px;border:1px solid currentColor;border-radius:999px;opacity:.78}.bench-language-switcher button{border:0;background:transparent;color:inherit;font:inherit;font-size:.72rem;font-weight:700;line-height:1;padding:.38rem .48rem;border-radius:999px;cursor:pointer}.bench-language-switcher button[aria-pressed="true"]{background:currentColor;color:Canvas}`;
+      style.textContent = '.bench-language-switcher{display:inline-flex;gap:2px;margin-inline-start:auto;padding:2px;border:1px solid currentColor;border-radius:999px;opacity:.78}.bench-language-switcher button{border:0;background:transparent;color:inherit;font:inherit;font-size:.72rem;font-weight:700;line-height:1;padding:.38rem .48rem;border-radius:999px;cursor:pointer}.bench-language-switcher button[aria-pressed="true"]{background:currentColor;color:Canvas}';
       document.head.append(style);
     }
 

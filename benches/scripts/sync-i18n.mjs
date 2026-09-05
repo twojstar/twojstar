@@ -16,4 +16,3 @@ const target = join(targetDir, "i18n-runtime.js");
 
 await mkdir(targetDir, { recursive: true });
 await copyFile(source, target);
-console.log(`Synced shared i18n runtime for ${product}`);

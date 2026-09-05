@@ -5,6 +5,8 @@ const [
   fonts,
   css,
   enhancementsCss,
+  i18nRuntime,
+  i18n,
   yaml,
   marked,
   pdfLib,
@@ -36,6 +38,8 @@ const [
   readFile("public/fonts.css", "utf8"),
   readFile("public/styles.css", "utf8"),
   readFile("public/document-enhancements.css", "utf8"),
+  readFile("public/i18n-runtime.js", "utf8"),
+  readFile("public/i18n.js", "utf8"),
   readFile("public/vendor/js-yaml.min.js", "utf8"),
   readFile("public/vendor/marked.umd.js", "utf8"),
   readFile("public/vendor/pdf-lib.min.js", "utf8"),
@@ -158,6 +162,8 @@ const portable = html
     '<link rel="stylesheet" href="/document-enhancements.css">',
     `<style>${enhancementsCss}</style>`,
   )
+  .replace('<script src="/i18n-runtime.js"></script>', `<script>${safeScript(i18nRuntime)}</script>`)
+  .replace('<script src="/i18n.js"></script>', `<script>${safeScript(i18n)}</script>`)
   .replace(
     '<script src="/vendor/js-yaml.min.js"></script>',
     `<script>${safeScript(yaml)}</script>`,
