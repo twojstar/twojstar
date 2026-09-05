@@ -70,31 +70,39 @@ internal static class IcoEncoder
     private static Bitmap Resize(Bitmap source, int size, bool preserveAspectRatio)
     {
         var target = new Bitmap(size, size, PixelFormat.Format32bppArgb);
-        using Graphics graphics = Graphics.FromImage(target);
-        graphics.Clear(Color.Transparent);
-        graphics.CompositingMode = CompositingMode.SourceCopy;
-        graphics.CompositingQuality = CompositingQuality.HighQuality;
-        graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-        graphics.SmoothingMode = SmoothingMode.HighQuality;
-        graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        try
+        {
+            using Graphics graphics = Graphics.FromImage(target);
+            graphics.Clear(Color.Transparent);
+            graphics.CompositingMode = CompositingMode.SourceCopy;
+            graphics.CompositingQuality = CompositingQuality.HighQuality;
+            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            graphics.SmoothingMode = SmoothingMode.HighQuality;
+            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
-        Rectangle destination = preserveAspectRatio
-            ? GetContainedRectangle(source.Width, source.Height, size)
-            : new Rectangle(0, 0, size, size);
+            Rectangle destination = preserveAspectRatio
+                ? GetContainedRectangle(source.Width, source.Height, size)
+                : new Rectangle(0, 0, size, size);
 
-        using var attributes = new ImageAttributes();
-        attributes.SetWrapMode(WrapMode.TileFlipXY);
-        graphics.DrawImage(
-            source,
-            destination,
-            0,
-            0,
-            source.Width,
-            source.Height,
-            GraphicsUnit.Pixel,
-            attributes);
+            using var attributes = new ImageAttributes();
+            attributes.SetWrapMode(WrapMode.TileFlipXY);
+            graphics.DrawImage(
+                source,
+                destination,
+                0,
+                0,
+                source.Width,
+                source.Height,
+                GraphicsUnit.Pixel,
+                attributes);
 
-        return target;
+            return target;
+        }
+        catch
+        {
+            target.Dispose();
+            throw;
+        }
     }
 
     private static Rectangle GetContainedRectangle(int sourceWidth, int sourceHeight, int size)
