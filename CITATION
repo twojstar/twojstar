@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+title: "滚"
+message: kurde
+type: software
+authors:
+  - name: trvny
+  - name: claude
+  - name: chatgpt
+  - name: codex
+  - name: actions-user
+  - name: github-actions[bot]
+  - name: dependabot[bot]
+  - name: chatgpt-codex-connector[bot]
+  - name: gptomek[bot]
+  - name: claudiusz69[bot]
+  - name: devin-ai-integration[bot]
+  - name: stepsecurity-app[bot]
+  - name: deepsource-io[bot]
+  - name: sourcery-ai[bot]
+  - name: coderabbitai[bot
+  - name: kanarek-companion[bot]
+identifiers:
+  - type: url
+    value: 'https://github.com/twojstar'
+repository-code: 'https://github.com/twojstar/twojstar'
+url: 'https://travny.pages.dev/'
+license: ISC
+version: 0.0.0
+date-released: '2026-07-29'
