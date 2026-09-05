@@ -20,6 +20,7 @@ public sealed class FeedWidget : IDisposable
     private readonly CancellationTokenSource _disposeCts = new();
     private readonly object _lifecycleGate = new();
     private readonly object _stateGate = new();
+    private readonly object _publishGate = new();
 
     private IReadOnlyList<FeedArticle> _articles = Array.Empty<FeedArticle>();
     private IReadOnlyList<FeedSource> _customizationSources = Array.Empty<FeedSource>();
@@ -345,36 +346,41 @@ public sealed class FeedWidget : IDisposable
 
     public void PushCurrentCard()
     {
-        IReadOnlyList<FeedArticle> articles;
-        IReadOnlyList<string> errors;
-        int visibleFeedCount;
-        WidgetState state;
-        DateTimeOffset updatedAt;
-        WidgetSize size;
-        bool customizing;
-        lock (_stateGate)
+        lock (_publishGate)
         {
-            if (_disposed) return;
-            customizing = _isCustomizing;
-            articles = _articles;
-            errors = _feedErrorLabels;
-            visibleFeedCount = _visibleFeedCount;
-            state = _state;
-            updatedAt = _updatedAt;
-            size = _size;
+            IReadOnlyList<FeedArticle> articles;
+            IReadOnlyList<string> errors;
+            IReadOnlyList<FeedSource> customizationSources;
+            int visibleFeedCount;
+            int customizationPage;
+            WidgetState state;
+            DateTimeOffset updatedAt;
+            WidgetSize size;
+            bool customizing;
+            bool customizationLoading;
+            bool customizationLoadFailed;
+            lock (_stateGate)
+            {
+                if (_disposed) return;
+                customizing = _isCustomizing;
+                articles = _articles;
+                errors = _feedErrorLabels;
+                customizationSources = _customizationSources;
+                visibleFeedCount = _visibleFeedCount;
+                customizationPage = _customizationPage;
+                state = _state;
+                updatedAt = _updatedAt;
+                size = _size;
+                customizationLoading = !_customizationSourcesLoaded;
+                customizationLoadFailed = _customizationLoadFailed;
+            }
+
+            var template = customizing
+                ? WidgetCustomizationRenderer.Render(
+                    customizationSources, state, customizationPage, customizationLoading, customizationLoadFailed)
+                : WidgetCardRenderer.Render(articles, errors, visibleFeedCount, state, updatedAt, size);
+            UpdateWidget(template, state);
         }
-        if (customizing)
-        {
-            PushCustomizationCard();
-            return;
-        }
-        var options = new WidgetUpdateRequestOptions(_id)
-        {
-            Template = WidgetCardRenderer.Render(articles, errors, visibleFeedCount, state, updatedAt, size),
-            Data = "{}",
-            CustomState = JsonSerializer.Serialize(state)
-        };
-        WidgetManager.GetDefault().UpdateWidget(options);
     }
 
     public void Dispose()
@@ -440,23 +446,33 @@ public sealed class FeedWidget : IDisposable
 
     private void PushCustomizationCard()
     {
-        IReadOnlyList<FeedSource> sources;
-        WidgetState state;
-        int page;
-        bool isLoading;
-        bool loadFailed;
-        lock (_stateGate)
+        lock (_publishGate)
         {
-            if (_disposed) return;
-            sources = _customizationSources;
-            state = _state;
-            page = _customizationPage;
-            isLoading = !_customizationSourcesLoaded;
-            loadFailed = _customizationLoadFailed;
+            IReadOnlyList<FeedSource> sources;
+            WidgetState state;
+            int page;
+            bool isLoading;
+            bool loadFailed;
+            lock (_stateGate)
+            {
+                if (_disposed || !_isCustomizing) return;
+                sources = _customizationSources;
+                state = _state;
+                page = _customizationPage;
+                isLoading = !_customizationSourcesLoaded;
+                loadFailed = _customizationLoadFailed;
+            }
+            UpdateWidget(
+                WidgetCustomizationRenderer.Render(sources, state, page, isLoading, loadFailed),
+                state);
         }
+    }
+
+    private void UpdateWidget(string template, WidgetState state)
+    {
         var options = new WidgetUpdateRequestOptions(_id)
         {
-            Template = WidgetCustomizationRenderer.Render(sources, state, page, isLoading, loadFailed),
+            Template = template,
             Data = "{}",
             CustomState = JsonSerializer.Serialize(state)
         };

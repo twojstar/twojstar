@@ -52,10 +52,10 @@ public sealed partial class FeedClient
             if (!activeUrls.Contains(url)) FeedCache.TryRemove(url, out _);
         }
 
-        var activeOrigins = activeUrls.Select(TryGetOrigin).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var origin in SiteIconCache.Keys)
+        var now = DateTimeOffset.UtcNow;
+        foreach (var entry in SiteIconCache)
         {
-            if (!activeOrigins.Contains(origin)) SiteIconCache.TryRemove(origin, out _);
+            if (entry.Value.ExpiresAt <= now) SiteIconCache.TryRemove(entry.Key, out _);
         }
 
         foreach (var entry in FeedRefreshLocks)
@@ -101,7 +101,7 @@ public sealed partial class FeedClient
 
     private static bool ShouldUseCachedEntry(FeedCacheEntry? cached, DateTimeOffset requestStartedAt) =>
         cached is not null &&
-        ((cached.LastSuccessAt is { } lastSuccess && lastSuccess > requestStartedAt) ||
+        ((cached.LastSuccessAt is { } lastSuccess && lastSuccess >= requestStartedAt) ||
          (cached.RetryAfter is { } retryAfter && retryAfter > DateTimeOffset.UtcNow));
 
     private static async Task<IReadOnlyList<FeedArticle>> UseCachedArticlesAsync(
@@ -151,10 +151,7 @@ public sealed partial class FeedClient
         var finalUrl = response.RequestMessage?.RequestUri?.ToString() ?? source.Url;
         var parseSource = source with { Url = finalUrl, Title = null };
         var articles = await ParseFeedBodyAsync(parseSource, response, buffer, bodyCts.Token);
-        articles = articles
-            .OrderByDescending(article => article.Published ?? DateTimeOffset.MinValue)
-            .Take(MaxCachedArticlesPerFeed)
-            .ToList();
+        articles = TrimCachedArticles(articles);
         if (discoverRichIcon)
             articles = await EnrichFallbackIconsAsync(parseSource.Url, articles, cancellationToken);
 
@@ -232,6 +229,24 @@ public sealed partial class FeedClient
             DateTimeOffset.UtcNow.AddMinutes(delayMinutes), current?.LastSuccessAt);
     }
 
+    private static IReadOnlyList<FeedArticle> TrimCachedArticles(IReadOnlyList<FeedArticle> articles)
+    {
+        if (articles.Count <= MaxCachedArticlesPerFeed) return articles;
+
+        const int undatedReserve = 6;
+        var undated = articles.Where(article => article.Published is null).Take(MaxCachedArticlesPerFeed).ToList();
+        var selectedUndated = undated.Take(undatedReserve).ToList();
+        var dated = articles
+            .Where(article => article.Published is not null)
+            .OrderByDescending(article => article.Published)
+            .Take(MaxCachedArticlesPerFeed - selectedUndated.Count)
+            .ToList();
+
+        var remaining = MaxCachedArticlesPerFeed - dated.Count - selectedUndated.Count;
+        if (remaining > 0) selectedUndated.AddRange(undated.Skip(selectedUndated.Count).Take(remaining));
+        return dated.Concat(selectedUndated).ToList();
+    }
+
     private static async Task<IReadOnlyList<FeedArticle>> EnrichFallbackIconsAsync(
         string feedUrl,
         IReadOnlyList<FeedArticle> articles,
@@ -248,13 +263,6 @@ public sealed partial class FeedClient
         return articles.Select(article => string.Equals(article.FaviconUrl, fallbackIcon, StringComparison.OrdinalIgnoreCase)
             ? article with { FaviconUrl = discoveredIcon }
             : article).ToList();
-    }
-
-    private static string? TryGetOrigin(string feedUrl)
-    {
-        return Uri.TryCreate(feedUrl, UriKind.Absolute, out var uri)
-            ? uri.GetLeftPart(UriPartial.Authority) + "/"
-            : null;
     }
 
     private static async Task<string?> GetSiteIconAsync(string feedUrl, CancellationToken cancellationToken)
