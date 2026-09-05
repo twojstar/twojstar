@@ -29,11 +29,11 @@ public sealed partial class FeedClient
     {
         var enabled = sources.Where(x => x.Enabled).ToList();
         var discoverRichIcons = enabled.Count <= MaxFeedsWithRichIconDiscovery;
-        var results = new ConcurrentBag<IReadOnlyList<FeedArticle>>();
+        var results = new IReadOnlyList<FeedArticle>[enabled.Count];
         await Parallel.ForEachAsync(
-            enabled,
+            Enumerable.Range(0, enabled.Count),
             new ParallelOptions { MaxDegreeOfParallelism = MaxFeedConcurrency, CancellationToken = cancellationToken },
-            async (source, token) => results.Add(await LoadSingleSafeAsync(source, discoverRichIcons, token)));
+            async (index, token) => results[index] = await LoadSingleSafeAsync(enabled[index], discoverRichIcons, token));
 
         return results.SelectMany(x => x)
             .GroupBy(x => x.Id, StringComparer.Ordinal)
@@ -56,6 +56,12 @@ public sealed partial class FeedClient
         foreach (var origin in SiteIconCache.Keys)
         {
             if (!activeOrigins.Contains(origin)) SiteIconCache.TryRemove(origin, out _);
+        }
+
+        foreach (var entry in FeedRefreshLocks)
+        {
+            if (!activeUrls.Contains(entry.Key) && entry.Value.CurrentCount == 1)
+                FeedRefreshLocks.TryRemove(entry.Key, out _);
         }
     }
 
