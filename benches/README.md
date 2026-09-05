@@ -23,3 +23,12 @@ Cloudflare Workers Builds uses `benches` as the root directory and the matching
 A dependency or source change inside one Bench should normally trigger only that
 Worker. Changes to `benches/package.json` and `benches/package-lock.json` are shared policy and should trigger all
 three builds.
+
+## Migration and license
+
+This workspace was extracted from [`trvny/trvny`](https://github.com/trvny/trvny)
+with its filtered `benches/` Git history preserved. Active development now lives
+in [`twojstar/twojstar`](https://github.com/twojstar/twojstar).
+
+The migrated Bench workspace remains licensed under [ISC](LICENSE). The root
+workshop repository may use a different license for other components.

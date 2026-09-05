@@ -24,7 +24,7 @@ On browser hosts that implement WebMCP, Streambench exposes `read_stream_state`,
 - [Full LLM guide](https://streambench.trfny.com/llms-full.txt): complete Streambench documentation in one file.
 - [Health](https://streambench.trfny.com/health): service health JSON.
 - [Provider manifest](https://streambench.trfny.com/api/providers): available public provider definitions.
-- [Source](https://github.com/trvny/trvny/tree/main/benches/streambench): application source.
+- [Source](https://github.com/twojstar/twojstar/tree/main/benches/streambench): application source.
 
 ## Related TRAVNY tools
 

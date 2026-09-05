@@ -24,4 +24,4 @@ On WebMCP-capable browser hosts, Streambench exposes `read_stream_state`, `searc
 - [Full LLM guide](https://streambench.trfny.com/llms-full.txt)
 - [Provider manifest](https://streambench.trfny.com/api/providers)
 - [Health](https://streambench.trfny.com/health)
-- [Source](https://github.com/trvny/trvny/tree/main/benches/streambench)
+- [Source](https://github.com/twojstar/twojstar/tree/main/benches/streambench)

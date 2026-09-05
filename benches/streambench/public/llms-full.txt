@@ -31,5 +31,5 @@ On browser hosts implementing WebMCP, Streambench exposes `read_stream_state`, `
 - [Application](https://streambench.trfny.com/)
 - [Provider manifest](https://streambench.trfny.com/api/providers)
 - [Health](https://streambench.trfny.com/health)
-- [Source](https://github.com/trvny/trvny/tree/main/benches/streambench)
+- [Source](https://github.com/twojstar/twojstar/tree/main/benches/streambench)
 - [TRAVNY hub](https://trfny.com/)

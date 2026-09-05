@@ -1,5 +1,5 @@
 {
-  "name": "trvny-benches",
+  "name": "twojstar-benches",
   "private": true,
   "description": "Shared workspace for Codebench, Docbench and Streambench.",
   "workspaces": [
