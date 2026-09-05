@@ -504,6 +504,7 @@ class MainController : Initializable {
             }
             checkDevice()
         }
+    }
 
     private suspend fun checkCamera2(): Boolean =
         "1" in Command.exec(mutableListOf("adb", "shell", "getprop", "persist.camera.HAL3.enabled"))
