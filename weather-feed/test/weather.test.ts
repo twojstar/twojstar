@@ -152,7 +152,7 @@ test("pushEntries is idempotent and keeps newest entries first", async () => {
 
 test("pending current transaction retries without duplicating entries", async () => {
   const store = new Map<string, string>();
-  let failWarnings = true;
+  let failEntries = true;
   const entry: FeedEntry = {
     id: "pending-current", kind: "current_change", title: "change", summary: "change",
     published: "2026-09-05T10:30:00.000Z",
@@ -165,8 +165,8 @@ test("pending current transaction retries without duplicating entries", async ()
       return type === "json" ? JSON.parse(value) : value;
     },
     async put(key: string, value: string) {
-      if (key === "warnings:active" && failWarnings) {
-        failWarnings = false;
+      if (key === "entries" && failEntries) {
+        failEntries = false;
         throw new Error("simulated KV failure");
       }
       store.set(key, value);
@@ -177,7 +177,8 @@ test("pending current transaction retries without duplicating entries", async ()
 
   await assert.rejects(() => completePendingCurrent(env), /simulated KV failure/);
   assert.ok(store.has("pending:current"));
-  assert.equal((JSON.parse(store.get("entries") ?? "[]") as FeedEntry[]).length, 1);
+  assert.ok(store.has("warnings:active"));
+  assert.equal((JSON.parse(store.get("entries") ?? "[]") as FeedEntry[]).length, 0);
 
   assert.equal(await completePendingCurrent(env), true);
   assert.ok(!store.has("pending:current"));

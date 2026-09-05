@@ -145,11 +145,11 @@ export async function pushEntries(env: Env, fresh: FeedEntry[]): Promise<void> {
 export async function completePendingCurrent(env: Env): Promise<boolean> {
   const pending = await load<PendingCurrent>(env, K.pendingCurrent);
   if (!pending) return false;
-  await pushEntries(env, pending.entries);
   if (pending.baselineCurrent) await env.WEATHER_KV.put(K.baselineCurrent, JSON.stringify(pending.baselineCurrent));
   if (pending.baselineAir) await env.WEATHER_KV.put(K.baselineAir, JSON.stringify(pending.baselineAir));
   if (pending.warnings) await env.WEATHER_KV.put(K.warnings, JSON.stringify(pending.warnings));
   if (pending.currentState) await env.WEATHER_KV.put(K.current, JSON.stringify(pending.currentState));
+  await pushEntries(env, pending.entries);
   await env.WEATHER_KV.delete(K.pendingCurrent);
   return true;
 }
@@ -157,8 +157,8 @@ export async function completePendingCurrent(env: Env): Promise<boolean> {
 async function completePendingForecast(env: Env): Promise<boolean> {
   const pending = await load<PendingForecast>(env, K.pendingForecast);
   if (!pending) return false;
-  await pushEntries(env, pending.entries);
   await env.WEATHER_KV.put(K.baselineForecast, JSON.stringify(pending.baselineForecast));
+  await pushEntries(env, pending.entries);
   await env.WEATHER_KV.delete(K.pendingForecast);
   return true;
 }
