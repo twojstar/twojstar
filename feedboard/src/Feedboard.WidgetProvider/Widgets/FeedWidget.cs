@@ -62,7 +62,10 @@ public sealed class FeedWidget : IDisposable
         timer?.Dispose();
     }
 
-    public async Task RefreshAsync(CancellationToken cancellationToken = default)
+    public Task RefreshAsync(CancellationToken cancellationToken = default) =>
+        RefreshAsync(waitForTurn: false, cancellationToken);
+
+    private async Task RefreshAsync(bool waitForTurn, CancellationToken cancellationToken)
     {
         if (_disposed) return;
 
@@ -71,7 +74,9 @@ public sealed class FeedWidget : IDisposable
         bool entered;
         try
         {
-            entered = await _refreshGate.WaitAsync(0, refreshToken);
+            entered = waitForTurn
+                ? await WaitForRefreshTurnAsync(refreshToken)
+                : await _refreshGate.WaitAsync(0, refreshToken);
         }
         catch (OperationCanceledException) when (refreshToken.IsCancellationRequested)
         {
@@ -144,6 +149,18 @@ public sealed class FeedWidget : IDisposable
         }
     }
 
+    private async Task<bool> WaitForRefreshTurnAsync(CancellationToken cancellationToken)
+    {
+        await _refreshGate.WaitAsync(cancellationToken);
+        if (_disposed)
+        {
+            _refreshGate.Release();
+            return false;
+        }
+
+        return true;
+    }
+
     public void BeginCustomization() => _ = BeginCustomizationSafelyAsync();
 
     private async Task BeginCustomizationSafelyAsync()
@@ -208,7 +225,7 @@ public sealed class FeedWidget : IDisposable
             if (args.Verb == "customize:done")
             {
                 lock (_stateGate) { _isCustomizing = false; }
-                _ = RefreshAsync();
+                _ = RefreshAsync(waitForTurn: true, CancellationToken.None);
                 return;
             }
             if (args.Verb == "customize:all")
