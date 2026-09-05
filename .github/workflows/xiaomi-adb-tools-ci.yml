@@ -48,3 +48,4 @@ jobs:
           name: XiaomiADBFastbootTools
           path: xiaomi-adb-tools/build/libs/XiaomiADBFastbootTools-*.jar
           if-no-files-found: error
+          retention-days: 7
