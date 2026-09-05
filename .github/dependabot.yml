@@ -29,7 +29,6 @@ updates:
       - "/feedboard/src/Feedboard.Core"
       - "/feedboard/src/Feedboard.Settings"
       - "/feedboard/src/Feedboard.WidgetProvider"
-      - "/paintdotnet-ico"
     schedule: { interval: "weekly" }
     groups:
       dotnet: { patterns: ["*"] }
