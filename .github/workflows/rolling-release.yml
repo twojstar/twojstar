@@ -160,16 +160,16 @@ jobs:
               return
             fi
 
-            if [ "$previous_format" = compact-v2 ] && \
-               [ "$published_run" = "$run_id" ] && \
-               [ "$published_attempt" = "$attempt" ] && \
-               [ -s "assets/$package" ]; then
-              copy_previous_source "$product" || {
-                echo "Missing persisted provenance for unchanged $product." >&2
-                exit 1
-              }
-              echo "$product is already at CI run $run_id attempt $attempt."
-              return
+            if [ "$previous_format" = compact-v2 ] && [ -s "assets/$package" ]; then
+              if [ "$published_run" -gt "$run_id" ] || \
+                 { [ "$published_run" -eq "$run_id" ] && [ "$published_attempt" -ge "$attempt" ]; }; then
+                copy_previous_source "$product" || {
+                  echo "Missing persisted provenance for preserved $product." >&2
+                  exit 1
+                }
+                echo "$product keeps published run $published_run attempt $published_attempt; latest successful candidate is $run_id attempt $attempt."
+                return
+              fi
             fi
 
             if artifact_available "$run_id" "$artifact"; then
