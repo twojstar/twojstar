@@ -21,7 +21,11 @@
         <ComboBoxItem Content="60 minutes" Tag="60" />
       </ComboBox>
     </StackPanel>
-    <ListView x:Name="FeedsList" Grid.Row="3" ItemsSource="{x:Bind Feeds}">
+    <ListView x:Name="FeedsList"
+              Grid.Row="3"
+              ItemsSource="{x:Bind Feeds}"
+              SelectionMode="Multiple"
+              SelectionChanged="FeedsList_SelectionChanged">
       <ListView.ItemTemplate>
         <DataTemplate x:DataType="local:FeedRow" xmlns:local="using:Feedboard.Settings">
           <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="12" Padding="4,8">
@@ -47,6 +51,8 @@
       <Button Content="Import OPML" Click="ImportOpml_Click" />
       <Button Content="Export OPML" Click="ExportOpml_Click" />
       <Button Content="Refresh status" Click="RefreshStatus_Click" />
+      <Button Content="Select all" Click="SelectAllFeeds_Click" />
+      <Button x:Name="RemoveSelectedButton" Content="Remove selected" Click="RemoveSelectedFeeds_Click" IsEnabled="False" />
       <TextBlock x:Name="StatusText" VerticalAlignment="Center" Margin="8,0,0,0" />
     </StackPanel>
   </Grid>

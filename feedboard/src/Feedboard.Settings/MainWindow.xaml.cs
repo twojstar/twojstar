@@ -50,6 +50,7 @@ public sealed partial class MainWindow : Window
                 .OfType<ComboBoxItem>()
                 .FirstOrDefault(item => string.Equals(item.Tag?.ToString(), settings.RefreshIntervalMinutes.ToString(), StringComparison.Ordinal));
 
+            UpdateSelectionActions();
             StatusText.Text = $"{Feeds.Count} feed(s)";
         }
         finally
@@ -204,6 +205,7 @@ public sealed partial class MainWindow : Window
             StatusText.Text = $"Feed URL updated to {new Uri(feedUrl).Host}.";
         });
     }
+
     private async Task<ContentDialogResult?> ShowDialogAsync(ContentDialog dialog)
     {
         if (!await _dialogGate.WaitAsync(0))
@@ -275,6 +277,46 @@ public sealed partial class MainWindow : Window
         {
             await _store.RemoveAsync(row.Id);
             await ReloadAsync();
+        });
+    }
+
+    private void FeedsList_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateSelectionActions();
+
+    private void SelectAllFeeds_Click(object sender, RoutedEventArgs e) => FeedsList.SelectAll();
+
+    private void UpdateSelectionActions()
+    {
+        var count = FeedsList.SelectedItems.Count;
+        RemoveSelectedButton.IsEnabled = count > 0;
+        RemoveSelectedButton.Content = count > 0 ? $"Remove selected ({count})" : "Remove selected";
+    }
+
+    private async void RemoveSelectedFeeds_Click(object sender, RoutedEventArgs e)
+    {
+        var selected = FeedsList.SelectedItems.OfType<FeedRow>().ToList();
+        if (selected.Count == 0) return;
+
+        await RunUiOperationAsync(async () =>
+        {
+            var root = (Content as FrameworkElement)?.XamlRoot;
+            if (root is null) throw new InvalidOperationException("Settings window is not ready.");
+
+            var removingAll = selected.Count == Feeds.Count;
+            var dialog = new ContentDialog
+            {
+                Title = removingAll ? "Remove all feeds?" : $"Remove {selected.Count} feeds?",
+                Content = "This removes the selected subscriptions from Feedboard. This cannot be undone.",
+                PrimaryButtonText = "Remove",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = root
+            };
+
+            if (await ShowDialogAsync(dialog) != ContentDialogResult.Primary) return;
+
+            await _store.RemoveManyAsync(selected.Select(row => row.Id));
+            await ReloadAsync();
+            StatusText.Text = selected.Count == 1 ? "Removed 1 feed." : $"Removed {selected.Count} feeds.";
         });
     }
 

@@ -60,6 +60,23 @@ public sealed class FeedStore
             if (source is not null) byUrl.Remove(source.Url);
         }, cancellationToken);
 
+    public Task RemoveManyAsync(IEnumerable<string> ids, CancellationToken cancellationToken = default)
+    {
+        var selectedIds = ids
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.Ordinal);
+        if (selectedIds.Count == 0) return Task.CompletedTask;
+
+        return MutateAsync(byUrl =>
+        {
+            var urls = byUrl.Values
+                .Where(source => selectedIds.Contains(source.StableId))
+                .Select(source => source.Url)
+                .ToList();
+            foreach (var url in urls) byUrl.Remove(url);
+        }, cancellationToken);
+    }
+
     public Task SetEnabledAsync(string id, bool enabled, CancellationToken cancellationToken = default) =>
         MutateAsync(byUrl =>
         {
