@@ -423,80 +423,87 @@ class MainController : Initializable {
 
         GlobalScope.launch(Dispatchers.IO) {
             if (!Command.check()) {
-                withContext(Dispatchers.Main) {
-                    val hb = HBox(15.0)
+                val archive = File(XiaomiADBFastbootTools.dir, "platform-tools.zip")
+                val platformToolsDir = File(XiaomiADBFastbootTools.dir, "platform-tools")
+                val (downloadAlert, downloadLabel) = withContext(Dispatchers.Main) {
                     val label = Label()
                     val indicator = ProgressIndicator()
+                    val hb = HBox(15.0).apply {
+                        alignment = Pos.CENTER
+                        children.addAll(indicator, label)
+                    }
+                    label.font = Font(15.0)
+                    indicator.setPrefSize(35.0, 35.0)
                     Alert(AlertType.WARNING).apply {
                         initStyle(StageStyle.UTILITY)
                         title = "Downloading SDK Platform Tools..."
-                        headerText =
-                            "ERROR: Cannot find ADB/Fastboot!\nDownloading the latest version..."
-                        hb.alignment = Pos.CENTER
-                        label.font = Font(15.0)
-                        indicator.setPrefSize(35.0, 35.0)
-                        hb.children.addAll(indicator, label)
+                        headerText = "ERROR: Cannot find ADB/Fastboot!\nDownloading the latest version..."
                         dialogPane.content = hb
                         isResizable = false
                         show()
-                        withContext(Dispatchers.IO) {
-                            val file = File(XiaomiADBFastbootTools.dir, "platform-tools.zip")
-                            when {
-                                XiaomiADBFastbootTools.win -> Downloader(
-                                    "https://dl.google.com/android/repository/platform-tools-latest-windows.zip",
-                                    file, label
-                                ).start()
-                                XiaomiADBFastbootTools.linux -> Downloader(
-                                    "https://dl.google.com/android/repository/platform-tools-latest-linux.zip",
-                                    file, label
-                                ).start()
-                                else -> Downloader(
-                                    "https://dl.google.com/android/repository/platform-tools-latest-darwin.zip",
-                                    file, label
-                                ).start()
+                    }.let { it to label }
+                }
+                try {
+                    when {
+                        XiaomiADBFastbootTools.win -> Downloader(
+                            "https://dl.google.com/android/repository/platform-tools-latest-windows.zip",
+                            archive, downloadLabel
+                        ).start()
+                        XiaomiADBFastbootTools.linux -> Downloader(
+                            "https://dl.google.com/android/repository/platform-tools-latest-linux.zip",
+                            archive, downloadLabel
+                        ).start()
+                        else -> Downloader(
+                            "https://dl.google.com/android/repository/platform-tools-latest-darwin.zip",
+                            archive, downloadLabel
+                        ).start()
+                    }
+                    withContext(Dispatchers.Main) { downloadLabel.text = "Unzipping..." }
+                    val extractionRoot = XiaomiADBFastbootTools.dir.canonicalFile
+                    platformToolsDir.mkdirs()
+                    ZipFile(archive).use { zip ->
+                        zip.stream().forEach { entry ->
+                            val target = File(extractionRoot, entry.name).canonicalFile
+                            require(target.toPath().startsWith(extractionRoot.toPath())) {
+                                "Unsafe platform-tools archive entry: ${entry.name}"
                             }
-                            withContext(Dispatchers.Main) {
-                                label.text = "Unzipping..."
-                            }
-                            val extractionRoot = XiaomiADBFastbootTools.dir.canonicalFile
-                            File(extractionRoot, "platform-tools").mkdirs()
-                            ZipFile(file).use { zip ->
-                                zip.stream().forEach { entry ->
-                                    val target = File(extractionRoot, entry.name).canonicalFile
-                                    require(target.toPath().startsWith(extractionRoot.toPath())) {
-                                        "Unsafe platform-tools archive entry: ${entry.name}"
-                                    }
-                                    if (entry.isDirectory)
-                                        target.mkdirs()
-                                    else zip.getInputStream(entry).use { input ->
-                                        target.apply {
-                                            parentFile?.mkdirs()
-                                            outputStream().use { output -> input.copyTo(output) }
-                                            setExecutable(true, false)
-                                        }
-                                    }
+                            if (entry.isDirectory) target.mkdirs()
+                            else zip.getInputStream(entry).use { input ->
+                                target.apply {
+                                    parentFile?.mkdirs()
+                                    outputStream().use { output -> input.copyTo(output) }
+                                    setExecutable(true, false)
                                 }
                             }
-                            file.delete()
                         }
-                        hb.children.remove(indicator)
-                        label.text = "Done!"
                     }
+                    archive.delete()
+                    withContext(Dispatchers.Main) {
+                        downloadLabel.text = "Done!"
+                        downloadAlert.close()
+                    }
+                } catch (ex: Exception) {
+                    runCatching { archive.delete() }
+                    runCatching { platformToolsDir.deleteRecursively() }
+                    withContext(Dispatchers.Main) { downloadAlert.close() }
+                    ex.alert()
+                    withContext(Dispatchers.Main) { Platform.exit() }
+                    return@launch
                 }
-                if (!Command.check(true))
+                if (!Command.check(true)) {
                     withContext(Dispatchers.Main) {
                         Alert(AlertType.ERROR).apply {
                             title = "Fatal Error"
-                            headerText =
-                                "ERROR: Couldn't run ADB/Fastboot!"
+                            headerText = "ERROR: Couldn't run ADB/Fastboot!"
                             showAndWait()
                         }
                         Platform.exit()
                     }
+                    return@launch
+                }
             }
             checkDevice()
         }
-    }
 
     private suspend fun checkCamera2(): Boolean =
         "1" in Command.exec(mutableListOf("adb", "shell", "getprop", "persist.camera.HAL3.enabled"))
@@ -743,7 +750,7 @@ class MainController : Initializable {
     private fun antirbButtonPressed(event: ActionEvent) {
         GlobalScope.launch {
             if (Device.checkFastboot()) {
-                File("dummy.img").apply {
+                File(XiaomiADBFastbootTools.dir, "dummy.img").apply {
                     writeBytes(ByteArray(8192))
                     withContext(Dispatchers.Main) {
                         if ("FAILED" in Command.exec(mutableListOf("fastboot", "oem", "ignore", "anti"))) {
