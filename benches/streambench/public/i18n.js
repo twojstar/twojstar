@@ -2,6 +2,7 @@
 (() => {
   const pairs = [
     ["Streambench: IPTV, radio and M3U playlist tester", "Streambench: tester IPTV, radia i playlist M3U"],
+    ["Streambench: IPTV, radio, HLS and M3U playlist tester", "Streambench: tester IPTV, radia, HLS i playlist M3U"],
     ["Browser workshop for locally testing IPTV streams, radio, HLS and M3U/M3U8 playlists with EPG, metadata and diagnostics.", "Przeglądarkowy warsztat do lokalnego testowania streamów IPTV, radia, HLS oraz playlist M3U i M3U8 z EPG, metadanymi i diagnostyką."],
     ["Local workshop for playing, checking and organizing IPTV streams, radio, HLS and M3U/M3U8 playlists.", "Lokalny warsztat do odtwarzania, sprawdzania i porządkowania streamów IPTV, radia, HLS oraz playlist M3U/M3U8."],
     ["Test IPTV streams, radio, HLS and local M3U/M3U8 playlists without uploading them to a server.", "Testuj streamy IPTV, radio, HLS i lokalne playlisty M3U/M3U8 bez wysyłania ich na serwer."],
@@ -13,6 +14,7 @@
     ["Player", "Odtwarzacz"],
     ["Playlist", "Playlista"],
     ["Tools", "Narzędzia"],
+    ["Workspace", "Zaplecze"],
     ["Player and current playlist", "Odtwarzacz i aktualna playlista"],
     ["No stream selected", "Brak wybranego streamu"],
     ["Ready", "Gotowy"],
@@ -193,9 +195,16 @@
   globalThis.BenchI18n = globalThis.createBenchI18n({
     baseLanguage: "pl",
     storageKey: "streambench.language.v1",
+    storage: (() => {
+      try {
+        return globalThis.localStorage;
+      } catch {
+        return null;
+      }
+    })(),
     pairs,
     patterns,
     mountSelector: ".site-header",
-    skipSelector: "#nowPlaying, #playlistEntries, #libraryEntries, #editChannelDialog input",
+    skipSelector: "#nowPlaying, #playlistEntries .channel-name, #playlistEntries .channel-meta, #playlistEntries .channel-badges, #libraryEntries .library-play, #editChannelDialog input",
   });
 })();

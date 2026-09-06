@@ -7,6 +7,8 @@
   function createBenchI18n(options) {
     const {
       baseLanguage,
+      storageKey = "",
+      storage = null,
       pairs,
       patterns = {},
       mountSelector = "header",
@@ -20,8 +22,26 @@
       maps.pl.set(en, pl); maps.pl.set(pl, pl);
     }
 
-    let language = (navigator.languages?.length ? navigator.languages : [navigator.language])
+    const browserLanguage = (navigator.languages?.length ? navigator.languages : [navigator.language])
       .some((item) => /^pl(?:-|$)/i.test(item || "")) ? "pl" : "en";
+    const readStoredLanguage = () => {
+      if (!storageKey) return null;
+      try {
+        const stored = storage?.getItem(storageKey);
+        return languages.includes(stored) ? stored : null;
+      } catch {
+        return null;
+      }
+    };
+    const storeLanguage = (next) => {
+      if (!storageKey) return;
+      try {
+        storage?.setItem(storageKey, next);
+      } catch {
+        return;
+      }
+    };
+    let language = readStoredLanguage() || browserLanguage;
     let applying = false;
     let switcher = null;
 
@@ -65,7 +85,11 @@
       }
       element.querySelectorAll("*").forEach((child) => {
         if (!shouldSkipAttributes(child)) for (const name of ["placeholder", "title", "aria-label"]) {
-          if (child.hasAttribute(name)) child.setAttribute(name, translate(child.getAttribute(name)));
+          if (child.hasAttribute(name)) {
+            const before = child.getAttribute(name);
+            const after = translate(before);
+            if (after !== before) child.setAttribute(name, after);
+          }
         }
       });
       const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
@@ -104,6 +128,7 @@
     const setLanguage = (next) => {
       if (!languages.includes(next)) return;
       language = next;
+      storeLanguage(language);
       apply(document.body);
       window.dispatchEvent(new CustomEvent("bench:languagechange", { detail: { language } }));
     };
@@ -133,13 +158,22 @@
     const observer = new MutationObserver((mutations) => {
       if (applying) return;
       for (const mutation of mutations) {
-        if (mutation.type === "characterData") apply(mutation.target);
-        else mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === ELEMENT_NODE || node.nodeType === TEXT_NODE) apply(node);
-        });
+        if (mutation.type === "characterData" || mutation.type === "attributes") {
+          apply(mutation.target);
+        } else {
+          mutation.addedNodes.forEach((node) => {
+            if (node.nodeType === ELEMENT_NODE || node.nodeType === TEXT_NODE) apply(node);
+          });
+        }
       }
     });
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ["placeholder", "title", "aria-label"],
+    });
     apply(document.body);
 
     return Object.freeze({

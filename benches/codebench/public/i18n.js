@@ -180,7 +180,6 @@
 };
   globalThis.BenchI18n = globalThis.createBenchI18n({
     baseLanguage: "en",
-    storageKey: "codebench.language.v1",
     pairs,
     patterns,
     mountSelector: "header",

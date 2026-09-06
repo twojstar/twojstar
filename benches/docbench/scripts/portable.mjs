@@ -68,7 +68,7 @@ const [
   readFile("public/vendor/qpdf/lib/qpdf.wasm"),
 ]);
 
-const safeScript = (value) => value.replaceAll("</script", "<\\/script");
+const safeScript = (value) => value.replaceAll("$", "$$$$").replaceAll("</script", "<\\/script");
 const dataUrl = (mime, value) => {
   const bytes = Buffer.isBuffer(value) ? value : Buffer.from(value, "utf8");
   return `data:${mime};base64,${bytes.toString("base64")}`;

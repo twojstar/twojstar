@@ -109,28 +109,35 @@
   const patterns = {
   pl: [
     [/^UTF-8 · LF · 1 line$/, "UTF-8 · LF · 1 linia"],
-    [/^(.+) · (\\d+) lines$/, "$1 · $2 linii"],
-    [/^Added (\\d+) attachment(?:s)?\\.$/, "Dodano $1 załącznik(i)."],
-    [/^(\\d+) bookmarks? to deleted pages were pruned\\.$/, "Usunięto $1 zakładek prowadzących do usuniętych stron."],
-    [/^(\\d+) words?$/, "$1 słów"],
-    [/^(\\d+) chars?$/, "$1 znaków"],
-    [/^(\\d+) tokens? · o200k$/, "$1 tokenów · o200k"],
-    [/^Inspect · (\\d+\\+?)$/, "Analiza · $1"]
+    [/^(.+) · (\d+) lines$/, "$1 · $2 linii"],
+    [/^Added (\d+) attachment(?:s)?\.$/, "Dodano $1 załącznik(i)."],
+    [/^(\d+) bookmarks? to deleted pages were pruned\.$/, "Usunięto $1 zakładek prowadzących do usuniętych stron."],
+    [/^(\d+) words?$/, "$1 słów"],
+    [/^(\d+) chars?$/, "$1 znaków"],
+    [/^(\d+) tokens? · o200k$/, "$1 tokenów · o200k"],
+    [/^Inspect · (\d+\+?)$/, "Analiza · $1"]
   ],
   en: [
     [/^UTF-8 · LF · 1 linia$/, "UTF-8 · LF · 1 line"],
-    [/^(.+) · (\\d+) linii$/, "$1 · $2 lines"],
-    [/^Dodano (\\d+) załącznik\\(i\\)\\.$/, "Added $1 attachments."],
-    [/^Usunięto (\\d+) zakładek prowadzących do usuniętych stron\\.$/, "$1 bookmarks to deleted pages were pruned."],
-    [/^(\\d+) słów$/, "$1 words"],
-    [/^(\\d+) znaków$/, "$1 chars"],
-    [/^(\\d+) tokenów · o200k$/, "$1 tokens · o200k"],
-    [/^Analiza · (\\d+\\+?)$/, "Inspect · $1"]
+    [/^(.+) · (\d+) linii$/, "$1 · $2 lines"],
+    [/^Dodano (\d+) załącznik\(i\)\.$/, "Added $1 attachments."],
+    [/^Usunięto (\d+) zakładek prowadzących do usuniętych stron\.$/, "$1 bookmarks to deleted pages were pruned."],
+    [/^(\d+) słów$/, "$1 words"],
+    [/^(\d+) znaków$/, "$1 chars"],
+    [/^(\d+) tokenów · o200k$/, "$1 tokens · o200k"],
+    [/^Analiza · (\d+\+?)$/, "Inspect · $1"]
   ]
 };
   globalThis.BenchI18n = globalThis.createBenchI18n({
     baseLanguage: "en",
     storageKey: "docbench.language.v1",
+    storage: (() => {
+      try {
+        return globalThis.localStorage;
+      } catch {
+        return null;
+      }
+    })(),
     pairs,
     patterns,
     mountSelector: ".hero",
