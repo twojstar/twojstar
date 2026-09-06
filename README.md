@@ -23,7 +23,7 @@
 | 🌦️ **Weather Feed** | [`weather-feed/`](weather-feed/) · [weather.trfny.com](https://weather.trfny.com) | Multi-source weather, air-quality and IMGW alerts for Kościelec/Chrzanów, exposed as web, JSON and Atom. |
 | 📰 **Feedboard** | [`feedboard/`](feedboard/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/feedboard.zip) | Windows 11 feed widget/provider with RSS/Atom/JSON Feed support and a small settings app. |
 | 📱 **Xiaomi ADB Tools** | [`xiaomi-adb-tools/`](xiaomi-adb-tools/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/xiaomi-adb-tools.zip) | Maintained desktop ADB/Fastboot utility with platform-specific JavaFX builds. |
-| 🖼️ **Paint.NET ICO FileType** | [`paintdotnet-ico/`](paintdotnet-ico/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/paintdotnet-ico.zip) | ICO import/export plugin for Paint.NET 5.1 and 5.2+, shipped as verified dual adapters. |
+| 🎨 **Paint.NET plugins** | [`paintdotnet/`](paintdotnet/) · [`ICO`](paintdotnet/ico/) · [`AI Restore`](paintdotnet/ai/) | Shared home for Paint.NET plugins: ICO import/export and local restoration effects. |
 
 ## 📦 One rolling release
 
@@ -33,7 +33,8 @@ GitHub **Latest** is the repository-wide rolling snapshot. Product workflows can
 - [`feedboard.zip`](https://github.com/twojstar/twojstar/releases/latest/download/feedboard.zip) — Feedboard sideload package, certificate, verified installer and dependencies,
 - [`xiaomi-adb-tools.zip`](https://github.com/twojstar/twojstar/releases/latest/download/xiaomi-adb-tools.zip) — all five platform-specific Xiaomi ADB Tools JARs,
 - [`paintdotnet-ico.zip`](https://github.com/twojstar/twojstar/releases/latest/download/paintdotnet-ico.zip) — Paint.NET ICO plugin package,
-- [`SHA256SUMS`](https://github.com/twojstar/twojstar/releases/latest/download/SHA256SUMS) — checksums for the four product bundles.
+- [`paintdotnet-ai.zip`](https://github.com/twojstar/twojstar/releases/latest/download/paintdotnet-ai.zip) — Paint.NET AI Restore plugin package,
+- [`SHA256SUMS`](https://github.com/twojstar/twojstar/releases/latest/download/SHA256SUMS) — checksums for the five product bundles.
 
 The publisher assembles a complete draft first and moves the GitHub `Latest` pointer only after all required bundles are uploaded.
 
@@ -41,7 +42,7 @@ The publisher assembles a complete draft first and moves the GitHub `Latest` poi
 
 ## ⚙️ Maintenance
 
-- **Dependabot** covers GitHub Actions, the Bench npm workspace, the Weather npm project, Xiaomi Gradle and Feedboard NuGet projects.
+- **Dependabot** covers GitHub Actions, the Bench npm workspace, the Weather npm project, Xiaomi Gradle and Feedboard/Paint.NET NuGet projects.
 - **CodeQL** uses GitHub default setup rather than a duplicate advanced workflow.
 - Project-specific CI remains path-filtered so unrelated workshop changes do not rebuild everything.
 - Cloudflare Worker builds for Weather and the three Benches read directly from this repository's `main` branch.
