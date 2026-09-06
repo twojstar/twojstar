@@ -87,12 +87,13 @@ Steinberg::uint32 PLUGIN_API AutoDeclipProcessor::getTailSamples()
 }
 
 template <typename Sample>
-void AutoDeclipProcessor::processBlock(
+bool AutoDeclipProcessor::processBlock(
     Sample** input,
     Sample** output,
     Steinberg::int32 channels,
     Steinberg::int32 samples) noexcept
 {
+    bool allSilent = true;
     const auto channelCount = std::min<Steinberg::int32>(channels, static_cast<Steinberg::int32>(dsp_.size()));
     for (Steinberg::int32 channel = 0; channel < channelCount; ++channel)
     {
@@ -100,9 +101,12 @@ void AutoDeclipProcessor::processBlock(
         auto* out = output[channel];
         for (Steinberg::int32 sample = 0; sample < samples; ++sample)
         {
-            out[sample] = dsp_[static_cast<std::size_t>(channel)].processSample(in[sample]);
+            const auto value = dsp_[static_cast<std::size_t>(channel)].processSample(in[sample]);
+            out[sample] = value;
+            allSilent = allSilent && value == static_cast<Sample>(0);
         }
     }
+    return allSilent;
 }
 
 Steinberg::tresult PLUGIN_API AutoDeclipProcessor::process(Steinberg::Vst::ProcessData& data)
@@ -118,21 +122,24 @@ Steinberg::tresult PLUGIN_API AutoDeclipProcessor::process(Steinberg::Vst::Proce
         return Steinberg::kResultFalse;
     }
 
-    data.outputs[0].silenceFlags = 0;
-
+    bool allSilent = false;
     if (data.symbolicSampleSize == Steinberg::Vst::kSample32)
     {
-        processBlock(data.inputs[0].channelBuffers32, data.outputs[0].channelBuffers32, channels, data.numSamples);
-        return Steinberg::kResultOk;
+        allSilent = processBlock(data.inputs[0].channelBuffers32, data.outputs[0].channelBuffers32, channels, data.numSamples);
     }
-
-    if (data.symbolicSampleSize == Steinberg::Vst::kSample64)
+    else if (data.symbolicSampleSize == Steinberg::Vst::kSample64)
     {
-        processBlock(data.inputs[0].channelBuffers64, data.outputs[0].channelBuffers64, channels, data.numSamples);
-        return Steinberg::kResultOk;
+        allSilent = processBlock(data.inputs[0].channelBuffers64, data.outputs[0].channelBuffers64, channels, data.numSamples);
+    }
+    else
+    {
+        return Steinberg::kResultFalse;
     }
 
-    return Steinberg::kResultFalse;
+    data.outputs[0].silenceFlags = allSilent
+        ? ((Steinberg::uint64{1} << static_cast<Steinberg::uint32>(channels)) - 1)
+        : 0;
+    return Steinberg::kResultOk;
 }
 
 } // namespace Travny::Vst3

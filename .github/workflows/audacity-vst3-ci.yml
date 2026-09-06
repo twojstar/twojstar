@@ -24,7 +24,7 @@ jobs:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Configure DSP tests
         run: cmake -S audacity/vst3 -B audacity/vst3/build -DBUILD_TESTING=ON
       - name: Build DSP tests
@@ -40,10 +40,10 @@ jobs:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check out VST3 SDK 3.8.0
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: steinbergmedia/vst3sdk
           ref: 9fad9770f2ae8542ab1a548a68c1ad1ac690abe0
@@ -53,7 +53,7 @@ jobs:
 
       - name: Configure VST3
         run: cmake -S audacity/vst3 -B audacity/vst3/build-sdk -DVST3_SDK_ROOT="${{ github.workspace }}/vst3sdk" -DBUILD_TESTING=ON -DSMTG_CREATE_PLUGIN_LINK=OFF
-      - name: Build Auto Declip
-        run: cmake --build audacity/vst3/build-sdk --config Release --target TravnyAutoDeclip
+      - name: Build Auto Declip and DSP tests
+        run: cmake --build audacity/vst3/build-sdk --config Release --target TravnyAutoDeclip AutoDeclipDspTests
       - name: Run DSP tests in SDK build
         run: ctest --test-dir audacity/vst3/build-sdk -C Release --output-on-failure

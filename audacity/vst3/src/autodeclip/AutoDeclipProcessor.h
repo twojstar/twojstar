@@ -37,7 +37,7 @@ private:
     void resetDsp() noexcept;
 
     template <typename Sample>
-    void processBlock(Sample** input, Sample** output, Steinberg::int32 channels, Steinberg::int32 samples) noexcept;
+    bool processBlock(Sample** input, Sample** output, Steinberg::int32 channels, Steinberg::int32 samples) noexcept;
 
     std::array<Travny::Audio::AutoDeclipDsp, 2> dsp_{};
 };

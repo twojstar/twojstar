@@ -35,7 +35,7 @@ double AutoDeclipDsp::processSampleImpl(double input) noexcept
     const std::uint64_t index = nextIndex_++;
     sampleAt(index) = input;
 
-    const bool clipped = std::abs(input) >= kClipThreshold;
+    const bool clipped = std::isfinite(input) && std::abs(input) >= kClipThreshold;
     if (clipped)
     {
         if (!inClip_)
@@ -81,10 +81,18 @@ void AutoDeclipDsp::repairPendingRun(std::uint64_t rightContextIndex) noexcept
     const double left = sampleAt(pendingStart_ - 1);
     const double right = sampleAt(pendingEnd_);
     const double rightContext = sampleAt(rightContextIndex);
+    if (!std::isfinite(left) || !std::isfinite(right) || !std::isfinite(rightContext))
+    {
+        return;
+    }
 
     const bool sameSign = (left >= 0.0 && right >= 0.0) || (left <= 0.0 && right <= 0.0);
     const bool nearPeak = std::abs(left) >= 0.5 && std::abs(right) >= 0.5;
     const bool cleanRightContext = std::abs(rightContext) < kClipThreshold;
+    if (!sameSign || !nearPeak || !cleanRightContext)
+    {
+        return;
+    }
 
     const double edgePeak = std::max(std::abs(left), std::abs(right));
     const double headroom = std::clamp(kSafePeak - edgePeak, 0.0, 0.12);
@@ -94,8 +102,7 @@ void AutoDeclipDsp::repairPendingRun(std::uint64_t rightContextIndex) noexcept
     {
         const double t = static_cast<double>(offset + 1) / static_cast<double>(runLength + 1);
         double repaired = left + (right - left) * t;
-
-        if (sameSign && nearPeak && cleanRightContext && headroom > 0.0)
+        if (headroom > 0.0)
         {
             repaired += sign * headroom * std::sin(kPi * t);
         }

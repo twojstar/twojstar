@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -120,6 +121,49 @@ void testLongClipIsUntouched()
     }
 }
 
+void testSignChangingRunIsUntouched()
+{
+    std::vector<double> input(150, 0.0);
+    input[69] = 0.8;
+    input[70] = 1.0;
+    input[71] = 1.0;
+    input[72] = -0.8;
+    input[73] = -0.6;
+
+    const auto output = aligned(render(input), input.size());
+    require(output[70] == 1.0 && output[71] == 1.0,
+            "sign-changing ambiguous transient should remain untouched");
+}
+
+void testLowConfidenceEdgesAreUntouched()
+{
+    std::vector<double> input(150, 0.0);
+    input[69] = 0.3;
+    input[70] = 1.0;
+    input[71] = 1.0;
+    input[72] = 0.3;
+    input[73] = 0.2;
+
+    const auto output = aligned(render(input), input.size());
+    require(output[70] == 1.0 && output[71] == 1.0,
+            "plateau with weak edge evidence should remain untouched");
+}
+
+void testNonFiniteEdgeDoesNotSpread()
+{
+    std::vector<double> input(150, 0.0);
+    input[69] = 0.85;
+    input[70] = 1.0;
+    input[71] = 1.0;
+    input[72] = std::numeric_limits<double>::quiet_NaN();
+    input[73] = 0.7;
+
+    const auto output = aligned(render(input), input.size());
+    require(output[70] == 1.0 && output[71] == 1.0,
+            "non-finite context must not rewrite a finite clipping run");
+    require(std::isnan(output[72]), "the original non-finite sample should not be spread or disguised");
+}
+
 } // namespace
 
 int main()
@@ -131,6 +175,9 @@ int main()
         testShortNegativeClipIsRepaired();
         testSinglePeakIsUntouched();
         testLongClipIsUntouched();
+        testSignChangingRunIsUntouched();
+        testLowConfidenceEdgesAreUntouched();
+        testNonFiniteEdgeDoesNotSpread();
         std::cout << "AutoDeclip DSP tests passed\n";
         return EXIT_SUCCESS;
     }
