@@ -24,20 +24,49 @@ Therefore the first usable stage is **Smart Transition** as an applied VST3 effe
 Version 0.1 is a bounded streaming audio effect, not a timeline editor.
 
 - **Buses:** one input and one output with matching layout; mono and stereo only.
-- **Samples:** VST3 `kSample32` and `kSample64` are both supported and must produce equivalent plans within numeric tolerance.
+- **Samples:** VST3 `kSample32` and `kSample64` are both supported. Analysis and rendering use the same double-precision core after input conversion; cross-format equivalence is defined below.
 - **Context:** at `setupProcessing`, derive a per-side analysis/lookahead window from 100 ms of audio, clamped to `1024..8192` samples. The value is fixed until the host changes processing setup.
-- **Block boundaries:** analysis state lives in fixed-capacity ring buffers and survives arbitrary host block splits. A seam crossing two VST3 process blocks must produce the same result as the same samples delivered in one block.
+- **Block boundaries:** analysis state lives in fixed-capacity ring buffers and survives arbitrary host block splits. Candidate coordinates and state use a monotonically increasing processing-run sample index, never block-local offsets.
 - **Latency:** report exactly the configured lookahead window through `getLatencySamples()`. No hidden additional latency.
 - **Tail:** report `kNoTail` / `0`. VST3 tail describes output generated after input stops and must not include lookahead latency. Smart Transition does not synthesize a reverb/delay-style tail.
 - **End of input:** delayed source samples are a latency-compensation concern, not fake tail. Before release, Audacity must be verified to compensate the reported latency and provide the processing/post-roll behavior needed to return the complete selected region. If it does not, v0.1 must change its buffering/adapter strategy instead of abusing `getTailSamples()`.
 - **Channels:** stereo analysis may use cross-channel correlation, but timing movement is shared by both channels so the effect cannot disturb stereo image by shifting channels independently.
 - **Real-time safety:** no allocation, file I/O, locks on contended global state, network access or model loading on the audio thread. Any optional ML classifier is initialized outside processing and must have a deterministic DSP fallback.
-- **Offline vs preview:** for `EditPlan` v1, identical input samples, settings and plan must produce the same rendered samples in preview and offline processing. A future higher-quality backend requires a schema revision or an explicit backend field before it may change rendering semantics.
+- **Offline vs preview:** for `EditPlan` v1, identical input samples, settings, sample format and plan must produce identical plan fields and rendered samples. Cross-format comparison uses the explicit tolerances below.
 - **Short selections:** when the host provides less than the preferred context, shrink the analysis window symmetrically. If either side lacks enough clean samples to make a confident plan, bypass unchanged.
 - **Processing-run boundary:** the observable reset boundary is a new `setProcessing(true)` run after processing was stopped. Starting a run clears ring buffers, candidate state and the accepted-plan flag. `setProcessing(false)` and deactivation discard any unfinished state.
 - **One seam per run:** v0.1 may accept at most one non-no-op seam in one processing run. This is intentionally scoped to a processing run, not component activation and not an assumed Audacity selection boundary.
 
 The VST3 adapter therefore needs no private Audacity state. It also does **not** attempt a region-wide search, because fixed-latency streaming cannot revise audio that has already left the lookahead buffer. Instead, v0.1 performs bounded local candidate scoring inside the current analysis window. A candidate must be fully observable before its oldest affected sample is emitted. The user should apply Smart Transition to a tight region containing one intended splice; if no candidate clears the confidence threshold, the effect passes the region through unchanged. Future host orchestration may provide an explicit seam hint and project coordinates to the same analysis core.
+
+### Deterministic candidate selection
+
+Candidate selection must depend only on sample coordinates and sample values, never on how the host partitions those samples into `process()` calls.
+
+- The processor maintains a zero-based, monotonically increasing **run sample index**. Every candidate anchor is expressed in that coordinate space.
+- Candidate anchors are enumerated in ascending run-sample order. A candidate is scored only after its complete fixed analysis support is present in the ring buffer.
+- Scoring traverses samples and channels in a fixed order and uses the double-precision core for both VST3 sample formats.
+- Before ranking, the normalized candidate score in `[0,1]` is converted to an integer `score_key = round(score * 1_000_000)`. Non-finite scores invalidate the candidate.
+- Candidates compete only when their maximum possible affected transition intervals overlap. A candidate is not eligible for commitment until the complete analysis support of every possible overlapping competitor is buffered.
+- The winner is selected lexicographically by **higher `score_key`**, then **lower run-sample anchor**. There is no arrival-order or block-order tie-break.
+- Commitment happens exactly when the oldest sample that the winning plan may modify reaches the emission frontier and the complete competitor set is known. If that condition cannot be satisfied within configured lookahead, the candidate is ineligible and those samples pass through unchanged rather than committing early.
+- Once one non-no-op winner is committed in a processing run, later candidates are ignored by v0.1. A new run resets this state.
+
+These rules make the decision frontier a property of the sample stream. Splitting the same input into `64+64+128` samples or one `256`-sample process block must not change the winner.
+
+### Numeric equivalence contract
+
+Tests use one explicit definition instead of mixing “same” and “close enough”:
+
+- Internally, source samples are promoted to `double`; analysis, candidate scoring and render coefficients are evaluated in deterministic sample/channel order in `double`.
+- For the **same VST3 sample format**, identical input bytes and settings must yield exactly identical integer/enum/bool plan fields and bit-identical floating plan fields and output samples across preview/offline processing and arbitrary block partitions.
+- Cross-format tests use a common source first quantized to IEEE-754 `float32`; the identical numeric values are then supplied through `kSample32` and promoted to `kSample64`. This compares processing precision rather than two differently quantized source signals.
+- Across `kSample32` and `kSample64`, integer/enum/bool plan fields, including `seam_anchor_samples`, must match exactly.
+- Floating `EditPlan` fields compare with `abs(a-b) <= 1e-7 + 1e-6 * max(abs(a), abs(b))`.
+- Rendered cross-format samples compare after promotion to `double` with `abs(a-b) <= 2e-6 + 2e-6 * max(abs(a), abs(b))`.
+- NaN and infinity are always failures, never tolerance matches.
+
+If a future SIMD or ML backend cannot meet these contracts, it must define a new tested backend contract instead of silently weakening v1.
 
 ### Audacity host compatibility gate
 
@@ -46,7 +75,7 @@ The first VST3 implementation is not considered release-ready until an Audacity 
 1. every preview pass and final Apply/render starts a fresh processing run, so preview cannot consume the final render's one-seam allowance;
 2. separate applications/selections do not reuse ring or accepted-plan state from a previous run;
 3. reported latency is compensated without truncating the first or last samples of the selected region;
-4. arbitrary VST3 block splits produce the same accepted `EditPlan` and output within numeric tolerance;
+4. arbitrary VST3 block splits satisfy the deterministic candidate-selection and numeric-equivalence contracts above;
 5. cancellation followed by another preview/apply starts from clean state.
 
 If Audacity does not expose preview/apply as distinct processing runs, the adapter must support multiple seam epochs or another host-observable boundary before shipping. The contract does not infer selection boundaries from `setActive()` or component lifetime.
