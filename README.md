@@ -24,7 +24,7 @@
 | 📰 **Feedboard** | [`feedboard/`](feedboard/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/feedboard.zip) | Windows 11 feed widget/provider with RSS/Atom/JSON Feed support and a small settings app. |
 | 📱 **Xiaomi ADB Tools** | [`xiaomi-adb-tools/`](xiaomi-adb-tools/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/xiaomi-adb-tools.zip) | Maintained desktop ADB/Fastboot utility with platform-specific JavaFX builds. |
 | 🎨 **Paint.NET plugins** | [`paintdotnet/`](paintdotnet/) · [`ICO`](paintdotnet/ico/) · [`AI Restore`](paintdotnet/ai/) | Shared home for Paint.NET plugins: ICO import/export and local restoration effects. |
-| 🎚️ **Audacity plugins** | [`audacity/`](audacity/) · [`VST3`](audacity/vst3/) | Local-first audio restoration and workflow effects, with a cross-platform VST3 foundation. |
+| 🎚️ **Audacity plugins** | [`audacity/`](audacity/) · [`VST3`](audacity/vst3/) · [Windows](https://github.com/twojstar/twojstar/releases/latest/download/audacity-auto-declip-windows.zip) · [Linux](https://github.com/twojstar/twojstar/releases/latest/download/audacity-auto-declip-linux.zip) | Local-first audio restoration and workflow effects, starting with Auto Declip. |
 
 ## 📦 One rolling release
 
@@ -35,7 +35,9 @@ GitHub **Latest** is the repository-wide rolling snapshot. Product workflows can
 - [`xiaomi-adb-tools.zip`](https://github.com/twojstar/twojstar/releases/latest/download/xiaomi-adb-tools.zip) — all five platform-specific Xiaomi ADB Tools JARs,
 - [`paintdotnet-ico.zip`](https://github.com/twojstar/twojstar/releases/latest/download/paintdotnet-ico.zip) — Paint.NET ICO plugin package,
 - [`paintdotnet-ai.zip`](https://github.com/twojstar/twojstar/releases/latest/download/paintdotnet-ai.zip) — Paint.NET AI Restore plugin package,
-- [`SHA256SUMS`](https://github.com/twojstar/twojstar/releases/latest/download/SHA256SUMS) — checksums for the five product bundles.
+- [`audacity-auto-declip-windows.zip`](https://github.com/twojstar/twojstar/releases/latest/download/audacity-auto-declip-windows.zip) — Auto Declip VST3 for Windows x64,
+- [`audacity-auto-declip-linux.zip`](https://github.com/twojstar/twojstar/releases/latest/download/audacity-auto-declip-linux.zip) — Auto Declip VST3 for Linux x64,
+- [`SHA256SUMS`](https://github.com/twojstar/twojstar/releases/latest/download/SHA256SUMS) — checksums for the seven product bundles.
 
 The publisher assembles a complete draft first and moves the GitHub `Latest` pointer only after all required bundles are uploaded.
 
