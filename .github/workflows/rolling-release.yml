@@ -290,12 +290,21 @@ jobs:
             cp work/paintdotnet-ai/paintdotnet-ai.zip assets/paintdotnet-ai.zip
           }
 
+          validate_audacity_package() {
+            local archive="$1" entries
+            unzip -tq "$archive" >/dev/null
+            entries="$(unzip -Z1 "$archive")"
+            grep -Eq '(^|/)INSTALL\.txt$' <<< "$entries"
+            grep -Eq '(^|/)TravnyAutoDeclip\.vst3/.+' <<< "$entries"
+          }
+
           bundle_audacity_windows() {
             local run_id="$1"
             rm -rf work/audacity-windows
             mkdir -p work/audacity-windows
             gh run download "$run_id" --repo "$GH_REPO" --name audacity-auto-declip-Windows --dir work/audacity-windows
             test -s work/audacity-windows/audacity-auto-declip-windows.zip
+            validate_audacity_package work/audacity-windows/audacity-auto-declip-windows.zip
             cp work/audacity-windows/audacity-auto-declip-windows.zip assets/audacity-auto-declip-windows.zip
           }
 
@@ -305,6 +314,7 @@ jobs:
             mkdir -p work/audacity-linux
             gh run download "$run_id" --repo "$GH_REPO" --name audacity-auto-declip-Linux --dir work/audacity-linux
             test -s work/audacity-linux/audacity-auto-declip-linux.zip
+            validate_audacity_package work/audacity-linux/audacity-auto-declip-linux.zip
             cp work/audacity-linux/audacity-auto-declip-linux.zip assets/audacity-auto-declip-linux.zip
           }
 
