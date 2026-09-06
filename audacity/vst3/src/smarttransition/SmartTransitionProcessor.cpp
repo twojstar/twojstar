@@ -91,34 +91,6 @@ Steinberg::uint32 PLUGIN_API SmartTransitionProcessor::getTailSamples()
 }
 
 template <typename Sample>
-bool SmartTransitionProcessor::validateBuffers(
-    Sample** input,
-    Sample** output,
-    Steinberg::int32 channels,
-    Steinberg::uint64 inputSilenceFlags) noexcept
-{
-    if (output == nullptr)
-    {
-        return false;
-    }
-
-    for (Steinberg::int32 channel = 0; channel < channels; ++channel)
-    {
-        const auto bit = Steinberg::uint64{1} << static_cast<Steinberg::uint32>(channel);
-        if (output[channel] == nullptr)
-        {
-            return false;
-        }
-        if ((inputSilenceFlags & bit) == 0 && (input == nullptr || input[channel] == nullptr))
-        {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-template <typename Sample>
 bool SmartTransitionProcessor::processBlock(
     Sample** input,
     Sample** output,
@@ -136,10 +108,11 @@ bool SmartTransitionProcessor::processBlock(
         for (Steinberg::int32 channel = 0; channel < channelCount; ++channel)
         {
             const auto bit = Steinberg::uint64{1} << static_cast<Steinberg::uint32>(channel);
-            const auto channelIsSilent = (inputSilenceFlags & bit) != 0;
+            const auto* channelInput = input != nullptr ? input[channel] : nullptr;
+            const auto channelIsSilent = (inputSilenceFlags & bit) != 0 || channelInput == nullptr;
             inputFrame[static_cast<std::size_t>(channel)] = channelIsSilent
                 ? 0.0
-                : static_cast<double>(input[channel][sample]);
+                : static_cast<double>(channelInput[sample]);
         }
 
         // Read the complete input frame before writing output, so aliased in-place buffers are safe.
@@ -147,7 +120,11 @@ bool SmartTransitionProcessor::processBlock(
         for (Steinberg::int32 channel = 0; channel < channelCount; ++channel)
         {
             const auto value = static_cast<Sample>(outputFrame[static_cast<std::size_t>(channel)]);
-            output[channel][sample] = value;
+            auto* channelOutput = output != nullptr ? output[channel] : nullptr;
+            if (channelOutput != nullptr)
+            {
+                channelOutput[sample] = value;
+            }
             allSilent = allSilent && value == static_cast<Sample>(0);
         }
     }
@@ -172,23 +149,21 @@ Steinberg::tresult PLUGIN_API SmartTransitionProcessor::process(Steinberg::Vst::
     bool allSilent = false;
     if (data.symbolicSampleSize == Steinberg::Vst::kSample32)
     {
-        auto** input = data.inputs[0].channelBuffers32;
-        auto** output = data.outputs[0].channelBuffers32;
-        if (!validateBuffers(input, output, channels, inputSilenceFlags))
-        {
-            return Steinberg::kResultFalse;
-        }
-        allSilent = processBlock(input, output, channels, data.numSamples, inputSilenceFlags);
+        allSilent = processBlock(
+            data.inputs[0].channelBuffers32,
+            data.outputs[0].channelBuffers32,
+            channels,
+            data.numSamples,
+            inputSilenceFlags);
     }
     else if (data.symbolicSampleSize == Steinberg::Vst::kSample64)
     {
-        auto** input = data.inputs[0].channelBuffers64;
-        auto** output = data.outputs[0].channelBuffers64;
-        if (!validateBuffers(input, output, channels, inputSilenceFlags))
-        {
-            return Steinberg::kResultFalse;
-        }
-        allSilent = processBlock(input, output, channels, data.numSamples, inputSilenceFlags);
+        allSilent = processBlock(
+            data.inputs[0].channelBuffers64,
+            data.outputs[0].channelBuffers64,
+            channels,
+            data.numSamples,
+            inputSilenceFlags);
     }
     else
     {

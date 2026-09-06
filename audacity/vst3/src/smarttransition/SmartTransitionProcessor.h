@@ -34,13 +34,6 @@ public:
 
 private:
     template <typename Sample>
-    static bool validateBuffers(
-        Sample** input,
-        Sample** output,
-        Steinberg::int32 channels,
-        Steinberg::uint64 inputSilenceFlags) noexcept;
-
-    template <typename Sample>
     bool processBlock(
         Sample** input,
         Sample** output,
