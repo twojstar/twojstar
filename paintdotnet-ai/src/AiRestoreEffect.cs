@@ -4,6 +4,7 @@ using PaintDotNet.Imaging;
 using PaintDotNet.PropertySystem;
 using PaintDotNet.Rendering;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -13,12 +14,18 @@ namespace Travny.PaintDotNet.AI;
 [PluginSupportInfo(typeof(PluginSupportInfo))]
 public sealed class AiRestoreEffect : PropertyBasedBitmapEffect
 {
-    private const int ContextRadius = 16;
+    // realesr-general-x4v3 has 34 stride-1 3x3 convolutions, so an output pixel
+    // has a strict 34-pixel low-resolution receptive-field radius.
+    private const int ContextRadius = 34;
+    private const int CoreTileSize = 128;
+    private const int MaxCachedTiles = 8;
     private const string ModelFileName = "realesr-general-x4v3.onnx";
 
     private static readonly Lazy<RealEsrganSession> SharedSession =
         new(() => new RealEsrganSession(FindModelPath()), LazyThreadSafetyMode.ExecutionAndPublication);
 
+    private readonly ConcurrentDictionary<TileKey, Lazy<RestoredTile>> tileCache = new();
+    private readonly ConcurrentQueue<TileKey> tileOrder = new();
     private IBitmapSource<ColorBgra32>? sourceBitmap;
     private int strength;
 
@@ -47,6 +54,11 @@ public sealed class AiRestoreEffect : PropertyBasedBitmapEffect
     {
         renderInfo.OutputPixelFormat = PixelFormats.Bgra32;
         sourceBitmap = Environment.GetSourceBitmap<ColorBgra32>();
+        tileCache.Clear();
+        while (tileOrder.TryDequeue(out _))
+        {
+        }
+
         base.OnInitializeRenderInfo(renderInfo);
     }
 
@@ -72,7 +84,74 @@ public sealed class AiRestoreEffect : PropertyBasedBitmapEffect
             return;
         }
 
-        RectInt32 sourceRect = RectInt32.Inflate(output.Bounds, ContextRadius, ContextRadius);
+        using IBitmap<ColorBgra32> sourceTile = sourceBitmap!
+            .CreateClipper(output.Bounds, BitmapExtendMode.Clamp)
+            .ToBitmap();
+        using IBitmapLock<ColorBgra32> sourceLock = sourceTile.Lock(BitmapLockOptions.Read);
+        RegionPtr<ColorBgra32> sourceRegion = sourceLock.AsRegionPtr();
+        float amount = strength / 100f;
+
+        try
+        {
+            for (int y = 0; y < outputRegion.Height; y++)
+            {
+                if (IsCancelRequested)
+                {
+                    return;
+                }
+
+                int globalY = output.Bounds.Y + y;
+                for (int x = 0; x < outputRegion.Width; x++)
+                {
+                    int globalX = output.Bounds.X + x;
+                    TileKey key = TileKey.FromPixel(globalX, globalY);
+                    RestoredTile restored = GetRestoredTile(key);
+                    int tileX = globalX - key.X;
+                    int tileY = globalY - key.Y;
+                    ColorBgra32 original = sourceRegion[x, y];
+
+                    outputRegion[x, y] = ColorBgra32.FromBgra(
+                        Blend(original.B, restored.Get(tileX, tileY, 2), amount),
+                        Blend(original.G, restored.Get(tileX, tileY, 1), amount),
+                        Blend(original.R, restored.Get(tileX, tileY, 0), amount),
+                        original.A);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (IsCancelRequested)
+        {
+            return;
+        }
+    }
+
+    private RestoredTile GetRestoredTile(TileKey key)
+    {
+        var candidate = new Lazy<RestoredTile>(
+            () => RestoreTile(key),
+            LazyThreadSafetyMode.ExecutionAndPublication);
+        Lazy<RestoredTile> actual = tileCache.GetOrAdd(key, candidate);
+
+        if (ReferenceEquals(actual, candidate))
+        {
+            tileOrder.Enqueue(key);
+            TrimTileCache();
+        }
+
+        return actual.Value;
+    }
+
+    private void TrimTileCache()
+    {
+        while (tileCache.Count > MaxCachedTiles && tileOrder.TryDequeue(out TileKey oldest))
+        {
+            tileCache.TryRemove(oldest, out _);
+        }
+    }
+
+    private RestoredTile RestoreTile(TileKey key)
+    {
+        RectInt32 coreRect = new(key.X, key.Y, CoreTileSize, CoreTileSize);
+        RectInt32 sourceRect = RectInt32.Inflate(coreRect, ContextRadius, ContextRadius);
         using IBitmap<ColorBgra32> sourceTile = sourceBitmap!
             .CreateClipper(sourceRect, BitmapExtendMode.Clamp)
             .ToBitmap();
@@ -86,16 +165,16 @@ public sealed class AiRestoreEffect : PropertyBasedBitmapEffect
 
         if (IsCancelRequested)
         {
-            return;
+            throw new OperationCanceledException();
         }
 
-        float[] restored = SharedSession.Value.Run(input, inputWidth, inputHeight);
+        float[] modelOutput = SharedSession.Value.Run(input, inputWidth, inputHeight);
         if (IsCancelRequested)
         {
-            return;
+            throw new OperationCanceledException();
         }
 
-        WriteOutput(sourceRegion, outputRegion, restored, inputWidth, inputHeight);
+        return DownsampleCore(modelOutput, inputWidth, inputHeight);
     }
 
     private void FillInput(RegionPtr<ColorBgra32> source, float[] input, int width, int height)
@@ -114,9 +193,6 @@ public sealed class AiRestoreEffect : PropertyBasedBitmapEffect
                 int offset = y * width + x;
                 if (pixel.A == 0)
                 {
-                    input[offset] = 0;
-                    input[planeSize + offset] = 0;
-                    input[(2 * planeSize) + offset] = 0;
                     continue;
                 }
 
@@ -127,43 +203,33 @@ public sealed class AiRestoreEffect : PropertyBasedBitmapEffect
         }
     }
 
-    private void WriteOutput(
-        RegionPtr<ColorBgra32> source,
-        RegionPtr<ColorBgra32> output,
-        float[] restored,
-        int inputWidth,
-        int inputHeight)
+    private static RestoredTile DownsampleCore(float[] restored, int inputWidth, int inputHeight)
     {
         const int scale = RealEsrganSession.Scale;
         int restoredWidth = checked(inputWidth * scale);
         int restoredHeight = checked(inputHeight * scale);
         int planeSize = checked(restoredWidth * restoredHeight);
-        float amount = strength / 100f;
+        float[] core = new float[checked(CoreTileSize * CoreTileSize * 3)];
+        int corePlaneSize = CoreTileSize * CoreTileSize;
 
-        for (int y = 0; y < output.Height; y++)
+        for (int channel = 0; channel < 3; channel++)
         {
-            if (IsCancelRequested)
+            for (int y = 0; y < CoreTileSize; y++)
             {
-                return;
-            }
-
-            for (int x = 0; x < output.Width; x++)
-            {
-                int localX = x + ContextRadius;
-                int localY = y + ContextRadius;
-                ColorBgra32 original = source[localX, localY];
-
-                float restoredR = AverageBlock(restored, localX, localY, 0, restoredWidth, planeSize);
-                float restoredG = AverageBlock(restored, localX, localY, 1, restoredWidth, planeSize);
-                float restoredB = AverageBlock(restored, localX, localY, 2, restoredWidth, planeSize);
-
-                output[x, y] = ColorBgra32.FromBgra(
-                    Blend(original.B, restoredB, amount),
-                    Blend(original.G, restoredG, amount),
-                    Blend(original.R, restoredR, amount),
-                    original.A);
+                for (int x = 0; x < CoreTileSize; x++)
+                {
+                    core[(channel * corePlaneSize) + (y * CoreTileSize) + x] = AverageBlock(
+                        restored,
+                        x + ContextRadius,
+                        y + ContextRadius,
+                        channel,
+                        restoredWidth,
+                        planeSize);
+                }
             }
         }
+
+        return new RestoredTile(core);
     }
 
     private static float AverageBlock(
@@ -215,5 +281,29 @@ public sealed class AiRestoreEffect : PropertyBasedBitmapEffect
         }
 
         return modelPath;
+    }
+
+    private readonly record struct TileKey(int X, int Y)
+    {
+        public static TileKey FromPixel(int x, int y)
+        {
+            return new TileKey((x / CoreTileSize) * CoreTileSize, (y / CoreTileSize) * CoreTileSize);
+        }
+    }
+
+    private sealed class RestoredTile
+    {
+        private readonly float[] values;
+
+        public RestoredTile(float[] values)
+        {
+            this.values = values;
+        }
+
+        public float Get(int x, int y, int channel)
+        {
+            int planeSize = CoreTileSize * CoreTileSize;
+            return values[(channel * planeSize) + (y * CoreTileSize) + x];
+        }
     }
 }
