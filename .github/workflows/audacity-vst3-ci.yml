@@ -78,6 +78,7 @@ jobs:
           name: audacity-auto-declip-Windows
           path: ${{ runner.temp }}/audacity-auto-declip-windows.zip
           if-no-files-found: error
+          retention-days: 7
 
       - name: Package Linux VST3
         if: runner.os == 'Linux'
@@ -104,3 +105,4 @@ jobs:
           name: audacity-auto-declip-Linux
           path: ${{ runner.temp }}/audacity-auto-declip-linux.zip
           if-no-files-found: error
+          retention-days: 7
