@@ -46,13 +46,15 @@ void SmartTransitionDsp::configure(double sampleRate) noexcept
         ++fadeLengthSamples_;
     }
 
-    competitionRadius_ = std::max(analysisRadius_, fadeLengthSamples_ / 2 + 8);
+    // Any candidates whose transition intervals can overlap must compete before a plan commits.
+    competitionRadius_ = std::max(analysisRadius_, fadeLengthSamples_);
     reset();
 }
 
 void SmartTransitionDsp::reset() noexcept
 {
     inputCount_ = 0;
+    drainStarted_ = false;
     clusterBest_ = {};
     clusterLastQualifiedAnchor_ = -1;
     clusterActive_ = false;
@@ -69,6 +71,24 @@ void SmartTransitionDsp::processFrame(const double* input, double* output, std::
 
 void SmartTransitionDsp::drainFrame(double* output, std::size_t channels) noexcept
 {
+    if (!drainStarted_)
+    {
+        drainStarted_ = true;
+
+        // End-of-input is the final deterministic commit boundary for a fully observed cluster.
+        if (!planCommitted_ && clusterActive_ && inputCount_ > 0)
+        {
+            finalizeCluster(inputCount_ - 1);
+        }
+
+        // Very short selections never accumulate the preferred context while streaming. They are
+        // still entirely inside lookahead here, so rescore them once with symmetric reduced context.
+        if (!planCommitted_ && !clusterActive_)
+        {
+            scanShortSelection(channels);
+        }
+    }
+
     const std::array<double, kMaxChannels> silence{};
     processFrameInternal(silence.data(), output, channels, false);
 }
@@ -90,7 +110,7 @@ void SmartTransitionDsp::processFrameInternal(
         if (inputIndex >= rightContext + static_cast<std::int64_t>(analysisRadius_) + 2)
         {
             const auto anchor = inputIndex - rightContext;
-            considerCandidate(scoreCandidate(anchor, channels), inputIndex);
+            considerCandidate(scoreCandidate(anchor, channels, analysisRadius_), inputIndex);
         }
     }
 
@@ -148,13 +168,16 @@ double SmartTransitionDsp::monoAt(std::int64_t index, std::size_t channels) cons
 
 SmartTransitionDsp::Candidate SmartTransitionDsp::scoreCandidate(
     std::int64_t anchor,
-    std::size_t channels) const noexcept
+    std::size_t channels,
+    std::size_t radiusValue) const noexcept
 {
     Candidate candidate{};
     candidate.anchor = anchor;
+    candidate.analysisRadius = radiusValue;
 
-    const auto radius = static_cast<std::int64_t>(analysisRadius_);
-    if (anchor < radius + 2 || anchor + radius >= inputCount_)
+    const auto radius = static_cast<std::int64_t>(radiusValue);
+    if (radius < static_cast<std::int64_t>(kMinAnalysisRadiusSamples) ||
+        anchor < radius + 2 || anchor + radius >= inputCount_)
     {
         return candidate;
     }
@@ -250,6 +273,51 @@ void SmartTransitionDsp::considerCandidate(const Candidate& candidate, std::int6
     }
 }
 
+void SmartTransitionDsp::scanShortSelection(std::size_t channels) noexcept
+{
+    if (planCommitted_ || clusterActive_ || inputCount_ <= 0 ||
+        inputCount_ >= static_cast<std::int64_t>(2 * analysisRadius_ + 4))
+    {
+        return;
+    }
+
+    Candidate best{};
+    const auto minimumRadius = static_cast<std::int64_t>(kMinAnalysisRadiusSamples);
+    for (std::int64_t anchor = minimumRadius + 2;
+         anchor + minimumRadius < inputCount_;
+         ++anchor)
+    {
+        const auto leftAvailable = anchor - 2;
+        const auto rightAvailable = inputCount_ - anchor - 1;
+        const auto radius = static_cast<std::size_t>(std::min<std::int64_t>({
+            static_cast<std::int64_t>(analysisRadius_), leftAvailable, rightAvailable}));
+        if (radius < kMinAnalysisRadiusSamples)
+        {
+            continue;
+        }
+
+        const auto candidate = scoreCandidate(anchor, channels, radius);
+        if (!candidate.valid)
+        {
+            continue;
+        }
+
+        if (!best.valid || candidate.scoreKey > best.scoreKey ||
+            (candidate.scoreKey == best.scoreKey && candidate.anchor < best.anchor))
+        {
+            best = candidate;
+        }
+    }
+
+    if (best.valid)
+    {
+        clusterActive_ = true;
+        clusterBest_ = best;
+        clusterLastQualifiedAnchor_ = best.anchor;
+        finalizeCluster(inputCount_ - 1);
+    }
+}
+
 void SmartTransitionDsp::finalizeCluster(std::int64_t currentInputIndex) noexcept
 {
     if (!clusterActive_ || !clusterBest_.valid || planCommitted_)
@@ -260,15 +328,21 @@ void SmartTransitionDsp::finalizeCluster(std::int64_t currentInputIndex) noexcep
         return;
     }
 
-    const auto halfFade = static_cast<std::int64_t>(fadeLengthSamples_ / 2);
+    const auto leftCapacity = clusterBest_.anchor - 2;
+    const auto rightCapacity = inputCount_ - clusterBest_.anchor - 2;
+    const auto preferredHalfFade = static_cast<std::int64_t>(fadeLengthSamples_ / 2);
+    const auto halfFade = std::min({preferredHalfFade, leftCapacity, rightCapacity});
+    const auto effectiveFadeLength = halfFade > 0 ? static_cast<std::size_t>(halfFade * 2) : 0;
+
     const auto transitionStart = clusterBest_.anchor - halfFade;
-    const auto transitionEnd = transitionStart + static_cast<std::int64_t>(fadeLengthSamples_);
+    const auto transitionEnd = transitionStart + static_cast<std::int64_t>(effectiveFadeLength);
     const auto emissionFrontier = currentInputIndex - static_cast<std::int64_t>(lookaheadSamples_);
 
-    if (transitionStart >= 2 && transitionEnd + 1 < inputCount_ && emissionFrontier <= transitionStart)
+    if (effectiveFadeLength >= kMinFadeLengthSamples &&
+        transitionStart >= 2 && transitionEnd + 1 < inputCount_ && emissionFrontier <= transitionStart)
     {
-        plan_ = makePlan(clusterBest_);
-        planWindowStart_ = clusterBest_.anchor - static_cast<std::int64_t>(analysisRadius_);
+        plan_ = makePlan(clusterBest_, effectiveFadeLength);
+        planWindowStart_ = clusterBest_.anchor - static_cast<std::int64_t>(clusterBest_.analysisRadius);
         plan_.seamAnchorSamples = clusterBest_.anchor - planWindowStart_;
         committedAnchor_ = clusterBest_.anchor;
         planCommitted_ = !plan_.noOp;
@@ -279,10 +353,10 @@ void SmartTransitionDsp::finalizeCluster(std::int64_t currentInputIndex) noexcep
     clusterLastQualifiedAnchor_ = -1;
 }
 
-SmartEditPlan SmartTransitionDsp::makePlan(const Candidate& candidate) const noexcept
+SmartEditPlan SmartTransitionDsp::makePlan(const Candidate& candidate, std::size_t fadeLength) const noexcept
 {
     SmartEditPlan plan{};
-    if (!candidate.valid)
+    if (!candidate.valid || fadeLength < kMinFadeLengthSamples)
     {
         return plan;
     }
@@ -300,7 +374,7 @@ SmartEditPlan SmartTransitionDsp::makePlan(const Candidate& candidate) const noe
     plan.rightGainDb = rightGainDb;
     plan.dcDelta = clampFinite(candidate.rightMean - candidate.leftMean, -0.35, 0.35);
     plan.timingOffsetSamples = 0;
-    plan.fadeLengthSamples = static_cast<std::int32_t>(fadeLengthSamples_);
+    plan.fadeLengthSamples = static_cast<std::int32_t>(fadeLength);
     plan.fadeCurve = SmartFadeCurve::SCurve;
     plan.repairMode = SmartRepairMode::None;
     plan.noOp = false;

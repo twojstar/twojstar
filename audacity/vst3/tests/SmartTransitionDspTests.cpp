@@ -1,5 +1,6 @@
 #include "SmartTransitionDsp.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdlib>
@@ -93,6 +94,11 @@ std::vector<Frame> withHardSeam(std::size_t count, std::size_t seam)
     return input;
 }
 
+std::int64_t globalAnchor(const RenderResult& result)
+{
+    return result.planWindowStart + result.plan.seamAnchorSamples;
+}
+
 void testCleanAudioIsBitTransparent()
 {
     const auto input = cleanSine(1200);
@@ -117,9 +123,7 @@ void testHardSeamIsDetectedAndSmoothed()
     require(!result.plan.noOp, "hard seam produced a no-op plan");
     require(result.plan.fadeLengthSamples > 0, "hard seam has no transition length");
     require(result.plan.confidence >= 0.62, "hard seam confidence below threshold");
-
-    const auto globalAnchor = result.planWindowStart + result.plan.seamAnchorSamples;
-    require(std::llabs(globalAnchor - static_cast<std::int64_t>(seam)) <= 2,
+    require(std::llabs(globalAnchor(result) - static_cast<std::int64_t>(seam)) <= 2,
             "detected seam moved away from the actual splice");
 
     const auto beforeJump = std::abs(input[seam][0] - input[seam - 1][0]);
@@ -146,6 +150,56 @@ void testBlockPartitionIsDeterministic()
     require(a.output == b.output, "rendered samples changed with block partition");
 }
 
+void testOverlappingCandidatesCompeteBeforeCommit()
+{
+    constexpr std::size_t firstSeam = 500;
+    constexpr std::size_t strongerSeam = 650;
+    std::vector<Frame> input(1500);
+    for (std::size_t i = 0; i < input.size(); ++i)
+    {
+        const double value = i < firstSeam ? 0.40 : (i < strongerSeam ? 0.50 : -0.50);
+        input[i] = {value, value * 0.9};
+    }
+
+    const auto result = render(input, 2, {23, 41, 67});
+    require(result.hasPlan, "overlapping-candidate fixture did not produce a plan");
+    require(std::llabs(globalAnchor(result) - static_cast<std::int64_t>(strongerSeam)) <= 2,
+            "an earlier weaker overlapping seam committed before the stronger candidate");
+}
+
+void testFinalClusterCommitsDuringDrain()
+{
+    constexpr std::size_t seam = 700;
+    std::vector<Frame> input(800);
+    for (std::size_t i = 0; i < input.size(); ++i)
+    {
+        const double value = i < seam ? 0.25 : -0.60;
+        input[i] = {value, value * 0.8};
+    }
+
+    const auto result = render(input, 2, {37, 19, 71});
+    require(result.hasPlan, "final fully observed seam was lost at end-of-input");
+    require(std::llabs(globalAnchor(result) - static_cast<std::int64_t>(seam)) <= 2,
+            "drain committed the wrong final seam");
+}
+
+void testShortSelectionShrinksAnalysisSymmetrically()
+{
+    constexpr std::size_t seam = 40;
+    std::vector<Frame> input(80);
+    for (std::size_t i = 0; i < input.size(); ++i)
+    {
+        const double value = i < seam ? 0.30 : -0.50;
+        input[i] = {value, value * 0.85};
+    }
+
+    const auto result = render(input, 2, {7, 11, 5});
+    require(result.hasPlan, "short selection did not shrink analysis context");
+    require(result.plan.fadeLengthSamples < 192, "short selection did not shrink transition to available context");
+    require(std::llabs(globalAnchor(result) - static_cast<std::int64_t>(seam)) <= 2,
+            "short-selection seam anchor is incorrect");
+}
+
 void testMonoPath()
 {
     constexpr std::size_t seam = 420;
@@ -157,8 +211,7 @@ void testMonoPath()
 
     const auto result = render(input, 1, {17, 63, 4});
     require(result.hasPlan, "mono seam was not detected");
-    const auto globalAnchor = result.planWindowStart + result.plan.seamAnchorSamples;
-    require(std::llabs(globalAnchor - static_cast<std::int64_t>(seam)) <= 2,
+    require(std::llabs(globalAnchor(result) - static_cast<std::int64_t>(seam)) <= 2,
             "mono seam anchor is incorrect");
 }
 
@@ -196,6 +249,9 @@ int main()
         testCleanAudioIsBitTransparent();
         testHardSeamIsDetectedAndSmoothed();
         testBlockPartitionIsDeterministic();
+        testOverlappingCandidatesCompeteBeforeCommit();
+        testFinalClusterCommitsDuringDrain();
+        testShortSelectionShrinksAnalysisSymmetrically();
         testMonoPath();
         testResetStartsFreshRun();
         std::cout << "SmartTransition DSP tests passed\n";

@@ -34,7 +34,19 @@ public:
 
 private:
     template <typename Sample>
-    bool processBlock(Sample** input, Sample** output, Steinberg::int32 channels, Steinberg::int32 samples) noexcept;
+    static bool validateBuffers(
+        Sample** input,
+        Sample** output,
+        Steinberg::int32 channels,
+        Steinberg::uint64 inputSilenceFlags) noexcept;
+
+    template <typename Sample>
+    bool processBlock(
+        Sample** input,
+        Sample** output,
+        Steinberg::int32 channels,
+        Steinberg::int32 samples,
+        Steinberg::uint64 inputSilenceFlags) noexcept;
 
     Travny::Audio::SmartTransitionDsp dsp_{};
 };
