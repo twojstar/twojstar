@@ -2,35 +2,33 @@
 
 Home for small audio effects and workflow helpers aimed primarily at Audacity.
 
-The first track is [`vst3/`](vst3/): cross-platform VST3 effects that stay local, deterministic and useful outside Audacity too when another host supports the same format.
+The first track is [`vst3/`](vst3/): cross-platform VST3 effects that stay local, deterministic and useful in other compatible hosts too.
 
 ## Direction
 
-This should become a compact **restoration and workflow toolbox**, not a random pile of effects and not a clone of features Audacity already does well.
+This is a compact **restoration and workflow toolbox**, not a random pile of effects and not a clone of features Audacity already does well.
 
 Good fits:
 
-- repair and cleanup helpers that are useful as reusable real-time effects,
+- repair and cleanup helpers that are useful as reusable effects,
 - small analysis/metering tools that reduce repetitive editing work,
 - narrowly scoped restoration stages that can be combined into a chain,
-- utilities that remain useful without an account, cloud service or permanent background process.
+- stronger ML-assisted repair when ordinary signal processing cannot recover enough information.
 
 Poor fits:
 
 - virtual instruments: Audacity does not support VST instruments,
-- effects added only because every plugin bundle apparently needs its seventeenth compressor,
 - network-dependent DSP, telemetry, login gates or runtime model downloads,
-- large frameworks unless a real effect justifies the dependency.
+- effects added only because every plugin bundle apparently needs its seventeenth compressor.
 
 ## Principles
 
 - **Local-first.** Audio stays on the machine.
-- **Effect-only.** Target Audacity's supported audio-effect use case rather than VST instruments.
-- **Windows + Linux first.** Keep one CMake source of truth and avoid generated IDE project files.
-- **Host-friendly.** Parameters and DSP must not depend on Audacity-specific internals unless there is a compelling reason.
+- **Windows + Linux first.** One CMake source of truth.
+- **Host-friendly.** Avoid Audacity-specific internals unless there is a compelling reason.
 - **Boring installation.** Standard VST3 bundles, no resident helper or launcher.
-- **Small surface.** Add the first actual DSP target only when its purpose is clear enough to test and document properly.
+- **Progressive repair.** Use deterministic DSP when it is sufficient; reserve ML for damage that actually needs inference.
 
 ## Status
 
-Foundation only. There is deliberately no pretend effect yet.
+The first experimental effect is **Auto Declip** under [`vst3/`](vst3/). It deliberately handles only short, high-confidence clipping plateaus. Longer or ambiguous damage is left untouched for a future stronger restoration stage instead of being creatively hallucinated into your recording.

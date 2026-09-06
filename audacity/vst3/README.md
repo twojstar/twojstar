@@ -2,76 +2,85 @@
 
 Cross-platform VST3 **audio effects** aimed first at Audacity and usable in other compatible hosts.
 
-This directory is intentionally a foundation, not a fake 0.1 release. The goal is to establish the build boundary and product rules before choosing the first DSP effect.
+## Auto Declip 0.1
 
-## What this is for
+The first effect is intentionally conservative. It repairs short full-scale clipping plateaus without pretending that severely missing audio can be recovered by a magic button.
 
-A small local-first toolbox for audio **restoration, cleanup and repetitive editing work** where a reusable real-time effect is more useful than another destructive one-off operation.
+Current detector/repair rules:
 
-The project should favor narrowly useful tools over a giant all-in-one plugin. Candidate directions include repair/cleanup stages, analysis or metering helpers, and small workflow utilities. The first real effect should be chosen because it fixes an actual editing pain point, not because an empty plugin menu looked lonely.
+- clipping threshold: `|sample| >= 0.995`,
+- repair only consecutive runs of **2–32 samples**,
+- isolated full-scale samples are preserved as possible legitimate transients,
+- longer clipping is preserved for a future stronger restoration stage,
+- clean audio is passed through unchanged after the fixed lookahead,
+- repaired runs are reconstructed between clean edges with a bounded peak-shaped interpolation,
+- output is capped just below full scale,
+- fixed **64-sample latency**, reported to the VST3 host,
+- mono and stereo, 32-bit and 64-bit floating-point processing,
+- fixed memory only in the audio path; no allocations, files, network or model loading.
 
-## What it is not
+This first stage is ordinary DSP on purpose. A future neural restoration stage can target longer/ambiguous clipping where interpolation does not have enough information. The deterministic repair remains useful as the cheap, low-risk first pass.
 
-- not a fork or patch set for Audacity itself,
-- not a virtual instrument collection: Audacity supports VST3 effects, not VST instruments,
-- not a cloud frontend,
-- not an account-gated plugin manager,
-- not a place to vendor huge SDK copies or generated Visual Studio projects.
-
-## Technical direction
-
-- **Format:** VST3.
-- **Language:** modern C++.
-- **Build system:** CMake as the single source of truth.
-- **Targets:** Windows x64 and Linux x64 first; keep the structure portable enough for macOS later.
-- **SDK:** Steinberg VST3 SDK 3.8+ from a separate local checkout. The SDK is MIT-licensed from 3.8 onward.
-- **UI:** host parameters first. Add a custom GUI only when the effect genuinely needs one.
-- **Runtime:** offline and deterministic by default; no telemetry, login, background service or runtime dependency download.
-- **Performance:** real-time-safe DSP where applicable, bounded memory and conservative CPU use.
-
-Audacity supports VST3 effects across its supported desktop platforms. Steinberg's SDK provides the CMake integration and test-host tooling used by normal VST3 projects.
-
-## Current layout
-
-```text
-audacity/
-└── vst3/
-    ├── CMakeLists.txt   # build boundary; no network fetching
-    └── README.md        # scope and future architecture
-```
-
-When the first effect is selected, prefer growing this into:
+## Layout
 
 ```text
 vst3/
 ├── CMakeLists.txt
-├── src/<effect>/
-├── tests/
-└── licenses/
+├── src/autodeclip/
+│   ├── AutoDeclipDsp.*       # host-independent repair core
+│   ├── AutoDeclipProcessor.* # VST3 audio adapter
+│   ├── AutoDeclipController.h
+│   ├── AutoDeclipCids.h
+│   └── AutoDeclipEntry.cpp
+└── tests/
+    └── AutoDeclipDspTests.cpp
 ```
 
-Keep shared DSP separate from VST3 adapter code when that makes testing easier.
+The DSP core is intentionally independent of the VST3 SDK so it can be unit-tested on Windows and Linux without the host adapter.
 
-## SDK setup
+## Build the DSP tests only
 
-The repository does **not** automatically download or execute a third-party SDK. Clone or unpack a reviewed Steinberg VST3 SDK separately, then point CMake at it:
+No third-party SDK is needed:
 
 ```bash
-cmake -S audacity/vst3 -B audacity/vst3/build \
-  -DVST3_SDK_ROOT=/path/to/vst3sdk
+cmake -S audacity/vst3 -B audacity/vst3/build -DBUILD_TESTING=ON
+cmake --build audacity/vst3/build --config Release
+ctest --test-dir audacity/vst3/build -C Release --output-on-failure
 ```
 
-On Windows the same project can be opened directly as a CMake project in Visual Studio. On Linux use a normal CMake + GCC/Clang toolchain.
+## Build the VST3 effect
 
-At the moment configuration only verifies and wires the SDK. There is deliberately no plugin target until the first effect has a concrete purpose and tests.
+Use a separately reviewed Steinberg VST3 SDK 3.8+ checkout. The repository does **not** download or execute an SDK at configure time.
 
-## Before the first release
+```bash
+cmake -S audacity/vst3 -B audacity/vst3/build-sdk \
+  -DVST3_SDK_ROOT=/path/to/vst3sdk \
+  -DBUILD_TESTING=ON \
+  -DSMTG_CREATE_PLUGIN_LINK=OFF
+cmake --build audacity/vst3/build-sdk --config Release --target TravnyAutoDeclip
+```
 
-The first actual effect should arrive with:
+CI pins Steinberg VST3 SDK **3.8.0** by commit and checks its submodules recursively on both Windows and Linux. VSTGUI and SDK examples are disabled because Auto Declip needs neither.
 
-1. a small DSP contract and unit tests,
-2. a VST3 adapter built with `smtg_add_vst3plugin`,
-3. Steinberg validator/test-host checks where practical,
-4. an Audacity load/scan smoke test,
-5. Windows and Linux CI,
-6. standard VST3 packaging with no custom launcher.
+## Product rules
+
+- **Format:** VST3 audio effect.
+- **Language:** C++20.
+- **Build:** CMake is the source of truth.
+- **Targets:** Windows x64 and Linux x64 first; macOS can follow without redesigning DSP.
+- **Runtime:** local/offline, deterministic, no telemetry/login/background service/runtime download.
+- **UI:** host parameters first; custom GUI only when an effect genuinely needs one.
+- **Performance:** bounded memory and real-time-safe processing where applicable.
+
+## Before calling Auto Declip stable
+
+The initial implementation still needs real recordings and generated clipping fixtures beyond the unit tests. Before a stable release, validate:
+
+1. Steinberg validator/test-host behavior,
+2. Audacity scan/load and latency compensation,
+3. mono/stereo and 32/64-bit paths,
+4. block-boundary clipping runs,
+5. false-positive rate on hard-limited but intentionally undamaged masters,
+6. quality against Audacity Clip Fix and other deterministic baselines.
+
+Neural declipping is a later stage, not a branding sticker glued over an interpolation function.
