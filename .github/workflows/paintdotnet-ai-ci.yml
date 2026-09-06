@@ -78,7 +78,7 @@ jobs:
       - name: Run model smoke test
         working-directory: ${{ env.PLUGIN_DIR }}
         shell: pwsh
-        run: dotnet run --project .\tests\ModelSmoke\ModelSmoke.csproj -c Release --nologo -- .\model\realesr-general-x4v3.onnx
+        run: dotnet run --project .\tests\ModelSmoke\ModelSmoke.csproj -c Release -- .\model\realesr-general-x4v3.onnx
 
       - name: Package release asset
         working-directory: ${{ env.PLUGIN_DIR }}
