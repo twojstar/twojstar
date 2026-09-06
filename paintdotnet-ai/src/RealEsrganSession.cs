@@ -13,6 +13,7 @@ internal sealed class RealEsrganSession
     private readonly InferenceSession session;
     private readonly string inputName;
     private readonly string outputName;
+    private readonly object runGate = new();
 
     public RealEsrganSession(string modelPath)
     {
@@ -32,21 +33,27 @@ internal sealed class RealEsrganSession
     public float[] Run(float[] input, int width, int height)
     {
         var tensor = new DenseTensor<float>(input, new[] { 1, 3, height, width });
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results =
-            session.Run(new[] { NamedOnnxValue.CreateFromTensor(inputName, tensor) });
 
-        Tensor<float> output = results.Single(value => value.Name == outputName).AsTensor<float>();
-        int[] dimensions = output.Dimensions.ToArray();
-        int expectedHeight = checked(height * Scale);
-        int expectedWidth = checked(width * Scale);
-
-        if (dimensions.Length != 4 || dimensions[0] != 1 || dimensions[1] != 3 ||
-            dimensions[2] != expectedHeight || dimensions[3] != expectedWidth)
+        // Paint.NET may request render regions in parallel. Keep the shared CPU
+        // session single-flight to avoid multiplying model working-set and threads.
+        lock (runGate)
         {
-            throw new InvalidDataException(
-                $"Unexpected Real-ESRGAN output shape: [{string.Join(", ", dimensions)}].");
-        }
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results =
+                session.Run(new[] { NamedOnnxValue.CreateFromTensor(inputName, tensor) });
 
-        return output.ToArray();
+            Tensor<float> output = results.Single(value => value.Name == outputName).AsTensor<float>();
+            int[] dimensions = output.Dimensions.ToArray();
+            int expectedHeight = checked(height * Scale);
+            int expectedWidth = checked(width * Scale);
+
+            if (dimensions.Length != 4 || dimensions[0] != 1 || dimensions[1] != 3 ||
+                dimensions[2] != expectedHeight || dimensions[3] != expectedWidth)
+            {
+                throw new InvalidDataException(
+                    $"Unexpected Real-ESRGAN output shape: [{string.Join(", ", dimensions)}].");
+            }
+
+            return output.ToArray();
+        }
     }
 }
