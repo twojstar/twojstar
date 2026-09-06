@@ -8,6 +8,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <AssemblyName>Travny.PaintDotNet.AI</AssemblyName>
     <RootNamespace>Travny.PaintDotNet.AI</RootNamespace>
     <Version>0.1.0</Version>
@@ -18,6 +19,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="src\*.cs" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.29.0" />
   </ItemGroup>
 

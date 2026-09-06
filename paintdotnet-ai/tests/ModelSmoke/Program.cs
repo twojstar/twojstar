@@ -18,9 +18,9 @@ tensor.Buffer.Span.Fill(0.5f);
 using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results =
     session.Run(new[] { NamedOnnxValue.CreateFromTensor(inputName, tensor) });
 Tensor<float> output = results.Single(value => value.Name == outputName).AsTensor<float>();
-IReadOnlyList<int> dimensions = output.Dimensions;
+int[] dimensions = output.Dimensions.ToArray();
 
-if (dimensions.Count != 4 || dimensions[0] != 1 || dimensions[1] != 3 ||
+if (dimensions.Length != 4 || dimensions[0] != 1 || dimensions[1] != 3 ||
     dimensions[2] != height * 4 || dimensions[3] != width * 4)
 {
     throw new InvalidDataException($"Unexpected output shape: [{string.Join(", ", dimensions)}]");

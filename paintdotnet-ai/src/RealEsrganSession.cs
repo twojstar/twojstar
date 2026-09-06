@@ -1,7 +1,6 @@
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -37,11 +36,11 @@ internal sealed class RealEsrganSession
             session.Run(new[] { NamedOnnxValue.CreateFromTensor(inputName, tensor) });
 
         Tensor<float> output = results.Single(value => value.Name == outputName).AsTensor<float>();
-        IReadOnlyList<int> dimensions = output.Dimensions;
+        int[] dimensions = output.Dimensions.ToArray();
         int expectedHeight = checked(height * Scale);
         int expectedWidth = checked(width * Scale);
 
-        if (dimensions.Count != 4 || dimensions[0] != 1 || dimensions[1] != 3 ||
+        if (dimensions.Length != 4 || dimensions[0] != 1 || dimensions[1] != 3 ||
             dimensions[2] != expectedHeight || dimensions[3] != expectedWidth)
         {
             throw new InvalidDataException(
