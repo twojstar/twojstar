@@ -168,7 +168,7 @@ public sealed class AiRestoreEffect : PropertyBasedBitmapEffect
             throw new OperationCanceledException();
         }
 
-        float[] modelOutput = SharedSession.Value.Run(input, inputWidth, inputHeight);
+        float[] modelOutput = SharedSession.Value.Run(input, inputWidth, inputHeight, () => IsCancelRequested);
         if (IsCancelRequested)
         {
             throw new OperationCanceledException();
