@@ -174,6 +174,7 @@ jobs:
 
             if info="$(latest_run "$workflow")"; then
               IFS=$'\t' read -r run_id attempt sha <<< "$info"
+              artifact="${artifact//@attempt@/$attempt}"
             else
               status=$?
               if [ "$status" -eq 2 ]; then
@@ -196,7 +197,7 @@ jobs:
             fi
 
             if artifact_available "$run_id" "$artifact"; then
-              "$downloader" "$run_id"
+              "$downloader" "$run_id" "$artifact"
               if ! run_still_matches "$run_id" "$attempt" "$sha"; then
                 echo "$product source run changed while its artifact was being assembled; aborting this snapshot." >&2
                 exit 1
@@ -299,20 +300,20 @@ jobs:
           }
 
           bundle_audacity_windows() {
-            local run_id="$1"
+            local run_id="$1" artifact="$2"
             rm -rf work/audacity-windows
             mkdir -p work/audacity-windows
-            gh run download "$run_id" --repo "$GH_REPO" --name audacity-auto-declip-Windows --dir work/audacity-windows
+            gh run download "$run_id" --repo "$GH_REPO" --name "$artifact" --dir work/audacity-windows
             test -s work/audacity-windows/audacity-auto-declip-windows.zip
             validate_audacity_package work/audacity-windows/audacity-auto-declip-windows.zip
             cp work/audacity-windows/audacity-auto-declip-windows.zip assets/audacity-auto-declip-windows.zip
           }
 
           bundle_audacity_linux() {
-            local run_id="$1"
+            local run_id="$1" artifact="$2"
             rm -rf work/audacity-linux
             mkdir -p work/audacity-linux
-            gh run download "$run_id" --repo "$GH_REPO" --name audacity-auto-declip-Linux --dir work/audacity-linux
+            gh run download "$run_id" --repo "$GH_REPO" --name "$artifact" --dir work/audacity-linux
             test -s work/audacity-linux/audacity-auto-declip-linux.zip
             validate_audacity_package work/audacity-linux/audacity-auto-declip-linux.zip
             cp work/audacity-linux/audacity-auto-declip-linux.zip assets/audacity-auto-declip-linux.zip
@@ -323,8 +324,8 @@ jobs:
           resolve_product Xiaomi-ADB-Tools xiaomi-adb-tools-ci.yml XiaomiADBFastbootTools xiaomi-adb-tools.zip bundle_xiaomi
           resolve_product Paint.NET-ICO paintdotnet-ico-ci.yml paintdotnet-ico-release paintdotnet-ico.zip bundle_paintdotnet
           resolve_product Paint.NET-AI paintdotnet-ai-ci.yml paintdotnet-ai-release paintdotnet-ai.zip bundle_paintdotnet_ai
-          resolve_product Audacity-Auto-Declip-Windows audacity-vst3-ci.yml audacity-auto-declip-Windows audacity-auto-declip-windows.zip bundle_audacity_windows
-          resolve_product Audacity-Auto-Declip-Linux audacity-vst3-ci.yml audacity-auto-declip-Linux audacity-auto-declip-linux.zip bundle_audacity_linux
+          resolve_product Audacity-Auto-Declip-Windows audacity-vst3-ci.yml audacity-auto-declip-Windows-@attempt@ audacity-auto-declip-windows.zip bundle_audacity_windows
+          resolve_product Audacity-Auto-Declip-Linux audacity-vst3-ci.yml audacity-auto-declip-Linux-@attempt@ audacity-auto-declip-linux.zip bundle_audacity_linux
 
           if [ "$updated" -eq 0 ] && [ "$previous_format" = compact-v2 ]; then
             echo "No product source run, attempt or public bundle format changed."
