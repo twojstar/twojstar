@@ -101,19 +101,27 @@ public sealed class AiRestoreEffect : PropertyBasedBitmapEffect
                 }
 
                 int globalY = output.Bounds.Y + y;
+                TileKey currentKey = default;
+                RestoredTile? currentTile = null;
+
                 for (int x = 0; x < outputRegion.Width; x++)
                 {
                     int globalX = output.Bounds.X + x;
                     TileKey key = TileKey.FromPixel(globalX, globalY);
-                    RestoredTile restored = GetRestoredTile(key);
+                    if (currentTile is null || key != currentKey)
+                    {
+                        currentKey = key;
+                        currentTile = GetRestoredTile(key);
+                    }
+
                     int tileX = globalX - key.X;
                     int tileY = globalY - key.Y;
                     ColorBgra32 original = sourceRegion[x, y];
 
                     outputRegion[x, y] = ColorBgra32.FromBgra(
-                        Blend(original.B, restored.Get(tileX, tileY, 2), amount),
-                        Blend(original.G, restored.Get(tileX, tileY, 1), amount),
-                        Blend(original.R, restored.Get(tileX, tileY, 0), amount),
+                        Blend(original.B, currentTile.Get(tileX, tileY, 2), amount),
+                        Blend(original.G, currentTile.Get(tileX, tileY, 1), amount),
+                        Blend(original.R, currentTile.Get(tileX, tileY, 0), amount),
                         original.A);
                 }
             }
@@ -126,6 +134,11 @@ public sealed class AiRestoreEffect : PropertyBasedBitmapEffect
 
     private RestoredTile GetRestoredTile(TileKey key)
     {
+        if (tileCache.TryGetValue(key, out Lazy<RestoredTile>? cached))
+        {
+            return cached.Value;
+        }
+
         var candidate = new Lazy<RestoredTile>(
             () => RestoreTile(key),
             LazyThreadSafetyMode.ExecutionAndPublication);
