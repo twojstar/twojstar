@@ -6,11 +6,13 @@ on: # yamllint disable-line rule:truthy
     branches: [main]
     paths:
       - paintdotnet/ico/**
+      - .gitattributes
       - .github/workflows/paintdotnet-ico-ci.yml
   pull_request:
     branches: [main]
     paths:
       - paintdotnet/ico/**
+      - .gitattributes
       - .github/workflows/paintdotnet-ico-ci.yml
   workflow_dispatch:
 
@@ -40,6 +42,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Verify Windows installer line endings
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:GITHUB_WORKSPACE "$env:PLUGIN_DIR/Install.bat"
+          $text = [IO.File]::ReadAllText($installer)
+          if ($text -match "(?<!`r)`n") {
+            throw 'Install.bat must be checked out with CRLF line endings.'
+          }
 
       - name: Set up .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
