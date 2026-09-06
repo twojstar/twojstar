@@ -8,7 +8,9 @@ focused on cleaning up low-resolution or degraded images rather than generative 
 - Real-ESRGAN `realesr-general-x4v3` via ONNX Runtime
 - local processing only; the plugin never uploads images or downloads models at runtime
 - preserves the original canvas dimensions and alpha channel
-- renders with source context around Paint.NET tiles to avoid visible seams
+- deterministic 128 px restoration tiles with the model's full 34 px receptive-field context
+- bounded tile cache avoids repeating the same expensive inference across Paint.NET render regions
+- active ONNX inference is terminated when Paint.NET cancels rendering
 - downsamples the model's 4x reconstruction back to the current canvas and blends it with the source
 - **Strength** controls how much of the restored result is applied
 
