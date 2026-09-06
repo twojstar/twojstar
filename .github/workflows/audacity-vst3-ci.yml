@@ -57,3 +57,50 @@ jobs:
         run: cmake --build audacity/vst3/build-sdk --config Release --target TravnyAutoDeclip AutoDeclipDspTests
       - name: Run DSP tests in SDK build
         run: ctest --test-dir audacity/vst3/build-sdk -C Release --output-on-failure
+
+      - name: Package Windows VST3
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'audacity-auto-declip-windows'
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item 'audacity/vst3/build-sdk/VST3/Release/TravnyAutoDeclip.vst3' -Destination $stage -Recurse
+          @(
+            'Travny Auto Declip 0.1'
+            'Copy TravnyAutoDeclip.vst3 into a standard VST3 plug-in directory, then rescan effects in Audacity.'
+          ) | Set-Content (Join-Path $stage 'INSTALL.txt')
+          Compress-Archive -Path "$stage/*" -DestinationPath "$env:RUNNER_TEMP/audacity-auto-declip-windows.zip" -Force
+
+      - name: Upload Windows package
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: audacity-auto-declip-Windows
+          path: ${{ runner.temp }}/audacity-auto-declip-windows.zip
+          if-no-files-found: error
+
+      - name: Package Linux VST3
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/audacity-auto-declip-linux"
+          rm -rf "$stage"
+          mkdir -p "$stage"
+          cp -a audacity/vst3/build-sdk/VST3/Release/TravnyAutoDeclip.vst3 "$stage/"
+          printf '%s\n' \
+            'Travny Auto Declip 0.1' \
+            'Copy TravnyAutoDeclip.vst3 into a standard VST3 plug-in directory, then rescan effects in Audacity.' \
+            > "$stage/INSTALL.txt"
+          (
+            cd "$stage"
+            zip -9 -r "$RUNNER_TEMP/audacity-auto-declip-linux.zip" .
+          )
+
+      - name: Upload Linux package
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: audacity-auto-declip-Linux
+          path: ${{ runner.temp }}/audacity-auto-declip-linux.zip
+          if-no-files-found: error

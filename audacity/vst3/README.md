@@ -21,6 +21,12 @@ Current detector/repair rules:
 
 This first stage is ordinary DSP on purpose. A future neural restoration stage can target longer/ambiguous clipping where interpolation does not have enough information. The deterministic repair remains useful as the cheap, low-risk first pass.
 
+## Packages
+
+CI produces ready-to-copy VST3 ZIPs for **Windows x64** and **Linux x64**. Each archive contains the `TravnyAutoDeclip.vst3` bundle plus a tiny `INSTALL.txt`.
+
+Install by extracting the archive, copying the `.vst3` bundle into a standard VST3 plug-in directory for your OS, then rescanning effects in Audacity. The repository does not install a background helper and the plug-in performs no runtime downloads.
+
 ## Layout
 
 ```text
