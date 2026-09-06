@@ -24,7 +24,7 @@
 | 📰 **Feedboard** | [`feedboard/`](feedboard/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/feedboard.zip) | Windows 11 feed widget/provider with RSS/Atom/JSON Feed support and a small settings app. |
 | 📱 **Xiaomi ADB Tools** | [`xiaomi-adb-tools/`](xiaomi-adb-tools/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/xiaomi-adb-tools.zip) | Maintained desktop ADB/Fastboot utility with platform-specific JavaFX builds. |
 | 🖼️ **Paint.NET ICO FileType** | [`paintdotnet-ico/`](paintdotnet-ico/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/paintdotnet-ico.zip) | ICO import/export plugin for Paint.NET 5.1 and 5.2+, shipped as verified dual adapters. |
-| ✨ **Paint.NET AI** | [`paintdotnet-ai/`](paintdotnet-ai/) | Local restoration effects for Paint.NET; first effect: Real-ESRGAN AI Restore. |
+| ✨ **Paint.NET AI** | [`paintdotnet-ai/`](paintdotnet-ai/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/paintdotnet-ai.zip) | Local restoration effects for Paint.NET; first effect: Real-ESRGAN AI Restore. |
 
 ## 📦 One rolling release
 
@@ -34,7 +34,8 @@ GitHub **Latest** is the repository-wide rolling snapshot. Product workflows can
 - [`feedboard.zip`](https://github.com/twojstar/twojstar/releases/latest/download/feedboard.zip) — Feedboard sideload package, certificate, verified installer and dependencies,
 - [`xiaomi-adb-tools.zip`](https://github.com/twojstar/twojstar/releases/latest/download/xiaomi-adb-tools.zip) — all five platform-specific Xiaomi ADB Tools JARs,
 - [`paintdotnet-ico.zip`](https://github.com/twojstar/twojstar/releases/latest/download/paintdotnet-ico.zip) — Paint.NET ICO plugin package,
-- [`SHA256SUMS`](https://github.com/twojstar/twojstar/releases/latest/download/SHA256SUMS) — checksums for the four product bundles.
+- [`paintdotnet-ai.zip`](https://github.com/twojstar/twojstar/releases/latest/download/paintdotnet-ai.zip) — Paint.NET AI Restore plugin package,
+- [`SHA256SUMS`](https://github.com/twojstar/twojstar/releases/latest/download/SHA256SUMS) — checksums for the five product bundles.
 
 The publisher assembles a complete draft first and moves the GitHub `Latest` pointer only after all required bundles are uploaded.
 
