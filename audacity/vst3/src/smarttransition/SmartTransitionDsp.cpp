@@ -169,7 +169,7 @@ SmartTransitionDsp::Candidate SmartTransitionDsp::scoreCandidate(
         return candidate;
     }
 
-    double scoreSum = 0.0;
+    double strongestScore = 0.0;
     for (std::size_t channel = 0; channel < channels; ++channel)
     {
         double leftSum = 0.0;
@@ -219,7 +219,8 @@ SmartTransitionDsp::Candidate SmartTransitionDsp::scoreCandidate(
 
         const auto jumpScore = jump / (jump + 4.0 * baselineDerivative + epsilon);
         const auto meanScore = meanGap / (meanGap + 0.25 * localLevel + 4.0 * baselineDerivative + epsilon);
-        scoreSum += std::clamp(0.82 * jumpScore + 0.18 * meanScore, 0.0, 1.0);
+        const auto channelScore = std::clamp(0.82 * jumpScore + 0.18 * meanScore, 0.0, 1.0);
+        strongestScore = std::max(strongestScore, channelScore);
     }
 
     const auto channelScale = 1.0 / static_cast<double>(channels);
@@ -228,7 +229,7 @@ SmartTransitionDsp::Candidate SmartTransitionDsp::scoreCandidate(
     candidate.leftRms *= channelScale;
     candidate.rightRms *= channelScale;
 
-    const auto score = scoreSum * channelScale;
+    const auto score = strongestScore;
     if (!std::isfinite(score))
     {
         return candidate;
@@ -346,7 +347,8 @@ void SmartTransitionDsp::finalizeCluster(std::int64_t currentInputIndex) noexcep
         transitionStart >= 2 && transitionEnd + 1 < inputCount_ && emissionFrontier <= transitionStart)
     {
         plan_ = makePlan(clusterBest_, effectiveFadeLength);
-        planWindowStart_ = clusterBest_.anchor - static_cast<std::int64_t>(clusterBest_.analysisRadius);
+        const auto analysisStart = clusterBest_.anchor - static_cast<std::int64_t>(clusterBest_.analysisRadius);
+        planWindowStart_ = std::min(analysisStart, transitionStart);
         plan_.seamAnchorSamples = clusterBest_.anchor - planWindowStart_;
         committedAnchor_ = clusterBest_.anchor;
         planCommitted_ = !plan_.noOp;
