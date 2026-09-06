@@ -1,3 +1,43 @@
 ---
-title: "data-sources"
+title: "Autka Data Sources and Marketplace Integrations"
+description: "Understand Autka's lawful data boundary, partner feed options, deep-link fallback, and checklist for enabling a live vehicle source."
+sidebarTitle: "Data Sources"
 ---
+
+Autka only aggregates vehicle offers when the project has a lawful, reliable right to ingest and display them. Scraping marketplaces or reverse-engineering private endpoints is deliberately outside the project boundary.
+
+## Two separate paths
+
+1. **Catalogue data** comes from licensed, partner-provided, seller-authorised, or otherwise permitted feeds. The backend normalizes those records into Autka's shared offer model.
+2. **Marketplace deep-links** stay on the client. Search filters are translated into the marketplace's own search URL, and Autka opens that site without ingesting listing data.
+
+<Note>
+  Production builds do not fabricate inventory. The mock source is for local development and debug/demo use only; unsupported marketplaces remain available through verified deep-links.
+</Note>
+
+## Partner integration options
+
+Autka can work with dealer/importer JSON or CSV snapshots, licensed pull APIs, signed partner pushes, connected seller accounts, and broker or logistics feeds for the USA → Poland workflow.
+
+A live catalogue source should provide stable source and listing IDs, title, make/model, price and currency, fuel, transmission, region, original listing URL, plus explicit update and expiry semantics. Year, mileage, location, coordinates and images improve the result when available.
+
+## Acceptance checklist
+Before a real source is enabled, record at least:
+
+- the right to ingest and display the data;
+- caching and image/text reuse rules;
+- attribution, branding, and link-back requirements;
+- stable IDs plus deletion/expiry semantics;
+- full-snapshot versus delta behavior;
+- pagination, rate limits, retries, and expected freshness;
+- currency, tax, and unit conventions;
+- lead, affiliate, or reporting requirements;
+- production credentials stored only as backend secrets.
+
+If those answers are unclear, the source stays disabled and Autka uses a deep-link instead.
+
+## Moving a source live
+
+When a lawful feed becomes available, document its contract, add and test a backend ingestion adapter, declare cleanup semantics, normalize records into the shared offer model, keep credentials server-side, and verify source health before enabling production ingestion.
+
+The maintained implementation details remain in the Autka repository's `docs/DATA_SOURCES.md` and backend documentation; this page summarizes the product-facing boundary.

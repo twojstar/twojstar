@@ -1,77 +1,56 @@
 ---
 title: "LlmBench AI Provider Support and WebViews"
-description: "Understand which AI providers LlmBench supports via WebViews, which are planned for native adapters, and how provider tweaks work through userscripts and CSS."
+description: "Understand LlmBench account-backed WebViews, native provider transports, gateway adapters, and the current compatibility boundary."
 sidebarTitle: "Providers"
 ---
 
-LlmBench supports multiple AI providers through two layers: account-backed WebViews for services you sign into, and a planned native layer for free API-compatible endpoints. This page documents which providers are supported, which work fully or partially, and how LlmBench adapts provider pages for mobile use.
+LlmBench combines account-backed provider WebViews with a native chat/compare layer. Provider-specific behavior stays behind bounded adapters instead of leaking across the UI.
 
 ## Account-backed WebViews
 
-These providers open inside LlmBench WebViews and use your existing account credentials:
-
-<CardGroup>
-  <Card title="ChatGPT" icon="message">
-    Persistent WebView tab for OpenAI's ChatGPT web interface.
-  </Card>
-
-  <Card title="Claude" icon="message">
-    Persistent WebView tab for Anthropic's Claude web interface.
-  </Card>
-
-  <Card title="Gemini" icon="message">
-    Persistent WebView tab for Google's Gemini web interface.
-  </Card>
-
-  <Card title="DeepSeek" icon="message">
-    Persistent WebView tab for DeepSeek's web interface.
-  </Card>
-
-  <Card title="Kimi" icon="message">
-    Persistent WebView tab for Kimi's web interface.
-  </Card>
-
-  <Card title="Gemini AI Studio" icon="sparkles">
-    Accessed via a browser-backed platform flow rather than embedded OAuth, allowing you to use the AI Studio environment securely.
-  </Card>
-</CardGroup>
+The current Android client includes WebView entries for ChatGPT, Claude, Gemini, DeepSeek, Kimi, Mistral Vibe, Qwen, Microsoft Copilot, Z.ai, Grok, Character.AI, Venice, and Meta AI.
 
 <Warning>
-  Some providers may block embedded login or restrict WebView access. LlmBench does not scrape passwords, session cookies, or OAuth tokens. Authentication remains strictly between the embedded provider page and that provider.
+  "Integrated" does not guarantee that every provider permits fresh embedded sign-in. Authentication remains between the provider page and that provider, and LlmBench does not scrape passwords, cookies, OAuth tokens, or page contents.
 </Warning>
 
-## Native/free-provider layer (planned)
+| Provider | Status | Uploads | Activity tracking | Notes |
+| --- | --- | --- | --- | --- |
+| ChatGPT | Full | Yes | Generating + unread | Persistent provider-scoped session |
+| Claude | Full | Yes | Generating + unread | Persistent provider-scoped session |
+| Gemini Chat | Partial | Yes | Generating + unread | Fresh Google OAuth may be blocked in embedded user-agents |
+| DeepSeek | Full | Yes | Generating + unread | Persistent session |
+| Kimi | Full | Yes | Generating + unread | Persistent session |
+| Mistral Vibe | Full | Yes | Generating + unread | Provider-scoped activity probe |
+| Qwen | Partial | Provider-documented; embedded flow unverified | Not yet | Embedded sign-in/upload verification pending |
+| Microsoft Copilot | Partial | Provider-documented; embedded flow unverified | Not yet | Provider-owned auth hosts are bounded in-WebView |
+| Z.ai | Partial | Page-driven; embedded flow unverified | Not yet | Provider-owned auth hosts are bounded in-WebView |
+| Grok | Partial | Provider-documented; embedded flow unverified | Not yet | Activity probe still needs verification |
+| Character.AI | Partial | Provider-documented image attachments; embedded flow unverified | Not yet | Sign-in/upload verification pending |
+| Venice | Partial | Provider-documented; embedded flow unverified | Not yet | Sign-in/upload verification pending |
+| Meta AI | Partial | Not verified | Not yet | Provider-owned Meta login surface |
 
-LlmBench is building adapters for free API-compatible providers so you can chat and compare without separate web accounts:
+## Native and free-provider layer
 
-- **OpenRouter-compatible services**
-- **AIHubMix** (where terms and APIs allow)
+The native chat layer is already implemented, not merely planned:
 
-Provider-specific implementation details stay behind adapter interfaces rather than being scattered through the UI code.
+- **Gemini** through `generateContent` REST with streaming support.
+- **OpenAI** through the Responses API with `store=false` and bounded visible-text replay.
+- **Claude** through its native API transport.
+- **OpenRouter Free** through the shared OpenAI-compatible gateway adapter.
+- **AIHubMix Free** through the same gateway boundary.
 
-## Provider tweaks and mobile layout
+The two gateway aggregators stay outside the default All Models comparison so the same underlying model is not routed twice.
 
-Provider web pages are designed for desktop browsers. LlmBench adapts them for mobile through a small, auditable userscript and CSS adapter layer that:
+## Provider tweaks and diagnostics
 
-- Fixes mobile layout issues
-- Reduces unnecessary chrome and animations
-- Handles provider-specific navigation quirks
+Provider tweaks live in a small, auditable in-app registry. Scripts are static, scoped to matching provider hosts, and applied after page load; remote userscript code is never fetched.
+Diagnostics expose only privacy-safe integration metadata such as provider host, WebView package/version, capability counts, activity-tracking support, and file-picker events. They do not collect page text, full URLs, form values, file names, cookies, or authentication tokens.
 
 <Note>
-  These tweaks are currently internal, but LlmBench plans to expose a provider-tweak/userscript interface so customizations can be maintained outside the core app code.
+  Compatibility for newer providers is intentionally marked partial until embedded sign-in, uploads, and provider-specific generation tracking are verified in the Android WebView.
 </Note>
 
-## Provider compatibility status
+## Gemini and embedded Google sign-in
 
-The project intends to document which providers work fully, which work partially, and which block embedded login. This table will be updated as the project matures.
-
-| Provider | WebView | Embedded Login | Native Adapter | Notes |
-| --- | --- | --- | --- | --- |
-| ChatGPT | Supported | Varies | Planned | May require mobile layout tweaks |
-| Claude | Supported | Varies | Planned | May require mobile layout tweaks |
-| Gemini | Supported | Varies | Planned | Standard web interface |
-| DeepSeek | Supported | Varies | Planned | Standard web interface |
-| Kimi | Supported | Varies | Planned | Standard web interface |
-| Gemini AI Studio | Supported | Browser flow | Planned | Uses browser-backed platform flow |
-| OpenRouter | Planned | N/A | Planned | Free-provider adapter layer |
-| AIHubMix | Planned | N/A | Planned | Free-provider adapter layer |
+Gemini Chat is integrated, but Google may reject OAuth flows from embedded user-agents. That is a provider policy boundary, not something LlmBench attempts to bypass.

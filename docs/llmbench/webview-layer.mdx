@@ -1,49 +1,50 @@
 ---
 title: "LlmBench WebView Architecture and Security"
-description: "Learn how LlmBench manages provider WebViews on Android using an LRU pool, memory-pressure handling, and a userscript/CSS adapter layer for mobile tweaks."
+description: "Learn how LlmBench manages provider WebViews on Android using an LRU pool, memory-pressure handling, and an auditable provider adapter layer."
 sidebarTitle: "WebView Layer"
 ---
 
-LlmBench hosts provider services inside WebViews on Android. Because every AI provider is a heavy single-page application (SPA), LlmBench must balance persistence (keeping you signed in) with performance (not keeping every SPA alive forever). This page explains how the WebView host works and how LlmBench keeps your credentials secure.
+LlmBench hosts account-backed AI services inside Android WebViews. Because each provider is a heavy single-page application, the host balances persistent sessions with bounded memory use.
 
 ## LRU WebView pool
 
-Account sessions persist so you do not have to log in repeatedly. To manage memory, the Android host uses a small LRU (Least Recently Used) pool:
+Account sessions persist so you do not have to log in repeatedly. The Android host uses a small LRU (Least Recently Used) pool:
 
 <Steps>
   <Step title="Active WebViews stay alive">
-    The WebView for the provider you are currently using remains active and fully loaded.
+    The selected provider remains active and fully loaded.
   </Step>
   <Step title="Inactive WebViews are paused">
-    When you switch to another provider, the previous WebView is paused to free resources while preserving session state.
+    Switching providers pauses the previous WebView while preserving provider-owned session state.
   </Step>
   <Step title="Eviction under memory pressure">
-    If the system runs low on memory, inactive WebViews are evicted from the pool. Cookies and session state remain provider-owned, so you stay signed in when the WebView is recreated.
+    Inactive WebViews can be evicted when memory is tight. Cookies and session state remain provider-owned, so the view can be recreated without LlmBench handling credentials.
   </Step>
 </Steps>
-
-This approach keeps long chats responsive without sacrificing the ability to switch between providers quickly.
 
 ## Security and authentication boundaries
 
 <Warning>
-  LlmBench must **never** scrape passwords, session cookies, OAuth tokens, or any other login credentials.
+  LlmBench must **never** scrape passwords, session cookies, OAuth tokens, or other login credentials.
 </Warning>
 
-Authentication remains strictly between the embedded provider page and that provider. LlmBench does not intercept or store credentials. The WebView acts as a rendering container, not an authentication proxy.
+Authentication stays between the embedded provider page and that provider. LlmBench is a rendering host, not an authentication proxy.
 
-## Userscript and CSS adapter layer
+## Provider tweak layer
 
-Provider web pages are built for desktop browsers. LlmBench includes a small, auditable adapter layer that applies userscripts and CSS to:
+Provider pages often need small mobile adaptations. LlmBench keeps those changes in a bounded provider-tweak/userscript registry that can:
 
-- Fix mobile layout issues
-- Reduce wasted chrome and animations
-- Handle provider-specific navigation quirks
+- fix mobile layout issues;
+- reduce wasted chrome and animation;
+- handle provider-specific navigation quirks;
+- expose provider-scoped activity tracking where a stable probe is known.
 
-<Note>
-  These tweaks are visible and reviewable. LlmBench plans to expose a provider-tweak/userscript interface so the community can maintain adapters without modifying core app code.
-</Note>
+Scripts are static, scoped to matching provider hosts, and applied after page load. Remote userscript code is never fetched.
 
-## HTTP/1.0 compatibility
+## Privacy-safe diagnostics
 
-The WebView layer operates over standard HTTP/S as provided by the Android WebView component. LlmBench does not add custom protocol handling beyond what the platform WebView supports natively.
+Diagnostics may report provider host, WebView package/version, capability counts, activity-tracking support, and file-picker events. They do not collect page text, full URLs, form values, file names, cookies, or authentication tokens.
+
+## Platform networking
+
+The WebView layer uses standard HTTP/S behavior provided by Android WebView. LlmBench does not add a custom transport protocol for embedded provider pages.
