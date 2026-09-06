@@ -134,6 +134,20 @@ void testHardSeamIsDetectedAndSmoothed()
     require(result.output[1200] == input[1200], "samples far after the seam changed");
 }
 
+void testPlanWindowContainsTransition()
+{
+    constexpr std::size_t seam = 500;
+    const auto result = render(withHardSeam(1400, seam), 2, {61, 17, 89});
+
+    require(result.hasPlan, "plan-window fixture did not produce a plan");
+    const auto halfFade = static_cast<std::int64_t>(result.plan.fadeLengthSamples / 2);
+    const auto transitionStart = globalAnchor(result) - halfFade;
+    require(result.planWindowStart <= transitionStart,
+            "transition starts before the advertised plan window");
+    require(result.plan.seamAnchorSamples >= halfFade,
+            "relative seam coordinate places transition before plan-window start");
+}
+
 void testBlockPartitionIsDeterministic()
 {
     const auto input = withHardSeam(1500, 620);
@@ -222,6 +236,28 @@ void testAntiPhaseStereoSeamDoesNotCancelDetection()
     }
 }
 
+void testSingleChannelStereoSeamQualifies()
+{
+    constexpr std::size_t seam = 500;
+    for (std::size_t changedChannel = 0; changedChannel < 2; ++changedChannel)
+    {
+        std::vector<Frame> input(1400, Frame{0.20, 0.20});
+        for (std::size_t i = seam; i < input.size(); ++i)
+        {
+            input[i][changedChannel] = -0.75;
+        }
+
+        const auto result = render(input, 2, {43, 7, 101});
+        require(result.hasPlan, "single-channel stereo seam was ignored");
+        require(std::llabs(globalAnchor(result) - static_cast<std::int64_t>(seam)) <= 2,
+                "single-channel stereo seam anchor is incorrect");
+
+        const auto beforeJump = std::abs(input[seam][changedChannel] - input[seam - 1][changedChannel]);
+        const auto afterJump = std::abs(result.output[seam][changedChannel] - result.output[seam - 1][changedChannel]);
+        require(afterJump < beforeJump * 0.55, "single-channel stereo seam was not smoothed");
+    }
+}
+
 void testMonoPath()
 {
     constexpr std::size_t seam = 420;
@@ -270,11 +306,13 @@ int main()
     {
         testCleanAudioIsBitTransparent();
         testHardSeamIsDetectedAndSmoothed();
+        testPlanWindowContainsTransition();
         testBlockPartitionIsDeterministic();
         testOverlappingCandidatesCompeteBeforeCommit();
         testFinalClusterCommitsDuringDrain();
         testShortSelectionShrinksAnalysisSymmetrically();
         testAntiPhaseStereoSeamDoesNotCancelDetection();
+        testSingleChannelStereoSeamQualifies();
         testMonoPath();
         testResetStartsFreshRun();
         std::cout << "SmartTransition DSP tests passed\n";
