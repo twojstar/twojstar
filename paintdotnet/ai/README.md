@@ -26,7 +26,7 @@ Target tools:
 - **Alpha Refine** — deterministic decontamination around semi-transparent edges: remove colour fringing, repair halos, feather conservatively and preserve existing good alpha.
 - **Denoise / DeJPEG / small repair** — prefer one licensed multi-purpose restoration backend over a zoo of overlapping models. Models are added only after reproducible ONNX export and quality fixtures exist.
 
-Medium should be an explicit opt-in because it will use more RAM and inference time than Fast. The UI should make the trade-off obvious instead of silently switching models.
+Medium should be an explicit opt-in in the effect UI because it will use more RAM and inference time than Fast. The UI should make the trade-off obvious instead of silently switching models.
 
 ## Upscaling
 
@@ -69,22 +69,24 @@ Paint.NET 5.2's modern FileType plugin system is especially interesting here bec
 
 ## Packaging direction
 
-Keep one downloadable `paintdotnet-ai.zip` unless the Medium models make the archive unreasonably large. The package may contain:
+The **current** release layout remains the source of truth:
 
 ```text
 Common/
-├── runtime/
-├── models/fast/
-├── models/medium/
-└── licenses/
+└── Travny.PaintDotNet.AI/
+    ├── Microsoft.ML.OnnxRuntime.dll
+    ├── onnxruntime.dll
+    └── model/
+        └── realesr-general-x4v3.onnx
 Paint.NET-5.1/
 Paint.NET-5.2+/
-Effects/
-FileTypes/          # SVG component when implemented
+licenses/
 Install.bat
 ```
 
-The installer should allow **Fast only** or **Fast + Medium** when Medium materially increases package/install size. No runtime model downloader.
+Keep one downloadable `paintdotnet-ai.zip` unless Medium makes that unreasonable. A future Medium implementation may introduce profile-specific model subdirectories, but the same PR must then update `Install.bat`, runtime model resolution, CI packaging and portable-install instructions together. Until that code exists, do not document a different on-disk model path.
+
+Likewise, Fast-only versus Fast+Medium **installation selection is only a future option**. The current installer chooses the Paint.NET adapter and copies the complete shared payload. If Medium materially increases install size, profile selection should be implemented before Medium models are added to the public package. No runtime model downloader.
 
 The package already ships separate adapters for **Paint.NET 5.1.x** and **Paint.NET 5.2+**, while sharing one ONNX Runtime/model payload.
 
