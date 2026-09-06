@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>Travny.PaintDotNet.AI.Modern</AssemblyName>
+    <RootNamespace>Travny.PaintDotNet.AI</RootNamespace>
+    <Version>0.1.0</Version>
+    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+    <Deterministic>false</Deterministic>
+    <NoWarn>MSB3277</NoWarn>
+    <PaintDotNetDir Condition="'$(PaintDotNetDir)' == ''">C:\Program Files\Paint.NET</PaintDotNetDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src\*.cs" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.29.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="PaintDotNet.Base" HintPath="$(PaintDotNetDir)\PaintDotNet.Base.dll" Private="false" />
+    <Reference Include="PaintDotNet.ComponentModel" HintPath="$(PaintDotNetDir)\PaintDotNet.ComponentModel.dll" Private="false" />
+    <Reference Include="PaintDotNet.Core" HintPath="$(PaintDotNetDir)\PaintDotNet.Core.dll" Private="false" />
+    <Reference Include="PaintDotNet.Effects.Core" HintPath="$(PaintDotNetDir)\PaintDotNet.Effects.Core.dll" Private="false" />
+    <Reference Include="PaintDotNet.Fundamentals" HintPath="$(PaintDotNetDir)\PaintDotNet.Fundamentals.dll" Private="false" />
+    <Reference Include="PaintDotNet.Framework" HintPath="$(PaintDotNetDir)\PaintDotNet.Framework.dll" Private="false" />
+    <Reference Include="PaintDotNet.Primitives" HintPath="$(PaintDotNetDir)\PaintDotNet.Primitives.dll" Private="false" />
+    <Reference Include="PaintDotNet.PropertySystem" HintPath="$(PaintDotNetDir)\PaintDotNet.PropertySystem.dll" Private="false" />
+    <Reference Include="PaintDotNet.Windows" HintPath="$(PaintDotNetDir)\PaintDotNet.Windows.dll" Private="false" />
+    <Reference Include="PaintDotNet.Windows.Core" HintPath="$(PaintDotNetDir)\PaintDotNet.Windows.Core.dll" Private="false" />
+    <Reference Include="PaintDotNet.Windows.Framework" HintPath="$(PaintDotNetDir)\PaintDotNet.Windows.Framework.dll" Private="false" />
+  </ItemGroup>
+</Project>
