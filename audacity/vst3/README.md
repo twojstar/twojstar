@@ -23,9 +23,12 @@ This first stage is ordinary DSP on purpose. A future neural restoration stage c
 
 ## Packages
 
-CI produces ready-to-copy VST3 ZIPs for **Windows x64** and **Linux x64**. Each archive contains the `TravnyAutoDeclip.vst3` bundle plus a tiny `INSTALL.txt`.
+Ready-to-copy packages are published in the repository-wide GitHub **Latest** release:
 
-Install by extracting the archive, copying the `.vst3` bundle into a standard VST3 plug-in directory for your OS, then rescanning effects in Audacity. The repository does not install a background helper and the plug-in performs no runtime downloads.
+- [Windows x64](https://github.com/twojstar/twojstar/releases/latest/download/audacity-auto-declip-windows.zip)
+- [Linux x64](https://github.com/twojstar/twojstar/releases/latest/download/audacity-auto-declip-linux.zip)
+
+Each archive contains the `TravnyAutoDeclip.vst3` bundle plus a tiny `INSTALL.txt`. Install by extracting the archive, copying the `.vst3` bundle into a standard VST3 plug-in directory for your OS, then rescanning effects in Audacity. The repository does not install a background helper and the plug-in performs no runtime downloads.
 
 ## Layout
 
