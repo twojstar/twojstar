@@ -1,0 +1,59 @@
+name: Audacity VST3 CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "audacity/vst3/**"
+      - ".github/workflows/audacity-vst3-ci.yml"
+  pull_request:
+    paths:
+      - "audacity/vst3/**"
+      - ".github/workflows/audacity-vst3-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dsp:
+    name: DSP · ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure DSP tests
+        run: cmake -S audacity/vst3 -B audacity/vst3/build -DBUILD_TESTING=ON
+      - name: Build DSP tests
+        run: cmake --build audacity/vst3/build --config Release
+      - name: Run DSP tests
+        run: ctest --test-dir audacity/vst3/build -C Release --output-on-failure
+
+  vst3:
+    name: VST3 · ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out VST3 SDK 3.8.0
+        uses: actions/checkout@v4
+        with:
+          repository: steinbergmedia/vst3sdk
+          ref: 9fad9770f2ae8542ab1a548a68c1ad1ac690abe0
+          path: vst3sdk
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Configure VST3
+        run: cmake -S audacity/vst3 -B audacity/vst3/build-sdk -DVST3_SDK_ROOT="${{ github.workspace }}/vst3sdk" -DBUILD_TESTING=ON -DSMTG_CREATE_PLUGIN_LINK=OFF
+      - name: Build Auto Declip
+        run: cmake --build audacity/vst3/build-sdk --config Release --target TravnyAutoDeclip
+      - name: Run DSP tests in SDK build
+        run: ctest --test-dir audacity/vst3/build-sdk -C Release --output-on-failure
