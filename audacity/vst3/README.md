@@ -4,7 +4,7 @@ Cross-platform VST3 **audio effects** aimed first at Audacity and usable in othe
 
 ## Auto Declip 0.1
 
-The first effect is intentionally conservative. It repairs short full-scale clipping plateaus without pretending that severely missing audio can be recovered by a magic button.
+The first released effect is intentionally conservative. It repairs short full-scale clipping plateaus without pretending that severely missing audio can be recovered by a magic button.
 
 Current detector/repair rules:
 
@@ -19,16 +19,37 @@ Current detector/repair rules:
 - mono and stereo, 32-bit and 64-bit floating-point processing,
 - fixed memory only in the audio path; no allocations, files, network or model loading.
 
-This first stage is ordinary DSP on purpose. A future neural restoration stage can target longer/ambiguous clipping where interpolation does not have enough information. The deterministic repair remains useful as the cheap, low-risk first pass.
+## Smart Transition 0.1 prototype
 
-## Packages
+Smart Transition is the first implementation from the [`../smart-edit/`](../smart-edit/) track. It targets the little click/thump/level jump left after a cut or join.
 
-Ready-to-copy packages are published in the repository-wide GitHub **Latest** release:
+The prototype is deliberately deterministic DSP first:
+
+- 100 ms bounded lookahead, clamped to 1024–8192 samples,
+- mono/stereo shared seam detection,
+- block-partition-independent candidate ordering and score quantization,
+- short local DC and level matching,
+- a bounded S-curve/Hermite bridge around the accepted seam,
+- one high-confidence seam per VST3 processing run,
+- exact same-format determinism tests across arbitrary input chunking,
+- no allocation, network, model loading or background helper in the audio path.
+
+The effect currently uses conservative fixed defaults while the host contract is being validated. The planned `Mode`, `Max transition`, `Strength` and `Repair` host parameters are still required before calling 0.1 release-ready.
+
+### Why it is not in Latest yet
+
+CI builds and packages `TravnySmartTransition.vst3` for Windows and Linux as an **experimental workflow artifact**, but the repository-wide rolling **Latest** release intentionally does not publish it yet.
+
+Before promotion, real Audacity testing must prove that preview and Apply start clean processing runs, reported latency is compensated without clipping selection ends, cancellation resets state, and different host block sizes produce the same plan/output contract. If Audacity does not bracket selections the way the VST3 contract needs, the adapter changes instead of papering over it with fake tail samples.
+
+## Released packages
+
+Ready-to-copy Auto Declip packages are published in the repository-wide GitHub **Latest** release:
 
 - [Windows x64](https://github.com/twojstar/twojstar/releases/latest/download/audacity-auto-declip-windows.zip)
 - [Linux x64](https://github.com/twojstar/twojstar/releases/latest/download/audacity-auto-declip-linux.zip)
 
-Each archive contains the `TravnyAutoDeclip.vst3` bundle plus a tiny `INSTALL.txt`. Install by extracting the archive, copying the `.vst3` bundle into a standard VST3 plug-in directory for your OS, then rescanning effects in Audacity. The repository does not install a background helper and the plug-in performs no runtime downloads.
+Each archive contains the `TravnyAutoDeclip.vst3` bundle plus a tiny `INSTALL.txt`. Install by extracting the archive, copying the `.vst3` bundle into a standard VST3 plug-in directory for your OS, then rescanning effects in Audacity. The repository does not install a background helper and the plug-ins perform no runtime downloads.
 
 ## Layout
 
@@ -36,16 +57,19 @@ Each archive contains the `TravnyAutoDeclip.vst3` bundle plus a tiny `INSTALL.tx
 vst3/
 ├── CMakeLists.txt
 ├── src/autodeclip/
-│   ├── AutoDeclipDsp.*       # host-independent repair core
-│   ├── AutoDeclipProcessor.* # VST3 audio adapter
-│   ├── AutoDeclipController.h
-│   ├── AutoDeclipCids.h
-│   └── AutoDeclipEntry.cpp
+│   ├── AutoDeclipDsp.*
+│   ├── AutoDeclipProcessor.*
+│   └── ... VST3 adapter files
+├── src/smarttransition/
+│   ├── SmartTransitionDsp.*
+│   ├── SmartTransitionProcessor.*
+│   └── ... VST3 adapter files
 └── tests/
-    └── AutoDeclipDspTests.cpp
+    ├── AutoDeclipDspTests.cpp
+    └── SmartTransitionDspTests.cpp
 ```
 
-The DSP core is intentionally independent of the VST3 SDK so it can be unit-tested on Windows and Linux without the host adapter.
+Both DSP cores are independent of the VST3 SDK so they can be unit-tested on Windows and Linux without the host adapter.
 
 ## Build the DSP tests only
 
@@ -57,7 +81,7 @@ cmake --build audacity/vst3/build --config Release
 ctest --test-dir audacity/vst3/build -C Release --output-on-failure
 ```
 
-## Build the VST3 effect
+## Build the VST3 effects
 
 Use a separately reviewed Steinberg VST3 SDK 3.8+ checkout. The repository does **not** download or execute an SDK at configure time.
 
@@ -66,10 +90,11 @@ cmake -S audacity/vst3 -B audacity/vst3/build-sdk \
   -DVST3_SDK_ROOT=/path/to/vst3sdk \
   -DBUILD_TESTING=ON \
   -DSMTG_CREATE_PLUGIN_LINK=OFF
-cmake --build audacity/vst3/build-sdk --config Release --target TravnyAutoDeclip
+cmake --build audacity/vst3/build-sdk --config Release \
+  --target TravnyAutoDeclip TravnySmartTransition
 ```
 
-CI pins Steinberg VST3 SDK **3.8.0** by commit and checks its submodules recursively on both Windows and Linux. VSTGUI and SDK examples are disabled because Auto Declip needs neither.
+CI pins Steinberg VST3 SDK **3.8.0** by commit and checks its submodules recursively on both Windows and Linux. VSTGUI and SDK examples are disabled because neither effect needs them.
 
 ## Product rules
 
