@@ -1,0 +1,111 @@
+---
+title: "Get Started with WAM Bridge CLI on Windows"
+sidebarTitle: "Quickstart"
+description: "Install the WAM Bridge CLI on Windows, discover your Samsung Shape M5 speaker, save a device profile, and stream your first audio file in under five minutes."
+---
+
+WAM Bridge requires Python 3.14+, FFmpeg in your `PATH`, and a Samsung WAM speaker on the same LAN as your PC. The steps below install the CLI, confirm your setup, and play a file.
+
+<Steps>
+  <Step title="Install WAM Bridge">
+    Clone the repository, create a virtual environment, and install the package:
+
+    ```powershell
+    git clone https://github.com/trvny/wambridge.git
+    cd wambridge
+    py -m venv .venv
+    .\.venv\Scripts\Activate.ps1
+    py -m pip install -e .
+    ```
+
+    Confirm FFmpeg is on your `PATH`:
+
+    ```powershell
+    ffmpeg -version
+    ```
+
+    If FFmpeg is not found, download a build from [ffmpeg.org](https://ffmpeg.org/download.html) and add its `bin` folder to your system `PATH`.
+  </Step>
+  <Step title="Discover your speaker">
+    Run discovery to find your Samsung WAM speaker on the LAN:
+
+    ```powershell
+    wambridge --discover
+    ```
+
+    WAM Bridge sends repeated SSDP requests through your active IPv4 adapters. If the speaker does not appear (some older firmware is silent to SSDP), discovery falls back to checking Samsung's API on port `55001` in nearby `/24` networks.
+
+    If you see no result, try:
+
+    ```powershell
+    wambridge --discover --verbose
+    wambridge --discover --interface 192.168.1.25
+    ```
+  </Step>
+  <Step title="Save your speaker as a device alias">
+    Instead of using the IP address every time, save the speaker under an alias. Use the IP address from the discovery output:
+
+    ```powershell
+    wambridge --speaker 10.0.0.118 --remember M5
+    ```
+
+    WAM Bridge stores the stable Samsung `device_id` alongside the last known IP. If the IP changes via DHCP, WAM Bridge searches the LAN for the same device and updates the profile automatically.
+
+    Verify the saved profile:
+
+    ```powershell
+    wambridge --list-devices
+    wambridge --device M5 --probe
+    ```
+  </Step>
+  <Step title="Play a file with a safe volume">
+    Stream an audio file to the saved device. Always set an explicit volume using raw steps (see below):
+
+    ```powershell
+    wambridge "D:\Music\track.opus" --device M5 --volume 3
+    ```
+
+    WAM Bridge encodes the file to FLAC via FFmpeg, serves it over a local HTTP stream, and starts playback on the speaker using `SetUrlPlayback`.
+  </Step>
+</Steps>
+
+## Volume safety
+
+The tested Shape M5 uses raw API volume steps `0` to `30`. Values above `30` are silently clamped to maximum.
+
+| Raw step | Approximate level |
+| --- | --- |
+| 3 | ~10% |
+| 6 | ~20% |
+| 15 | ~50% |
+| 30 | Maximum |
+
+<Warning>
+  Old WAM firmware may jump to a high volume when switching to URL playback. WAM Bridge protects against this by muting the speaker, starting the stream with 1.5 seconds of silence, and then applying your requested volume after decoding begins.
+</Warning>
+
+To set only a startup ceiling while preserving a quieter current setting:
+
+```powershell
+wambridge "D:\Music\track.opus" --device M5 --max-start-volume 3
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Radio Stations" icon="radio" href="/wambridge/radio-stations">
+    Save and play internet radio streams and TuneIn presets.
+  </Card>
+
+  <Card title="Remote Control" icon="sliders" href="/wambridge/remote-control">
+    Control volume, pause, play, and standby from the CLI.
+  </Card>
+
+  <Card title="Foobar2000 Plugin" icon="plug" href="/wambridge/foobar-install">
+    Use WAM Bridge as a foobar2000 output component.
+  </Card>
+
+  <Card title="Discovery Reference" icon="magnifying-glass" href="/wambridge/discovery">
+    Full speaker discovery and device management reference.
+  </Card>
+</CardGroup>

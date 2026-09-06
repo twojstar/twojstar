@@ -1,0 +1,214 @@
+---
+title: "Autka Backend API: Cloudflare Workers, D1, and R2"
+sidebarTitle: "API Reference"
+description: "Reference for Autka's Cloudflare backend API. Endpoints for health, offers, sources, ingestion, images, and import services. Built on Workers, D1 SQL, and R2 object storage."
+---
+
+Autka's backend runs on Cloudflare Workers with a D1 SQL database and R2 object storage. It aggregates authorized car listing feeds and exposes a clean REST API for the Android app. This page documents the available endpoints, request parameters, and the `CarOffer` data model.
+
+## Base URL
+
+- Production: configured in the Android release build (`BACKEND_BASE_URL` build config field)
+- Local development: `http://10.0.2.2:8787/` (emulator loopback to host running `wrangler dev`)
+
+## Endpoints
+
+### GET /health
+
+Returns a simple liveness check for the Worker.
+
+**Response:**
+
+```json
+{
+  "status": "ok"
+}
+```
+
+### GET /offers
+
+Search and list offers. Query parameters mirror the app's `SearchFilter` fields.
+
+**Query parameters:**
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| make | string | Vehicle manufacturer filter |
+| priceMin | number | Minimum price in native currency |
+| priceMax | number | Maximum price in native currency |
+| yearMin | number | Minimum model year |
+| yearMax | number | Maximum model year |
+| mileageMin | number | Minimum odometer reading |
+| mileageMax | number | Maximum odometer reading |
+| fuel | string | Fuel type filter |
+| transmission | string | Transmission type filter |
+| region | string | Geographic region filter |
+| source | string | Source identifier filter |
+| complete | boolean | Return full matching set without pagination |
+| limit | number | Page size (ignored when `complete=true`) |
+| offset | number | Page offset (ignored when `complete=true`) |
+
+**Response (regular mode):**
+
+```json
+{
+  "offers": [ /* CarOffer[] */ ],
+  "count": 42,
+  "warnings": null
+}
+```
+
+**Response (`complete=true`):** Returns the full matching set from one SQL statement, ignoring `limit` and `offset`. This prevents page shifts during ingestion. Complete responses are capped at 5,000 rows. If the result exceeds this limit, the API returns HTTP 422 instead of silently truncating.
+
+<Warning>
+  Server-side price filtering and sorting are disabled until a normalized-price column is added. Android requests `complete=true` and performs these operations locally after currency conversion.
+</Warning>
+
+### GET /offers/:id
+
+Returns a single offer by its internal ID.
+
+**Response:** `CarOffer` object.
+
+<Note>
+  The current Android client reads offer details directly from the Room cache rather than through this endpoint, so the UI stays consistent with the cached catalogue.
+</Note>
+
+### GET /sources
+
+Returns the list of configured sources with public-safe health metadata.
+
+**Response fields per source:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| id | string | Source identifier |
+| enabled | boolean | Whether the source is active |
+| offerCount | number \| null | Number of offers from this source |
+| lastCompletedAtEpochMs | number \| null | Timestamp of last completed ingest |
+| lastCompletedOk | boolean \| null | Whether the last completed ingest succeeded |
+| lastOffersUpserted | number \| null | How many offers were upserted in the last run |
+
+If D1 health lookup fails, the static source list and enabled flags are still returned with health fields set to `null`. Raw ingestion errors remain server-side.
+
+### POST /admin/ingest
+
+Manually triggers ingestion. Requires a bearer token in the `Authorization` header.
+
+**Headers:**
+
+```text
+Authorization: Bearer <ADMIN_TOKEN>
+```
+
+**Behavior:** Runs all enabled ingestion adapters. Concurrent scheduled or manual runs for the same source are skipped; different sources still run in parallel.
+
+### GET /images/:key
+
+Streams a cached offer image from R2.
+
+**Features:**
+
+- Supports ETag and HTTP 304 caching
+- Never fetches arbitrary URLs on demand
+- Returns the original URL if the image was not cached in R2
+
+### GET /import-services
+
+Returns a directory of import and logistics companies, optionally filtered by region.
+
+**Query parameters:**
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| region | string | Optional region filter |
+
+## CarOffer model
+
+The `CarOffer` shape in `backend/src/lib/types.ts` mirrors Android's `com.autka.core.model.CarOffer`. Keep them in sync when making changes.
+
+**Core fields:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| sourceId | string | Source identifier |
+| id | string | Stable source-native offer ID |
+| title | string | Listing title |
+| make | string | Vehicle manufacturer |
+| model | string | Vehicle model |
+| price | number | Listed price |
+| currency | string | Price currency: PLN, EUR, or USD |
+| fuel | string | Fuel type |
+| transmission | string | Transmission type |
+| region | string | Geographic region |
+| originalUrl | string | Link to original marketplace listing |
+| year | number \| null | Model year (optional) |
+| mileage | number \| null | Odometer reading (optional) |
+| power | number \| null | Engine power (optional) |
+| location | string \| null | Location description (optional) |
+| latitude | number \| null | Latitude for map view (optional) |
+| longitude | number \| null | Longitude for map view (optional) |
+| images | string[] | Image URLs (may be empty) |
+| thumbnail | string \| null | Thumbnail URL (optional) |
+| updatedAt | string \| null | ISO 8601 timestamp (optional) |
+| expiresAt | string \| null | ISO 8601 expiry timestamp (optional) |
+
+## Local development
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    cd backend
+    npm install
+    ```
+  </Step>
+  <Step title="Apply local migrations">
+    ```bash
+    npm run db:migrate:local
+    ```
+  </Step>
+  <Step title="Start the development server">
+    ```bash
+    npm run dev
+    ```
+  </Step>
+  <Step title="Run tests and type checking">
+    ```bash
+    npm test
+    npm run typecheck
+    ```
+  </Step>
+</Steps>
+
+The Android debug build points at `http://10.0.2.2:8787/` automatically.
+
+## Deploy to production
+
+```bash
+npx wrangler login
+npx wrangler secret put ADMIN_TOKEN
+npm run db:migrate:remote
+npm run deploy
+```
+
+Migration is required to create the offer schema, de-duplication columns, coordinate support, ingest leases, and to remove mock rows left by older deployments.
+
+<Tip>
+  Set `ENABLE_MOCK_SOURCE=true` locally for demo data. Production keeps this disabled.
+</Tip>
+
+## Next steps
+
+<CardGroup>
+  <Card title="Data Sources" icon="database" href="/autka/data-sources">
+    Learn how data partners feed into the backend ingestion pipeline.
+  </Card>
+
+  <Card title="Offline Mode" icon="wifi-off" href="/autka/offline-mode">
+    Understand how the Android app caches backend responses locally.
+  </Card>
+
+  <Card title="Quickstart" icon="rocket" href="/autka/quickstart">
+    Build the app and backend together for local development.
+  </Card>
+</CardGroup>

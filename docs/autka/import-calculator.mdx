@@ -1,0 +1,66 @@
+---
+title: "Autka Import Calculator: USA to Poland Landed Costs"
+sidebarTitle: "Import Calculator"
+description: "Estimate shipping, customs duty, Polish excise, and VAT for USA to Poland car imports using Autka's built-in calculator. Available per listing or standalone, with drivetrain-aware excise logic."
+---
+
+Autka's import calculator helps you estimate what a car from the USA may cost after it lands in Poland. The tool is available both from any US listing detail page and as a standalone feature, so you can run estimates even without browsing the catalogue. All figures are indicative estimates, not official customs quotes.
+
+## What the calculator covers
+
+The calculator breaks down the landed cost into four main components:
+
+| Component | Description |
+| --- | --- |
+| Shipping | Ocean freight and transport to destination |
+| EU customs duty | Duty applied at EU border based on vehicle classification |
+| Polish excise | Polish excise tax, calculated by drivetrain and engine capacity |
+| VAT | Value-added tax on the total imported value |
+
+Excise calculations are drivetrain-aware and engine-capacity aware. Electric and hydrogen vehicles follow separate tax paths. If engine capacity is missing for a non-exempt drivetrain, the calculator uses a deliberately conservative fallback rather than silently assuming a lower rate.
+
+## How to use the import calculator
+
+<Steps>
+  <Step title="Open the calculator">
+    Navigate to a US listing and tap **Import estimate**, or open the standalone import calculator from the app menu.
+  </Step>
+  <Step title="Review or enter vehicle details">
+    When opened from a listing, make, model, price, and drivetrain are pre-filled. In standalone mode, enter the vehicle price, currency, drivetrain, and engine capacity manually.
+  </Step>
+  <Step title="Adjust shipping and defaults">
+    Review the default shipping estimate. Adjust if you have specific quotes from a broker or logistics partner.
+  </Step>
+  <Step title="View the breakdown">
+    The calculator shows a line-item breakdown of shipping, duty, excise, and VAT along with the total estimated landed cost in PLN.
+  </Step>
+  <Step title="Compare scenarios">
+    Change drivetrain or engine capacity to compare how different configurations affect Polish excise.
+  </Step>
+</Steps>
+
+## Important limitations
+
+<Warning>
+  The result is an estimate, not a customs quote. Exact classification, valuation, shipping rates, tax rules, and available reliefs can change the final amount. Always confirm figures with your broker or customs office before purchasing.
+</Warning>
+
+## Where the logic lives
+
+Import cost estimation is implemented in `shared/src/commonMain/kotlin/com/autka/core/model/ImportCostEstimate.kt`. Both the listing detail path and standalone tool reuse the same calculation logic, defaults, and localized numeric parsing so results are consistent.
+
+## Next steps
+
+<CardGroup>
+  <Card title="VIN Decoder" icon="barcode" href="/autka/vin-decoder">
+    Decode a US vehicle's VIN to verify make, model, and specifications before estimating import costs.
+  </Card>
+
+  <Card title="Search & Filter" icon="magnifying-glass" href="/autka/search-and-filters">
+    Browse US listings and trigger the import calculator directly from offer details.
+  </Card>
+
+  <Card title="Data Sources" icon="database" href="/autka/data-sources">
+    Learn about partnerships with US auction brokers and logistics providers that can improve shipping estimates.
+  </Card>
+</CardGroup>

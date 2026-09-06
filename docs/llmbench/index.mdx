@@ -1,0 +1,46 @@
+---
+title: "LlmBench: Multiplatform AI Client Workspace"
+description: "LlmBench is a Kotlin Multiplatform workspace that lets you access multiple AI services from a single Android client, with planned support for desktop and iOS."
+sidebarTitle: "Introduction"
+---
+
+LlmBench is a Kotlin Multiplatform workspace designed to let you use multiple AI services from one client without installing a separate app for every provider. The project is currently an early prototype with Android as the first client, while shared domain and provider logic migrates to Kotlin Multiplatform so desktop and iOS clients can reuse the same core in the future.
+
+## What LlmBench provides
+
+LlmBench combines three layers into a single interface:
+
+<CardGroup>
+  <Card title="Web accounts" icon="globe">
+    Persistent WebView tabs for services where you sign in with your normal account. Providers include ChatGPT, Claude, Gemini, DeepSeek, Kimi, and Gemini AI Studio.
+  </Card>
+
+  <Card title="Free/native providers" icon="server">
+    A shared chat and comparison surface for API-compatible free providers, such as OpenRouter-style endpoints.
+  </Card>
+
+  <Card title="Optional AI tooling" icon="robot">
+    Reusable profiles, instructions, and skills from the portable AI configuration project, consumed optionally without vendoring a copy into LlmBench.
+  </Card>
+</CardGroup>
+
+The first prototype already contains Compose UI, persistent per-provider WebViews, a native comparison chat, profile and instruction rendering, YAML editing, and a small skills/docs browser.
+
+## Target providers
+
+### Account-backed WebViews
+
+- **ChatGPT**
+- **Claude**
+- **Gemini**
+- **DeepSeek**
+- **Kimi**
+- **Gemini AI Studio** (via a browser-backed platform flow rather than embedded OAuth)
+
+### Native/free-provider layer
+
+Planned adapters include OpenRouter-compatible services and other free endpoints (such as AIHubMix) where their terms and APIs allow it. Provider-specific details belong behind adapters rather than being spread through UI code.
+
+## Project status and license
+
+LlmBench is released under the **ISC license**. Android is the current focus, with shared KMP core enabling desktop and iOS clients in the future.

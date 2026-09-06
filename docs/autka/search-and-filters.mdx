@@ -1,0 +1,84 @@
+---
+title: "Autka Search and Filters: Find Cars Across Borders"
+sidebarTitle: "Search & Filters"
+description: "Use Autka's unified search and filters to browse cars by make, price, year, mileage, fuel, transmission, and region. Deep-link to marketplaces or view cached results offline."
+---
+
+Autka brings together car listings from multiple sources into one search experience. Whether you are browsing Polish marketplaces, European dealers, or US inventory, you can filter by the criteria that matter to you and compare results in a single currency. When Autka does not have a licensed feed for a particular source, it preserves your search intent and hands you off directly to the original marketplace through a deep-link.
+
+## Available filters
+
+Use the filter panel before or after running a search to narrow results:
+
+| Filter | What it does |
+| --- | --- |
+| Make | Vehicle manufacturer (e.g., BMW, Toyota, Ford) |
+| Price | Minimum and maximum price in the selected currency |
+| Year | Model year range |
+| Mileage | Odometer range |
+| Fuel | Fuel type: petrol, diesel, hybrid, electric, hydrogen, etc. |
+| Transmission | Manual, automatic, or other gearbox types |
+| Region | Geographic area or country of the listing |
+| Source | Which marketplace or feed the listing comes from |
+
+Autka applies all active filters together. If a source does not support a particular filter on its deep-link, Autka omits that parameter rather than silently sending an unfiltered page.
+
+## Currency comparison
+
+Prices may appear in PLN, EUR, or USD depending on the source. Autka converts prices through a PLN base using official NBP (National Bank of Poland) exchange rates so you can compare mixed-currency results in your chosen display currency.
+
+<Note>
+  If NBP rates are temporarily unavailable, Autka falls back to cached or built-in rates and explicitly marks them as stale. You always know when rates are not fresh.
+</Note>
+
+## Search workflow
+
+<Steps>
+  <Step title="Open the search screen">
+    Tap the search icon in the main listings toolbar to open the filter panel.
+  </Step>
+  <Step title="Set your criteria">
+    Select make, price range, year, mileage, fuel type, transmission, region, and source. Tap **Apply** to run the search.
+  </Step>
+  <Step title="Review results">
+    Browse matching offers in list or map view. Prices are shown in your selected display currency.
+  </Step>
+  <Step title="Tap an offer for details">
+    Open the detail screen to see full offer information, original listing URL, and optional import cost estimates.
+  </Step>
+  <Step title="Use marketplace hand-off if needed">
+    If a source has no licensed feed, tap the marketplace deep-link button to open the original site with your search parameters preserved.
+  </Step>
+</Steps>
+
+## Marketplace hand-off
+
+When Autka cannot ingest a marketplace directly, it does not scrape it. Instead, the app translates your active `SearchFilter` into the original marketplace's search URL and opens it in your browser. This preserves your intent without violating data policies.
+
+<Warning>
+  Deep-links are verified against real marketplace URLs where possible. Uncertain parameters are omitted rather than guessed, because a wrong parameter can silently open an unfiltered page.
+</Warning>
+
+## Offline behavior
+
+Autka is offline-first. The last successfully cached catalogue remains available when the network is unavailable. Cached results include the full offer set from the most recent successful refresh. Failed source refreshes do not wipe previously cached offers from healthy sources.
+
+<Tip>
+  Save frequently used filter combinations as local snapshots. Autka stores these in Preferences DataStore along with the selected currency so your price bounds keep their meaning when restored.
+</Tip>
+
+## Next steps
+
+<CardGroup>
+  <Card title="Import Calculator" icon="calculator" href="/autka/import-calculator">
+    Estimate total landed cost for US imports into Poland from any listing.
+  </Card>
+
+  <Card title="Offline Mode" icon="wifi-off" href="/autka/offline-mode">
+    Learn how Autka caches and cleans up offer data for offline access.
+  </Card>
+
+  <Card title="Data Sources" icon="database" href="/autka/data-sources">
+    Understand which sources are supported and how new partnerships are added.
+  </Card>
+</CardGroup>

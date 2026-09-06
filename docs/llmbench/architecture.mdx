@@ -1,0 +1,79 @@
+---
+title: "LlmBench Kotlin Multiplatform Architecture"
+description: "Explore the shared KMP core, platform clients, and Compose-first UI strategy that power LlmBench across Android, with planned desktop and iOS support."
+sidebarTitle: "Architecture"
+---
+
+LlmBench is built as a Kotlin Multiplatform (KMP) workspace that separates shared domain logic from platform-specific clients. This architecture lets Android, desktop, and iOS clients reuse the same core while preserving native capabilities where they matter most.
+
+## Shared module
+
+The shared Kotlin Multiplatform module contains portable logic that runs on every target:
+
+<CardGroup>
+  <Card title="Provider/model registry" icon="database">
+    Central registry of supported providers and models, including metadata and adapter interfaces.
+  </Card>
+
+  <Card title="Profile + prompt tools" icon="message">
+    Utilities for parsing, validating, and applying portable AI profiles and prompts.
+  </Card>
+
+  <Card title="Portable domain logic" icon="code">
+    Business rules, comparison logic, and other domain code that does not depend on platform APIs.
+  </Card>
+</CardGroup>
+
+## Platform clients
+
+Each platform owns the parts of the stack that require native behavior:
+
+### Android app
+
+The Android app is the first shipping client and owns:
+
+- **WebView host and file chooser**: Renders provider web interfaces and handles file uploads through the platform picker
+- **Provider tweaks and mobile performance**: Applies userscripts and CSS adaptations for mobile layout
+- **Custom Tabs, intents, and Keystore**: Handles external authentication flows and secure credential storage
+
+### Desktop app (planned)
+
+A desktop client will reuse the shared KMP core while providing native WebView or browser integration appropriate for desktop operating systems.
+
+### iOS app (planned)
+
+An iOS client will reuse the same shared core with platform-specific WebView and storage implementations.
+
+## Backend strategy
+
+Backends are optional, not the default. LlmBench prefers client-side processing where possible. If a feature truly needs a backend, the project prefers a small stateless service and evaluates free tiers (Cloudflare, Google Cloud, AWS, Oracle) based on actual requirements rather than choosing infrastructure first.
+
+## UI strategy: Compose-first
+
+LlmBench uses Jetpack Compose as the primary UI toolkit. Shared UI moves into Compose Multiplatform only where it does not weaken:
+
+- Native WebView behavior
+- File upload handling
+- Authentication flows
+- Secure storage access
+
+<Note>
+  Mobile UX is a product constraint: long chats must stay responsive, file upload must work, and provider tweaks should reduce wasted chrome and animation without breaking provider pages.
+</Note>
+
+## Architecture diagram
+
+```text
+shared (Kotlin Multiplatform)
+├── provider/model registry
+├── profile + prompt tools
+└── portable domain logic
+
+platform clients
+├── Android app
+│   ├── WebView host + file chooser
+│   ├── provider tweaks / mobile performance
+│   └── Custom Tabs / intents / Keystore
+├── Desktop app (planned)
+└── iOS app (planned)
+```

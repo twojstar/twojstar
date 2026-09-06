@@ -1,0 +1,44 @@
+---
+title: "Paint.NET ICO FileType"
+sidebarTitle: "Paint.NET ICO"
+description: "Dependency-free ICO import/export for Paint.NET 5.1 and 5.2+, with modern and compatibility adapters."
+---
+
+Paint.NET ICO FileType adds proper multi-image `.ico` support to Paint.NET.
+
+## What it does
+
+- opens every decodable ICO frame as a named layer,
+- handles PNG-backed and legacy BMP/DIB-backed icons,
+- writes real multi-image ICO containers,
+- exports common icon sizes from 16 px through 256 px,
+- preserves transparency and can keep aspect ratio with transparent padding.
+
+## Install
+
+Download `paintdotnet-ico.zip` from the shared rolling **Latest** release. The ZIP contains separate adapters for Paint.NET 5.2+ and Paint.NET 5.1.x plus `Install.bat`.
+
+For per-user installs, the helper uses:
+
+```text
+Documents\Paint.NET App Files\FileTypes
+```
+
+Classic installs can also use:
+
+```text
+C:\Program Files\Paint.NET\FileTypes
+```
+
+Restart Paint.NET after replacing a plugin DLL.
+
+## Two adapters, one codec
+
+- **Paint.NET 5.2+** uses the newer `PaintDotNet.FileTypes` API and .NET 10.
+- **Paint.NET 5.1.x** keeps a compatibility adapter on the classic FileType API and .NET 9.
+
+The actual ICO codec is shared plain C# with no external image-package dependency.
+
+<Card title="Download latest" icon="download" href="https://github.com/twojstar/twojstar/releases/latest/download/paintdotnet-ico.zip">
+  Stable rolling-release download.
+</Card>

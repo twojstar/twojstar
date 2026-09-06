@@ -1,0 +1,97 @@
+---
+title: "Internet Radio Stations and TuneIn in WAM Bridge"
+sidebarTitle: "Radio Stations"
+description: "Save custom internet radio stations with fallback URLs and TuneIn IDs, import bundled station packs, and browse the full TuneIn catalogue from the WAM Bridge CLI."
+---
+
+WAM Bridge lets you save custom internet radio stations by name, associate them with TuneIn IDs for reliable resolution, and play them on your Samsung WAM speaker without managing IP addresses or stream URLs each time. Station definitions are stored locally and separate from the speaker's own preset buttons.
+
+## Save a custom station
+
+```powershell
+wambridge --radio-add paradise "https://primary.example/radio.mp3" "https://backup.example/radio.ogg"
+```
+
+Fallback URLs are tried in order if the primary stream is unreachable.
+
+Add a TuneIn ID alongside the URL. When the station is played, WAM Bridge resolves the TuneIn ID first, so if the broadcaster moves their stream address the station still works. The saved URLs are used as fallbacks when TuneIn cannot be reached:
+
+```powershell
+wambridge --radio-add trojka "http://41.dktr.pl:8000/trojka.ogg" --tunein-id s15984
+```
+
+Station definitions are stored in:
+
+```text
+%LOCALAPPDATA%\WAMBridge\stations.json
+```
+
+## Manage stations
+
+```powershell
+# List all saved stations
+wambridge --radio-list
+
+# Play a saved station
+wambridge --radio-play paradise --device M5 --volume 3
+
+# Remove a station
+wambridge --radio-remove paradise
+```
+
+## Bundled station packs
+
+Import the bundled BBC Radio 1, PR3 Trojka, and PR4 Czworka pack:
+
+```powershell
+wambridge --radio-import top3
+wambridge --radio-list
+```
+
+Play the imported stations:
+
+```powershell
+wambridge --radio-play bbc1 --device M5 --volume 3
+wambridge --radio-play trojka --device M5 --volume 3
+wambridge --radio-play czworka --device M5 --volume 3
+```
+
+<Note>
+  These are WAM Bridge stations. They do not overwrite the three preset stations stored on the speaker's physical preset button.
+</Note>
+
+## TuneIn presets (stored on the speaker)
+
+Read and start TuneIn presets that are already saved on the speaker itself:
+
+```powershell
+wambridge --device M5 --tunein-list
+wambridge --device M5 --tunein-play 0 --volume 3
+wambridge --device M5 --tunein-play "Radio Paradise" --volume 3
+```
+
+Changing the speaker's TuneIn account or preset list still requires Samsung's own plugin; no reliable write API is known for the M5.
+
+## Browse the TuneIn catalogue
+
+The entire TuneIn catalogue is accessible without saving anything. `--tunein-browse` walks the tree; a path is the row numbers of successive pages separated by slashes.
+
+```powershell
+# Top-level TuneIn tree
+wambridge --device M5 --tunein-browse
+
+# Navigate into a subtree (row 1 at top, then row 0)
+wambridge --device M5 --tunein-browse 1/0
+
+# Search by station name
+wambridge --device M5 --tunein-search "Radio Paradise"
+
+# Paginate results
+wambridge --device M5 --tunein-search "jazz" --tunein-start 30
+```
+
+Rows are printed as `index TAB kind TAB mediaid TAB title`. The `mediaid` is the stable TuneIn station ID and is what you pass to `--radio-add --tunein-id`; the leading index only identifies the row on that page and changes as you paginate.
+
+<Tip>
+  If a search leaves the browse cursor in TuneIn's search results rather than the catalogue, run `--tunein-browse` again. WAM Bridge detects the displaced cursor and steps back automatically.
+</Tip>

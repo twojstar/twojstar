@@ -1,0 +1,89 @@
+---
+title: "Autka: Open-Source Cross-Border Car Shopping for Android"
+sidebarTitle: "Introduction"
+description: "Autka is a free, open-source Android app for cross-border car shopping across Poland, Europe, and US imports. Search listings, compare currencies, and calculate import costs with no ads or tracking."
+---
+
+Autka is an open-source Android app that helps you shop for cars across borders without juggling twelve browser tabs. Formerly known as CarGate, it brings together search, filtering, currency comparison, and USA import cost calculation into one streamlined experience. Whether you are browsing Polish marketplaces, scouting European dealers, or researching US auction inventory, Autka keeps your search intent intact and your data private.
+
+<CardGroup>
+  <Card title="Search & Filter" icon="magnifying-glass" href="/autka/search-and-filters">
+    Filter by make, price, year, mileage, fuel, transmission, and region across connected sources.
+  </Card>
+
+  <Card title="Import Calculator" icon="calculator" href="/autka/import-calculator">
+    Estimate total landed cost for USA to Poland imports including shipping, duty, excise, and VAT.
+  </Card>
+
+  <Card title="Offline Mode" icon="wifi-off" href="/autka/offline-mode">
+    Browse cached listings even when your network is unavailable. Autka is built offline-first.
+  </Card>
+</CardGroup>
+
+## What Autka does
+
+Buying a car across borders means dealing with different marketplaces, currencies, and import rules. Autka unifies that process into a single app. When a licensed listing feed is available, the backend normalizes it into one catalogue. When a marketplace cannot be directly ingested, Autka preserves your search filters and hands you off to the original site through a deep link instead of scraping it.
+
+## Key features
+
+<CardGroup>
+  <Card title="Cross-border search" icon="globe">
+    Search and filter across Polish, European, and US car listings with unified filters for make, price, year, mileage, fuel type, transmission, and region.
+  </Card>
+
+  <Card title="Currency comparison" icon="coins">
+    Compare prices in PLN, EUR, or USD using official NBP (National Bank of Poland) exchange rates, with explicit stale-rate fallback so you always know when rates are cached.
+  </Card>
+
+  <Card title="USA import calculator" icon="calculator">
+    Built-in landed-cost estimator for US imports into Poland: shipping, EU customs duty, Polish excise tax, and VAT. Available from any listing or as a standalone tool.
+  </Card>
+
+  <Card title="Map view" icon="map">
+    View offer locations on an interactive map powered by OpenStreetMap.
+  </Card>
+
+  <Card title="Source diagnostics" icon="stethoscope">
+    Check which catalogue sources are healthy, enabled, and up to date.
+  </Card>
+
+  <Card title="Import services" icon="truck">
+    Browse a directory of import and logistics companies to help with cross-border purchases.
+  </Card>
+</CardGroup>
+
+## Privacy and transparency
+
+Autka does not include ads or analytics SDKs. The Android manifest requests only internet and network-state permissions. Your search data stays on your device; the app does not track your browsing behavior or sell your data.
+
+## Current project state
+
+The Android app and Cloudflare backend are fully functional. However, Autka deliberately does not fabricate production inventory. Sample offers are available only in debug or demo builds. Until a compliant live data provider is connected, the internal production catalogue may be empty and marketplace deep-links serve as the main hand-off for unsupported sources.
+
+This makes Autka useful today as an import-cost calculator and search companion, while the full aggregator vision depends on data partnerships.
+
+## Looking for partners
+
+The most valuable contribution to Autka right now is lawful access to listing data, not another scraper. Potential partners include:
+
+- Marketplaces and aggregators able to license search or listing data
+- Dealers and importers willing to provide authorized JSON, CSV, or API inventory feeds
+- US auction buyers, brokers, and logistics partners who can provide realistic shipping and landed-cost inputs
+- Connected-seller integrations where a business explicitly authorizes access to its own inventory
+- Affiliate or lead-generation partnerships that can fund development without turning Autka into an ad farm
+
+A first integration does not need to be large, but it does need enough structured data to normalize into Autka's offer model. See [Data Sources and Partnerships](/autka/data-sources) for the full partner checklist and integration paths.
+
+## Next steps
+
+<Steps>
+  <Step title="Build the app">
+    Follow the [Quickstart](/autka/quickstart) to build Autka from source using Android Studio and JDK 17.
+  </Step>
+  <Step title="Explore search and filters">
+    Learn how to search and filter across sources in [Search and Filters](/autka/search-and-filters).
+  </Step>
+  <Step title="Calculate import costs">
+    Try the [Import Calculator](/autka/import-calculator) to estimate landed costs for US imports into Poland.
+  </Step>
+</Steps>

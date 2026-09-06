@@ -1,0 +1,62 @@
+---
+title: "LlmBench Profiles, Instructions, and AI Skills"
+description: "Learn how LlmBench integrates with portable AI profiles and instructions from the trvny/.ai project, enabling reusable skills and runtime configuration."
+sidebarTitle: "Profiles"
+---
+
+LlmBench supports portable AI configuration through integration with the `trvny/.ai` project, which provides reusable profiles, instructions, and skills. Rather than vendoring a second copy of that configuration, LlmBench consumes it optionally through an explicit boundary.
+
+## Relationship to `.ai`
+
+The `trvny/.ai` repository remains the canonical portable AI configuration core. LlmBench contains the multiplatform client code; `trvny/.ai` contains the reusable AI configuration you can bring into any compatible client.
+
+```text
+trvny/.ai             reusable profiles / instructions / skills
+      │
+      └── optional consumption
+              │
+              ▼
+twojstar/llmbench      shared KMP core + platform clients
+```
+
+<Warning>
+  Do not vendor a second copy of `.ai` into LlmBench. If runtime integration becomes useful, consume a pinned or exported representation with an explicit boundary rather than duplicating content.
+</Warning>
+
+## What profiles and instructions contain
+
+The `.ai` project defines portable, reusable AI configuration that can include:
+
+<CardGroup>
+  <Card title="Profiles" icon="user">
+    Named configurations that describe how a model or assistant should behave, including system instructions and parameter defaults.
+  </Card>
+
+  <Card title="Instructions" icon="file-lines">
+    Specific prompts or prompt templates that can be reused across conversations or providers.
+  </Card>
+
+  <Card title="Skills" icon="wrench">
+    Domain-specific capabilities and workflows defined as portable configuration.
+  </Card>
+</CardGroup>
+
+## Runtime integration
+
+LlmBench consumes `.ai` content at runtime rather than embedding it into the source tree. This means:
+
+- Updates to profiles and instructions happen independently of LlmBench releases
+- You can pin to a specific version for reproducibility
+- The boundary between client code and AI configuration stays explicit
+
+## Skills and docs browser
+
+The first LlmBench prototype includes a small skills/docs browser that lets you:
+
+- Browse available profiles and instructions
+- View YAML definitions
+- Apply configurations to conversations
+
+<Note>
+  This browser is part of the early prototype and will evolve as the `.ai` integration matures.
+</Note>

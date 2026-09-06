@@ -1,0 +1,41 @@
+---
+title: "TVPI: Stable TVP IPTV Playlists"
+sidebarTitle: "Introduction"
+description: "TVPI exposes stable TVP playlist URLs while handling short-lived signed HLS manifests and a Polish residential refresh path."
+---
+
+TVPI provides ready-to-use TVP IPTV playlists with stable URLs while hiding the short-lived signed HLS URLs that TVP rotates underneath.
+
+## Current model
+
+<CardGroup cols={2}>
+  <Card title="Cloudflare Worker" icon="cloud">
+    Stable per-channel `.m3u8` endpoints. A player can save one URL and resolve current content when the channel is opened.
+  </Card>
+
+  <Card title="GitHub Raw fallback" icon="github">
+    Static playlist snapshots refreshed on a timer. Useful as a fallback, but signed tokens can expire between refreshes.
+  </Card>
+</CardGroup>
+
+## Important limitation
+
+TVP currently rejects most refresh attempts from non-Polish infrastructure with `GEOIP_FILTER_FAILED`. The verified workaround is a pusher running from a Polish residential connection, which refreshes and validates manifests before sending them to the Worker.
+
+<Warning>
+  TVPI is not guaranteed 24/7 unless a Polish residential refresh host is online. Temporary stale or unavailable channels are therefore possible.
+</Warning>
+
+## Main playlist
+
+Use the Worker combined playlist for stable endpoints:
+
+```text
+https://tvpi.travny.workers.dev/playlist.m3u
+```
+
+The GitHub Raw playlist remains available as a secondary path.
+
+<Card title="Repository" icon="github" href="https://github.com/trvny/tvpi">
+  Source, status notes, and the residential-runner issue.
+</Card>

@@ -1,0 +1,58 @@
+---
+title: "Autka VIN Decoder: Lookup via NHTSA vPIC API"
+sidebarTitle: "VIN Decoder"
+description: "Decode any 17-character US vehicle VIN using Autka's integrated NHTSA vPIC lookup. Returns make, model, year, and vehicle details to help verify listings before purchase."
+---
+
+Autka includes a standalone VIN decoder that lets you verify a US vehicle's identity before committing to a purchase or import. Enter any valid 17-character VIN and the app performs a lookup against the official NHTSA vPIC API, returning structured vehicle data such as make, model, year, and drivetrain details. This is separate from the catalogue search: you can decode a VIN even if the vehicle is not listed in Autka.
+
+## How VIN decoding works
+
+<Steps>
+  <Step title="Open the VIN decoder">
+    Navigate to the VIN decoder screen from the app menu or toolbar.
+  </Step>
+  <Step title="Enter the VIN">
+    Type the full 17-character Vehicle Identification Number. Autka normalizes input locally and rejects letters I, O, and Q before sending any request, because these characters are invalid in a standard VIN.
+  </Step>
+  <Step title="Trigger the lookup">
+    Tap **Decode** to submit the VIN. Requests are only sent when you explicitly confirm, not while you are typing.
+  </Step>
+  <Step title="Review the result">
+    The app displays decoded fields returned by NHTSA, including make, model, model year, fuel type, and engine information. NHTSA decoder warnings are shown alongside any partial result.
+  </Step>
+</Steps>
+
+## Understanding the results
+
+The decoder returns a `VinDecodeResult` object containing fields provided by the NHTSA vPIC `DecodeVinValues` endpoint. A missing field means NHTSA does not have that data for the submitted VIN, not that the vehicle lacks that feature.
+
+<Note>
+  Decoded VIN data is not persisted as history. Each lookup is independent and session-only.
+</Note>
+
+## Validation rules
+
+- The VIN must be exactly 17 characters.
+- Letters I, O, and Q are rejected before the request is sent.
+- Autka never fires requests while you are typing; only an explicit user action triggers the lookup.
+
+## Integration with import estimates
+
+After decoding a VIN, you can cross-check the returned make, model, and drivetrain against a listing or use the information to feed the standalone [Import Calculator](/autka/import-calculator). This helps ensure your excise and duty estimates use the correct vehicle specifications.
+
+<Warning>
+  NHTSA vPIC data reflects what manufacturers report to the US government. It is authoritative for the US market, but always verify final specifications with the seller before purchase.
+</Warning>
+
+## Next steps
+
+<CardGroup>
+  <Card title="Import Calculator" icon="calculator" href="/autka/import-calculator">
+    Use decoded VIN specifications to inform your USA-to-Poland import cost estimate.
+  </Card>
+
+  <Card title="Search & Filter" icon="magnifying-glass" href="/autka/search-and-filters">
+    Browse US listings and compare them against decoded VIN data.
+  </Card>
+</CardGroup>

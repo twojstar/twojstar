@@ -1,0 +1,43 @@
+---
+title: "Kanarek Worker & API"
+sidebarTitle: "Worker & API"
+description: "Optional Cloudflare Worker routes for feeds, discovery, clean articles, radio lookup, logos, and synchronized state."
+---
+
+The Worker is optional. Kanarek can still fetch and parse ordinary RSS/Atom feeds directly on Android.
+
+## Routes
+
+| Route | Purpose |
+| --- | --- |
+| `GET /?feeds=...` | merge and normalize feeds; optionally export Atom, RSS, or JSON Feed |
+| `GET /discover?url=...` | discover feed URLs on a page |
+| `GET /scrape?url=...` | convert suitable HTML pages into Atom |
+| `GET /article?url=...` | extract clean article text for configured hosts |
+| `GET /stations/search?...` | search the Radio Browser directory |
+| `GET /logos?ids=...` | resolve missing IPTV logos |
+| `/state/*`, `/pair/*` | optional synchronized state and pairing |
+| `GET /health` | health probe |
+
+## Deploy
+
+```bash
+cd worker
+npm ci
+npm run typecheck
+npm test
+npx wrangler deploy
+```
+
+Production deployment is connected to `twojstar/kanarek` through Cloudflare Workers Builds.
+
+## Optional storage
+
+- `SCRAPE_KV` adds durable cache for discovery and scraping.
+- `STATE_DB` enables synchronized read/subscription/pairing state.
+
+If either binding is absent, unrelated Worker capabilities continue to work.
+
+## Safety and caching
+
+Only HTTP(S) source URLs are accepted. External reads are bounded, clean-reader hosts are configured explicitly, and one failed source does not fail the remaining batch. Merged-feed responses use ETags so unchanged results can return `304 Not Modified`.

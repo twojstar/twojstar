@@ -1,0 +1,43 @@
+---
+title: "Kanarek Quickstart"
+sidebarTitle: "Quickstart"
+description: "Set up feeds, radio or IPTV, widgets, and the optional backend in Kanarek."
+---
+
+## News in two minutes
+
+<Steps>
+  <Step title="Add feeds">
+    Open **News**, add a direct RSS/Atom URL or import an OPML file.
+  </Step>
+  <Step title="Tune the reader">
+    Use source filters, local search, saved/read state, and notifications as needed.
+  </Step>
+  <Step title="Place the widget">
+    Add the Kanarek news widget from the Android launcher and resize it to the layout you prefer.
+  </Step>
+</Steps>
+
+A failed source is isolated from the rest, and the last known-good story set is kept instead of being replaced by an empty refresh.
+
+## Radio and IPTV
+
+<Steps>
+  <Step title="Add stations">
+    Search the Radio Browser directory, add a station manually, or import M3U/M3U8.
+  </Step>
+  <Step title="Organize">
+    Use groups and favorites, and edit playlist entries when headers or metadata need correction.
+  </Step>
+  <Step title="Keep controls handy">
+    Add the player widget or use Android's system media controls.
+  </Step>
+</Steps>
+
+## Optional backend
+
+Leave **Backend URL** blank for normal on-device feed parsing. Configure your own Worker only when you want Worker-backed feed merging, clean-reader extraction, discovery/scraping, or synchronized state.
+
+<Tip>
+  If a stream works locally but fails through Cast, check whether it needs custom `User-Agent` or `Referer` headers. The default Cast receiver fetches media itself and does not inherit Kanarek's local request overrides.
+</Tip>

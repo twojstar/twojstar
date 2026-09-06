@@ -1,0 +1,67 @@
+---
+title: "WAM Bridge: Stream Audio to Samsung Multiroom Speakers"
+sidebarTitle: "Introduction"
+description: "WAM Bridge is a Windows CLI and foobar2000 plugin for streaming audio over Wi-Fi to Samsung Wireless Audio Multiroom speakers, including the Shape M5."
+---
+
+WAM Bridge is a Windows-first Python bridge that lets you stream audio from your PC to Samsung Wireless Audio Multiroom speakers over Wi-Fi. It supports two paths: a command-line tool that serves a tokenized local stream via Samsung's `SetUrlPlayback` API, and a foobar2000 output component that routes whatever foobar is playing (including internet radio) directly to your speaker.
+
+Everything here was measured against a physical SPK-WAM550 running firmware `WAM550WWB-3117.1`. Other models in the Samsung WAM family are untested.
+
+<Warning>
+  WAM Bridge is alpha software built by one person against one speaker. It works, but it is not polished. Read the latency note below before you install.
+</Warning>
+
+## What works
+
+<CardGroup cols={2}>
+  <Card title="CLI Playback" icon="terminal">
+    Stream local files and internet radio. SSDP speaker discovery, saved device aliases, custom radio stations, TuneIn preset browsing.
+  </Card>
+
+  <Card title="Foobar2000 Output" icon="music">
+    `f32le` PCM from foobar encoded to FLAC, served over local HTTP to the speaker. Validated on a physical M5 on 2026-08-02.
+  </Card>
+
+  <Card title="Remote Control" icon="sliders">
+    Volume, mute, pause, play, stop, standby from the CLI. Hardware volume routing available for lower-latency control.
+  </Card>
+
+  <Card title="Android Adapter" icon="mobile">
+    Automatic speaker discovery, UPnP renderer, Quick Settings tile, widgets, and native TuneIn browsing with artwork.
+  </Card>
+</CardGroup>
+
+## The latency note
+
+The last measured end-to-end FLAC latency was 6.7 seconds (historical figure, measured before the host buffer was reduced). With `buffer_extra=0`, the host queue is approximately 1.9 seconds. A fresh ear-to-clock measurement has not been taken yet, so the 6.7 s figure is outdated rather than current.
+
+Playback runs at wall-clock speed and the seekbar is honest. Pause, stop, and skip still carry PCM pipeline latency because they act through the PCM path. Setting `hardware_volume=1` routes the volume slider directly to the speaker for lower-latency volume control.
+
+## Requirements
+
+- Python 3.14+
+- FFmpeg available in `PATH`
+- Computer and speaker on the same LAN
+- Windows 10/11 and foobar2000 2.x x64 (for the native output component)
+- Windows Firewall access for the bridge on private networks
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/wambridge/quickstart">
+    Install the CLI, discover your speaker, and play your first file.
+  </Card>
+
+  <Card title="Foobar2000 Plugin" icon="plug" href="/wambridge/foobar-install">
+    Install the output component for seamless foobar2000 integration.
+  </Card>
+
+  <Card title="CLI Reference" icon="terminal" href="/wambridge/discovery">
+    Full reference for discovery, playback, radio, and remote control.
+  </Card>
+
+  <Card title="GitHub" icon="github" href="https://github.com/trvny/wambridge">
+    Source code, releases, and issue tracker.
+  </Card>
+</CardGroup>

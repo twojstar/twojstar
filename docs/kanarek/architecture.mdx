@@ -1,0 +1,43 @@
+---
+title: "Kanarek Architecture"
+sidebarTitle: "Architecture"
+description: "How Kanarek splits Android UI, shared Kotlin logic, widgets, playback, and its optional Cloudflare Worker."
+---
+
+Kanarek is one Android application with two user-facing domains and an optional edge backend.
+
+```text
+shared/commonMain
+      │
+      ├── ReaderScreen → NewsRepository → on-device parser / Worker
+      │                                  └→ news widget
+      │
+      └── PlayerScreen → PlayerService → ExoPlayer / MediaSession
+                                         └→ player widget
+```
+
+## Repository boundaries
+
+| Component | Responsibility |
+| --- | --- |
+| `app/` | Android UI, DataStore, WorkManager, services, notifications, launcher widgets |
+| `shared/` | portable models, parsers, codecs, merge/state logic and shared UI state |
+| `worker/` | optional edge parsing, caching, discovery, scraping, article extraction and synchronized state |
+
+## Reader path
+
+When a backend is configured, `NewsRepository` can request normalized merged data from the Worker and reuse responses with ETags. If the backend is blank or unavailable, feeds are downloaded concurrently and parsed by the shared Kotlin feed parser.
+
+One broken feed should not poison the whole batch, and unsuccessful refreshes do not intentionally erase last-known-good widget data.
+
+## Playback path
+
+`PlayerService` owns ExoPlayer and the app's `MediaSession`, so playback survives navigation and remains available to Android media controls. Widgets cannot keep the Activity's local binder, so they communicate through service actions and playback snapshots.
+
+## Widgets
+
+Both launcher widgets use `RemoteViews`, not Compose. Widget images are stored in a dedicated on-disk cache rather than relying on an Activity-scoped image loader.
+
+## Source-of-truth rule
+
+Portable parsers, models and state transformations belong in `shared/commonMain` when possible. Android-specific code should keep lifecycle-sensitive responsibilities rather than grow duplicate domain logic.

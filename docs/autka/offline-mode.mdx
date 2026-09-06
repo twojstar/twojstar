@@ -1,0 +1,72 @@
+---
+title: "Autka Offline Mode: Room Cache and Failure Isolation"
+sidebarTitle: "Offline Mode"
+description: "Autka works offline-first by caching offers in a local Room database. Learn how cache upserts, 7-day cleanup, and source failure isolation keep your last successful catalogue available."
+---
+
+Autka is designed to keep working when your network does not. The app caches the last successful catalogue refresh in a local Room database, so you can continue browsing, filtering, and viewing offer details even without connectivity. Source failures are isolated: a broken feed does not wipe data from healthy sources, and the cache is only cleaned up after a successful full refresh.
+
+## How offline mode works
+
+<Steps>
+  <Step title="Initial load">
+    When you open Autka with a network connection, the app fetches the latest catalogue from the backend and stores it locally in Room.
+  </Step>
+  <Step title="Upsert caching">
+    New offers are upserted into the cache. Existing offers are updated in place. The local database is the source of truth for the listings screen and offer details.
+  </Step>
+  <Step title="Offline browsing">
+    When the network is unavailable, Autka reads directly from the Room cache. Search, filters, sorting, and detail views all continue to work.
+  </Step>
+  <Step title="Cleanup on success">
+    After a successful full-catalogue refresh from every active source, Autka runs an age-based cleanup that removes cache rows older than seven days. Filtered refreshes do not trigger unrelated cleanup.
+  </Step>
+</Steps>
+
+## Failure isolation
+
+Autka isolates source failures so one broken provider cannot corrupt your entire cache:
+
+- **Failed sources do not wipe cached offers**: if a remote source fails to refresh, previously cached offers from that source remain visible.
+- **Healthy sources still update**: sources that succeed continue to update the cache normally.
+- **Disabled sources are explicitly removed**: when a source is disabled, its rows are removed from the cache.
+
+<Note>
+  Backend ingestion has separate snapshot semantics. A failed complete-snapshot fetch does not delete the previous successful snapshot, while a successful snapshot may expire rows that disappeared from the authoritative feed.
+</Note>
+
+## Currency and preferences offline
+
+Exchange rates are also cached offline-first. `ExchangeRateRepository` can seed from persisted or built-in rates and refreshes from the NBP public API when online. Cached or fallback rates remain marked as stale until a fresh request succeeds, so you always know when you are looking at older data.
+
+Saved searches and display currency preferences are stored in Preferences DataStore and remain available offline. A saved search stores the complete `SearchFilter` and its display currency so price bounds keep their meaning when restored.
+
+## Cache limits and cleanup
+
+| Behavior | Rule |
+| --- | --- |
+| Global cleanup age | 7 days |
+| Trigger | Only after a successful full-catalogue refresh |
+| Filtered refreshes | Do not expire unrelated cached offers |
+| Disabled sources | Explicitly removed from cache |
+| Source failure | Does not wipe existing cache rows |
+
+<Tip>
+  Source health and offer counts are cached in memory for up to five minutes when online, but this is process-local and never persisted as history. Offline, rely on the Room offer cache instead.
+</Tip>
+
+## Next steps
+
+<CardGroup>
+  <Card title="Search & Filter" icon="magnifying-glass" href="/autka/search-and-filters">
+    Learn how search and filtering work against cached offer data.
+  </Card>
+
+  <Card title="API Reference" icon="code" href="/autka/api-reference">
+    See how the backend serves data that feeds into the local cache.
+  </Card>
+
+  <Card title="Data Sources" icon="database" href="/autka/data-sources">
+    Understand how source health and backend ingestion affect what gets cached.
+  </Card>
+</CardGroup>

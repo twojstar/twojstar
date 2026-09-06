@@ -1,0 +1,77 @@
+---
+title: "LlmBench AI Provider Support and WebViews"
+description: "Understand which AI providers LlmBench supports via WebViews, which are planned for native adapters, and how provider tweaks work through userscripts and CSS."
+sidebarTitle: "Providers"
+---
+
+LlmBench supports multiple AI providers through two layers: account-backed WebViews for services you sign into, and a planned native layer for free API-compatible endpoints. This page documents which providers are supported, which work fully or partially, and how LlmBench adapts provider pages for mobile use.
+
+## Account-backed WebViews
+
+These providers open inside LlmBench WebViews and use your existing account credentials:
+
+<CardGroup>
+  <Card title="ChatGPT" icon="message">
+    Persistent WebView tab for OpenAI's ChatGPT web interface.
+  </Card>
+
+  <Card title="Claude" icon="message">
+    Persistent WebView tab for Anthropic's Claude web interface.
+  </Card>
+
+  <Card title="Gemini" icon="message">
+    Persistent WebView tab for Google's Gemini web interface.
+  </Card>
+
+  <Card title="DeepSeek" icon="message">
+    Persistent WebView tab for DeepSeek's web interface.
+  </Card>
+
+  <Card title="Kimi" icon="message">
+    Persistent WebView tab for Kimi's web interface.
+  </Card>
+
+  <Card title="Gemini AI Studio" icon="sparkles">
+    Accessed via a browser-backed platform flow rather than embedded OAuth, allowing you to use the AI Studio environment securely.
+  </Card>
+</CardGroup>
+
+<Warning>
+  Some providers may block embedded login or restrict WebView access. LlmBench does not scrape passwords, session cookies, or OAuth tokens. Authentication remains strictly between the embedded provider page and that provider.
+</Warning>
+
+## Native/free-provider layer (planned)
+
+LlmBench is building adapters for free API-compatible providers so you can chat and compare without separate web accounts:
+
+- **OpenRouter-compatible services**
+- **AIHubMix** (where terms and APIs allow)
+
+Provider-specific implementation details stay behind adapter interfaces rather than being scattered through the UI code.
+
+## Provider tweaks and mobile layout
+
+Provider web pages are designed for desktop browsers. LlmBench adapts them for mobile through a small, auditable userscript and CSS adapter layer that:
+
+- Fixes mobile layout issues
+- Reduces unnecessary chrome and animations
+- Handles provider-specific navigation quirks
+
+<Note>
+  These tweaks are currently internal, but LlmBench plans to expose a provider-tweak/userscript interface so customizations can be maintained outside the core app code.
+</Note>
+
+## Provider compatibility status
+
+The project intends to document which providers work fully, which work partially, and which block embedded login. This table will be updated as the project matures.
+
+| Provider | WebView | Embedded Login | Native Adapter | Notes |
+| --- | --- | --- | --- | --- |
+| ChatGPT | Supported | Varies | Planned | May require mobile layout tweaks |
+| Claude | Supported | Varies | Planned | May require mobile layout tweaks |
+| Gemini | Supported | Varies | Planned | Standard web interface |
+| DeepSeek | Supported | Varies | Planned | Standard web interface |
+| Kimi | Supported | Varies | Planned | Standard web interface |
+| Gemini AI Studio | Supported | Browser flow | Planned | Uses browser-backed platform flow |
+| OpenRouter | Planned | N/A | Planned | Free-provider adapter layer |
+| AIHubMix | Planned | N/A | Planned | Free-provider adapter layer |

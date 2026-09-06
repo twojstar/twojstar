@@ -1,0 +1,51 @@
+---
+title: "Build and Run LlmBench on Android"
+description: "Learn how to open the LlmBench project in Android Studio, set up the Kotlin Multiplatform environment, and build the Android target with Gradle."
+sidebarTitle: "Quickstart"
+---
+
+To get started with LlmBench, you need Android Studio with Kotlin Multiplatform support. The Android target uses API 35 with a minimum SDK of 26. This guide walks you through opening the project and building it.
+
+<Steps>
+  <Step title="Clone the repository">
+    Open a terminal and clone the LlmBench repository:
+
+    ```bash
+    git clone https://github.com/twojstar/llmbench.git
+    cd llmbench
+    ```
+  </Step>
+  <Step title="Open in Android Studio">
+    Launch Android Studio and select **Open** from the welcome screen. Navigate to the cloned `llmbench` directory and open it. Android Studio should recognize the Kotlin Multiplatform project structure.
+  </Step>
+  <Step title="Sync Gradle">
+    Once the project opens, Android Studio will prompt you to sync Gradle. Click **Sync Now** and wait for the sync to complete. This downloads dependencies and configures the KMP modules.
+  </Step>
+  <Step title="Build the Android target">
+    Select the **Android** target from the run configuration dropdown. Build the project with:
+
+    ```bash
+    ./gradlew :androidApp:assembleDebug
+    ```
+
+    Or use the **Build** menu in Android Studio.
+  </Step>
+  <Step title="Run on a device or emulator">
+    Connect an Android device running API 26 or higher, or start an emulator with API 35. Click **Run** to deploy the LlmBench app.
+  </Step>
+</Steps>
+
+<Note>
+  The UI is built with Jetpack Compose and remains Compose-first. Shared UI moves into Compose Multiplatform only where it does not weaken native WebView, upload, authentication, or secure-storage behavior.
+</Note>
+
+## Prerequisites
+
+- Android Studio (latest stable)
+- JDK 17 or higher
+- Android SDK with API 35 installed
+- Kotlin Multiplatform Mobile plugin (if not bundled)
+
+## Verify your build
+
+After a successful build, you should see the LlmBench app install on your device or emulator. The main screen shows provider tabs and the chat comparison surface.

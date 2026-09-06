@@ -1,0 +1,74 @@
+---
+title: "Speaker Discovery and Device Management in WAM Bridge"
+sidebarTitle: "Discovery"
+description: "Find Samsung WAM speakers on your LAN with SSDP, save device aliases with stable device IDs, and manage saved profiles in WAM Bridge."
+---
+
+WAM Bridge locates Samsung Wireless Audio Multiroom speakers on your local network using SSDP, and falls back to a direct port scan when older firmware does not respond to multicast. Once found, you can save a speaker under an alias so you never need to look up its IP address again.
+
+## Discover speakers
+
+```powershell
+wambridge --discover
+```
+
+Discovery sends repeated SSDP requests through each active IPv4 adapter. When a speaker has old firmware that stays silent to SSDP, WAM Bridge falls back to checking Samsung's API on port `55001` in nearby `/24` networks.
+
+### Diagnostic flags
+
+```powershell
+wambridge --discover --verbose
+wambridge --discover --interface 192.168.1.25
+wambridge --discover --no-scan
+```
+
+| Flag | Effect |
+| --- | --- |
+| `--verbose` | Prints every probe and response |
+| `--interface <ip>` | Restricts discovery to the adapter with that IP |
+| `--no-scan` | Skips the `/24` port-55001 fallback scan |
+
+## Save a device alias
+
+Saving a speaker under a short alias stores the stable Samsung `device_id` alongside the current IP. If the speaker's DHCP lease changes, WAM Bridge searches the LAN for the same `device_id` and updates the stored IP automatically.
+
+```powershell
+wambridge --speaker 10.0.0.118 --remember M5
+```
+
+The profile is stored in:
+
+```text
+%LOCALAPPDATA%\WAMBridge\devices.json
+```
+
+The foobar2000 component uses the same profile resolver, so any alias you save here works in foobar's configuration too.
+
+## Manage saved devices
+
+```powershell
+# List all saved profiles
+wambridge --list-devices
+
+# Probe a saved device (checks connectivity and retrieves status)
+wambridge --device M5 --probe
+
+# Remove a saved profile
+wambridge --forget M5
+```
+
+## Use a device in commands
+
+Once saved, pass the alias with `--device` instead of specifying the IP each time:
+
+```powershell
+wambridge "D:\Music\track.opus" --device M5
+wambridge --device M5 --status
+wambridge --device M5 --radio-play trojka --volume 3
+```
+
+When exactly one WAM speaker is discovered on the LAN, `--speaker` and `--device` can both be omitted and WAM Bridge uses that speaker automatically.
+
+<Note>
+  Do not expose port `55001` or any WAM Bridge HTTP port to the internet. The Samsung control API and the local stream server are designed for LAN use only.
+</Note>

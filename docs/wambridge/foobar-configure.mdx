@@ -1,0 +1,84 @@
+---
+title: "Configure the WAM Bridge Foobar2000 Component"
+sidebarTitle: "Configure Plugin"
+description: "Configure the foo_out_wam foobar2000 component: device alias, stream format, volume, hardware volume routing, buffer, and sleep timer settings."
+---
+
+The WAM Bridge foobar2000 component is configured through its preferences page or by directly editing `foobar.ini`. Both methods are equivalent: the preferences page edits the same INI file, and existing manual configuration stays compatible after installing the GUI page.
+
+## Open the preferences page
+
+```text
+Preferences -> Playback -> Output -> WAM Bridge
+```
+
+The page shows all configurable settings, follows foobar2000's dark mode, and validates inputs using the same rules as the runtime. If an existing INI value is invalid, the page shows the effective fallback and enables Apply; saving normalizes that stale entry. Reset returns all settings to component defaults and removes redundant default-valued keys.
+
+## INI file location
+
+```text
+%LOCALAPPDATA%\WAMBridge\foobar.ini
+```
+
+You can edit the file directly at any time. Changes take effect on the next playback session.
+
+Minimal example:
+
+```ini
+[wambridge]
+device=M5
+volume=3
+```
+
+## Settings reference
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `device` | `M5` | WAM device alias (must match a saved profile) |
+| `format` | `flac` | Stream format: `flac`, `mp3`, or `wav` |
+| `volume` | `3` | Startup volume (raw step 0..30) |
+| `hardware_volume` | `0` | Set to `1` to route volume slider to speaker port 55001 |
+| `max_start_volume` | `30` | Volume ceiling at playback start |
+| `startup_silence` | `1500` | Milliseconds of silence before applying volume |
+| `buffer_extra` | `0` | Extra host buffer in milliseconds (0 gives ~1.9 s queue) |
+| `sleep_after_stop` | (none) | Seconds before sending standby after stop |
+| `diagnostics` | `0` | Set to `1` to print extra protocol diagnostics to foobar console |
+| `pcm_helper` | (bundled) | Override path to the PCM helper executable |
+
+### Volume steps
+
+The Shape M5 uses raw steps `0` to `30`. Model-aware percentage conversion is not implemented.
+
+| Step | Approximate level |
+| --- | --- |
+| 3 | ~10% |
+| 6 | ~20% |
+| 15 | ~50% |
+| 30 | Maximum |
+
+### Hardware volume routing
+
+With `hardware_volume=0` (default), the volume slider acts through the PCM pipeline and carries pipeline latency (approximately 1.9 seconds with `buffer_extra=0`). With `hardware_volume=1`, volume commands go directly to the speaker's port `55001` control API and respond in about one second.
+
+```ini
+[wambridge]
+hardware_volume=1
+```
+
+## Environment overrides
+
+`WAMBRIDGE_*` environment variables take precedence over INI values. The preferences page shows a notice when an active override is in effect. This is useful for per-session or CI-style overrides without touching the shared INI file.
+
+## Expected helper output
+
+When a playback session starts successfully, you should see these markers in the foobar console:
+
+```text
+WAMBRIDGE STREAM_REQUESTED
+WAMBRIDGE ENCODER_STARTED
+WAMBRIDGE READY
+WAMBRIDGE AUDIO_STARTED
+WAMBRIDGE PLAYING volume=3
+```
+
+If `AUDIO_STARTED` does not appear, check that the speaker is on and reachable, and that no other WAM Bridge session or `wambridge-events` listener is running concurrently. Running a second listener while a PCM session owns the control channel can prevent the M5 from responding to the player.

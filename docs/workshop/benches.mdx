@@ -1,0 +1,27 @@
+---
+title: "Benches: Codebench, Docbench & Streambench"
+sidebarTitle: "Benches"
+description: "Three browser-first tools in one npm workspace with separate Cloudflare runtimes."
+---
+
+The **Bench** family shares one npm workspace but keeps three separate applications and Cloudflare runtime boundaries.
+
+| Project | Purpose |
+| --- | --- |
+| **Codebench** | QR and barcode studio |
+| **Docbench** | local-first document and PDF studio |
+| **Streambench** | IPTV, radio, HLS, M3U and XMLTV workshop |
+
+## Develop
+
+```bash
+cd benches
+npm ci
+npm run check
+```
+
+Run one project with `npm run check:<name>` or `npm run build:<name>`.
+
+## Why one workspace?
+
+Dependency installation, the lockfile, and common CI entry points are shared. The applications still have independent `wrangler.jsonc` files and deployment boundaries, so changing one Bench normally rebuilds only that one. Changes to the shared workspace manifest or lockfile intentionally affect all three.

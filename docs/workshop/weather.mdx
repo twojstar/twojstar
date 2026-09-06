@@ -1,0 +1,43 @@
+---
+title: "Weather Feed: Kościelec & Chrzanów"
+sidebarTitle: "Weather Feed"
+description: "Multi-source weather, air quality and IMGW alerts exposed as change-oriented Atom feeds and JSON state."
+---
+
+Weather Feed is a Cloudflare Worker that combines several weather sources for **Kościelec / Chrzanów** and publishes meaningful changes instead of repeating nearly identical readings.
+
+## What it combines
+
+- three point-weather sources reduced to median + spread,
+- IMGW meteo alerts for powiat chrzanowski,
+- IMGW hydro alerts for małopolskie,
+- air quality,
+- a nearby IMGW station as reference context.
+
+## Endpoints
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /feed.atom` | all meaningful change entries |
+| `GET /warnings.atom` | IMGW warning-only feed |
+| `GET /state.json` | latest ensemble, warnings, air quality and station context |
+| `GET /healthz` | health/staleness check |
+| `GET /` | human-facing page |
+
+## Change-oriented output
+
+Current-condition entries are emitted for notable condition changes, temperature shifts of at least 3 °C, or precipitation start/stop. Forecast entries focus on meaningful maximum-temperature revisions and 50% rain-probability crossings.
+
+A partial IMGW outage preserves the last known warning state for the failed category rather than inventing a false all-clear.
+
+## Deploy
+
+```bash
+npm install
+wrangler secret put OPENWEATHER_KEY
+wrangler secret put VISUALCROSSING_KEY
+npm run check
+wrangler deploy
+```
+
+Open-Meteo and IMGW require no key. If keyed providers are absent, the Worker can continue in a degraded mode.

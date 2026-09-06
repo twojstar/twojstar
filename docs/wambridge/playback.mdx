@@ -1,0 +1,79 @@
+---
+title: "Play Audio Files and Streams with WAM Bridge"
+sidebarTitle: "Playback"
+description: "Stream local files, internet radio, and any FFmpeg-compatible source to your Samsung WAM speaker using the WAM Bridge CLI."
+---
+
+WAM Bridge streams audio by encoding it through FFmpeg, serving the result via a local HTTP endpoint, and starting playback on the speaker using Samsung's `SetUrlPlayback` API. All sources (local files, Ogg, HLS, HTTPS streams) are proxied through the local server; WAM Bridge never hands a remote URL directly to the speaker.
+
+## Basic playback
+
+```powershell
+# By saved device alias
+wambridge "D:\Music\track.opus" --device M5 --volume 3
+
+# By IP address
+wambridge "D:\Music\track.opus" --speaker 192.168.1.50
+
+# Internet stream
+wambridge "https://example.net/radio-stream" --speaker 192.168.1.50
+
+# Ogg file
+wambridge "D:\Music\track.ogg" --speaker 192.168.1.50
+```
+
+When exactly one speaker is discovered on the LAN, you can omit `--speaker` or `--device`.
+
+## Probe a speaker before playing
+
+```powershell
+wambridge --speaker 192.168.1.50 --probe
+wambridge --device M5 --probe
+```
+
+`--probe` checks connectivity and prints the speaker's current status without starting playback.
+
+## Output format
+
+WAM Bridge defaults to FLAC encoding. Use MP3 if FLAC is unstable on a particular firmware revision:
+
+```powershell
+wambridge "D:\Music\track.opus" --speaker 192.168.1.50 --format mp3
+```
+
+| Format | Notes |
+| --- | --- |
+| `flac` | Default. Validated on physical M5 (SPK-WAM550). |
+| `mp3` | Fallback for firmware that has trouble with FLAC. |
+| `wav` | Validated in testing; larger pipe throughput. |
+
+## Volume
+
+The Shape M5 uses raw API volume steps `0` to `30`. Model-aware percentage conversion is not yet implemented, so treat all volume arguments as raw steps.
+
+```powershell
+# Set playback volume
+wambridge "D:\Music\track.opus" --device M5 --volume 3
+
+# Set only the startup ceiling, preserve quieter current volume
+wambridge "D:\Music\track.opus" --device M5 --max-start-volume 3
+```
+
+<Warning>
+  Old WAM firmware can jump to a high volume when switching sources. WAM Bridge mutes the speaker, starts the stream with 1.5 seconds of silence, and applies your volume after decoding begins. Always set `--volume` to a cautious value (3 is approximately 10%).
+</Warning>
+
+## How the local stream works
+
+- The stream uses HTTP/1.0 without chunked transfer for compatibility with old firmware.
+- The URL contains a random session token and exists only for the duration of the command.
+- `SetUrlPlayback` may freeze certain firmware revisions if the stream body is not recognized as audio. WAM Bridge exposes only FFmpeg output and returns `404` for all other paths.
+- Do not expose the bridge HTTP port or port `55001` to the internet.
+
+## Latency
+
+Pause, stop, and skip carry PCM pipeline latency because they act through the PCM path. The host buffer with `buffer_extra=0` is approximately 1.9 seconds. Setting `hardware_volume=1` routes volume control directly to the speaker instead, which responds in about one second.
+
+<Tip>
+  If you need more responsive volume control, enable `hardware_volume=1` in your configuration. See the foobar2000 plugin guide for the full configuration reference.
+</Tip>

@@ -1,0 +1,98 @@
+---
+title: "Get Started with Autka: Build from Source"
+sidebarTitle: "Quickstart"
+description: "Build Autka from source with JDK 17 and Android Studio. Run debug builds with Gradle and optionally start the local Cloudflare backend for full-stack development."
+---
+
+Get Autka running on your Android device or emulator in minutes. You need JDK 17, a recent Android Studio, and optionally Node.js if you want to run the local backend alongside the app.
+
+<Steps>
+  <Step title="Clone the repository">
+    Download the Autka source code from GitHub:
+
+    ```bash
+    git clone https://github.com/twojstar/Autka.git
+    cd Autka
+    ```
+  </Step>
+  <Step title="Install JDK 17">
+    Autka requires JDK 17. Verify your installation:
+
+    ```bash
+    java -version
+    ```
+
+    If you see a version other than 17, install JDK 17 through Android Studio (Settings/Preferences > Build, Execution, Deployment > Build Tools > Gradle > Gradle JDK) or your system package manager.
+  </Step>
+  <Step title="Open in Android Studio">
+    Launch Android Studio and select **Open** to import the `Autka` project folder. Android Studio will sync Gradle and download dependencies automatically. This may take several minutes on first open.
+  </Step>
+  <Step title="Build the debug APK">
+    Assemble a debug build from the terminal or Android Studio's built-in terminal:
+
+    ```bash
+    ./gradlew assembleDebug
+    ```
+
+    The APK will be placed in `app/build/outputs/apk/debug/`.
+  </Step>
+  <Step title="Install on device or emulator">
+    Install the debug build directly to a connected device or running emulator:
+
+    ```bash
+    ./gradlew installDebug
+    ```
+
+    Alternatively, drag the APK onto an emulator window or use `adb install`.
+  </Step>
+  <Step title="(Optional) Start the local backend">
+    If you want the app to talk to a local backend instead of production, navigate to the `backend` folder and start the Cloudflare Worker locally:
+
+    ```bash
+    cd backend
+    npm install
+    npm run db:migrate:local
+    npm run dev
+    ```
+
+    The Android debug build points at `http://10.0.2.2:8787/` (the emulator loopback to your host machine running `wrangler dev`).
+  </Step>
+</Steps>
+
+## Verify the build
+
+After installation, open Autka on your device. You should see the main listings screen. If you started the local backend, verify connectivity by checking the source health screen or performing a search.
+
+<Tip>
+  Use `./gradlew connectedCheck` to run instrumented tests on a connected device or emulator.
+</Tip>
+
+## Troubleshooting
+
+<Accordion title="Gradle sync fails with JDK version error">
+  Ensure Android Studio is using JDK 17 for the project. Go to **Settings > Build, Execution, Deployment > Build Tools > Gradle > Gradle JDK** and select JDK 17.
+</Accordion>
+
+<Accordion title="Backend not reachable from emulator">
+  Confirm the backend is running with `npm run dev` and that the Android debug build uses the emulator loopback. The debug build is preconfigured to `http://10.0.2.2:8787/`.
+</Accordion>
+
+<Accordion title="InstallDebug fails with device not found">
+  Ensure your device is connected with USB debugging enabled, or that an emulator is running. Run `adb devices` to verify detection.
+</Accordion>
+
+## Next steps
+
+<CardGroup>
+  <Card title="Search & Filter" icon="magnifying-glass" href="/autka/search-and-filters">
+    Learn how to search and filter car listings across sources.
+  </Card>
+
+  <Card title="Offline Mode" icon="wifi-off" href="/autka/offline-mode">
+    Understand how Autka caches listings for offline use.
+  </Card>
+
+  <Card title="API Reference" icon="code" href="/autka/api-reference">
+    Explore the backend API endpoints and data models.
+  </Card>
+</CardGroup>

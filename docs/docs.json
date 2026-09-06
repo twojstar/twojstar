@@ -1,0 +1,188 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "luma",
+  "name": "twojstar",
+  "colors": {
+    "primary": "#6366f1",
+    "light": "#818cf8",
+    "dark": "#4f46e5"
+  },
+  "background": {
+    "decoration": "gradient"
+  },
+  "navbar": {
+    "links": []
+  },
+  "seo": {
+    "indexing": "all"
+  },
+  "fonts": {
+    "body": {
+      "family": "Lato"
+    }
+  },
+  "contextual": {
+    "options": [
+      "download-pdf",
+      "mcp"
+    ],
+    "display": "header"
+  },
+  "thumbnails": {
+    "fonts": {
+      "family": "Inter"
+    }
+  },
+  "styling": {
+    "latex": false,
+    "codeblocks": "system"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Autka",
+        "icon": "car",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "autka/index",
+              "autka/quickstart"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "autka/search-and-filters",
+              "autka/import-calculator",
+              "autka/vin-decoder",
+              "autka/offline-mode"
+            ]
+          },
+          {
+            "group": "Backend & API",
+            "pages": [
+              "autka/api-reference",
+              "autka/data-sources"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "LlmBench",
+        "icon": "bot",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "llmbench/index",
+              "llmbench/quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "llmbench/providers",
+              "llmbench/webview-layer",
+              "llmbench/profiles-and-instructions"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "llmbench/architecture",
+              "llmbench/roadmap"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "WAM Bridge",
+        "icon": "speaker",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "wambridge/index",
+              "wambridge/quickstart"
+            ]
+          },
+          {
+            "group": "CLI Reference",
+            "pages": [
+              "wambridge/discovery",
+              "wambridge/playback",
+              "wambridge/radio-stations",
+              "wambridge/remote-control"
+            ]
+          },
+          {
+            "group": "Foobar2000 Plugin",
+            "pages": [
+              "wambridge/foobar-install",
+              "wambridge/foobar-configure"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Kanarek",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "kanarek/index",
+              "kanarek/quickstart"
+            ]
+          },
+          {
+            "group": "Under the Hood",
+            "pages": [
+              "kanarek/architecture",
+              "kanarek/worker"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Feedseek",
+        "groups": [
+          {
+            "group": "Feedseek",
+            "pages": [
+              "feedseek/index",
+              "feedseek/development"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "TVPI",
+        "groups": [
+          {
+            "group": "TVPI",
+            "pages": [
+              "tvpi/index"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Workshop",
+        "groups": [
+          {
+            "group": "Workshop",
+            "pages": [
+              "workshop/index",
+              "workshop/benches",
+              "workshop/feedboard",
+              "workshop/weather",
+              "workshop/xiaomi-adb-tools",
+              "workshop/paintdotnet-ico"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

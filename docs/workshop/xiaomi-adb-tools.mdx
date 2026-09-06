@@ -1,0 +1,42 @@
+---
+title: "Xiaomi ADB/Fastboot Tools"
+sidebarTitle: "Xiaomi ADB Tools"
+description: "A maintained JavaFX front-end for ADB and Fastboot with current builds and explicit package-vetting safety signals."
+---
+
+Xiaomi ADB/Fastboot Tools is a maintained JavaFX desktop front-end for `adb` and `fastboot`.
+
+## Main capabilities
+
+- list, uninstall, disable and restore Android packages,
+- browse device storage,
+- change DPI and resolution,
+- inspect device properties,
+- flash partitions and reboot into ADB/Fastboot modes,
+- use `adb` / `fastboot` from `PATH` or download platform-tools when missing.
+
+## Safety: watch the Vetted column
+
+Modern Android and HyperOS devices report far more packages than the old upstream allowlist knew about. The app therefore shows **all** packages, while the **Vetted** column tells you whether a package exists in the curated list.
+
+<Warning>
+  `Vetted: no` means nobody has vouched for that package. Removing the wrong system package can break core phone functionality. Research it before touching it.
+</Warning>
+
+## Build
+
+Requires JDK 21 or newer:
+
+```bash
+./gradlew platformJars
+```
+
+The build produces host-specific self-contained JARs for Windows x64, Linux x64/arm64 and macOS x64/arm64.
+
+## Device setup
+
+Enable Developer Options and USB debugging, connect the phone, then approve the computer's ADB authorization prompt. Fastboot mode can be entered with the phone's hardware keys or from the app when an ADB connection is available.
+
+<Note>
+  Most functions do not require root or an unlocked bootloader. Flashing/wiping operations are a different category and may require an unlocked bootloader.
+</Note>

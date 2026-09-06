@@ -1,0 +1,35 @@
+---
+title: "Feedboard: Windows 11 Feed Widget"
+sidebarTitle: "Feedboard"
+description: "Local-first RSS/Atom/JSON Feed support for the Windows 11 Widgets Board, with WinUI settings and OPML."
+---
+
+Feedboard is a local-first RSS/Atom/JSON Feed reader for the Windows 11 Widgets Board.
+
+## What it does
+
+- RSS 2.0, Atom, RSS 1.0/RDF and JSON Feed 1.x
+- small, medium and large widget layouts
+- article thumbnails and discovered site/feed icons
+- per-widget feed selection and read state
+- WinUI settings app and OPML import/export
+- local cache, conditional HTTP requests, backoff and duplicate suppression
+- no account and no backend
+
+## Install
+
+Use the current Feedboard bundle from the shared `twojstar/twojstar` **Latest** release. The bundle contains the package and installer.
+
+<Note>
+  Development packages use local signing. Store distribution needs a stable publisher identity and trusted signing path, so a raw development MSIX is not the same experience as a normal Store install.
+</Note>
+
+## Data and architecture
+
+Feed definitions live under `%LOCALAPPDATA%\\Feedboard\\feeds.json`.
+
+```text
+Feedboard.Core            models, storage, discovery, OPML
+Feedboard.Settings        WinUI settings app
+Feedboard.WidgetProvider  fetch/cache/parser + widget lifecycle + Adaptive Cards
+```

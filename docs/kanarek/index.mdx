@@ -1,0 +1,52 @@
+---
+title: "Kanarek: News, Radio & IPTV on Android"
+sidebarTitle: "Introduction"
+description: "Kanarek combines RSS/Atom reading, home-screen widgets, radio/IPTV playback, and an optional Cloudflare backend in one Android app."
+---
+
+Kanarek is an Android app with two main surfaces: a **news reader** and a **radio/IPTV player**. It also ships two launcher widgets, one for headlines and one for playback controls.
+
+<CardGroup cols={2}>
+  <Card title="News" icon="newspaper">
+    RSS 2.0 and Atom sources, OPML import/export, search, saved/read state, optional clean text, notifications, and a resizable slideshow widget.
+  </Card>
+
+  <Card title="Radio & TV" icon="radio">
+    M3U/M3U8 playlists, Radio Browser discovery, favorites, metadata, playback controls, IPTV groups, and Google Cast in the play flavor.
+  </Card>
+</CardGroup>
+
+## Backend is optional
+
+Regular feeds can be fetched and parsed **on-device**. The Cloudflare Worker adds shared caching, feed discovery, HTML-to-Atom scraping, clean article extraction, station search, logo lookup, and optional synchronized state.
+
+<Note>
+  Leaving **Backend URL** empty does not disable ordinary RSS/Atom reading. The Worker is an extension layer, not a hard dependency.
+</Note>
+
+## Install
+
+Download either APK flavor from the repository releases:
+
+- **play** includes Google Cast support,
+- **foss** is Google-services-free and intended for FOSS/F-Droid environments.
+
+The minimum supported system is Android 8.0 (API 26).
+
+## First run
+
+<Steps>
+  <Step title="Choose a surface">
+    Open Kanarek and enter News or Radio & TV.
+  </Step>
+  <Step title="Add content">
+    Add RSS/Atom feeds, import OPML, search radio stations, or import an M3U/M3U8 playlist.
+  </Step>
+  <Step title="Add a widget">
+    Long-press the Android home screen, open Widgets, and add the Kanarek news or player widget.
+  </Step>
+</Steps>
+
+<Card title="Repository" icon="github" href="https://github.com/twojstar/kanarek">
+  Source, releases, issues, and project history.
+</Card>

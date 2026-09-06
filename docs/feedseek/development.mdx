@@ -1,0 +1,49 @@
+---
+title: "Feedseek Development"
+sidebarTitle: "Development"
+description: "Run Feedseek locally, validate outputs, and add new feed generators without duplicating pipeline logic."
+---
+
+## Local workflow
+
+```bash
+make install
+make feeds
+make validate
+```
+
+For the exact repository checks:
+
+```bash
+uv sync --locked
+uv run --locked python -m unittest discover -s tests
+uv run --locked feed_generators/validate_feeds.py
+```
+
+## Add a feed
+
+<Steps>
+  <Step title="Write the generator">
+    Create `feed_generators/<name>.py` and publish through the shared writer.
+  </Step>
+  <Step title="Register it">
+    Add the source to `feeds.yaml`.
+  </Step>
+  <Step title="Reuse shared helpers">
+    Use the maintained HTTP, normalization, cache, enrichment and feed helpers rather than cloning them.
+  </Step>
+  <Step title="Publish it">
+    Add the feed to the public registry/site when appropriate.
+  </Step>
+  <Step title="Validate">
+    Run tests and feed validation before merging.
+  </Step>
+</Steps>
+
+## Quality contract
+
+Every enabled feed should produce non-empty parseable XML and a valid JSON Feed 1.1 sidecar with the same item count. Rich metadata such as authors, images or categories is adaptive, not fabricated merely to satisfy a schema.
+
+<Tip>
+  A weather endpoint, changelog and newsroom do not need identical metadata. Preserve what upstream can truthfully provide, normalize it, and avoid inventing the rest.
+</Tip>

@@ -1,0 +1,43 @@
+---
+title: "Feedseek: Better Feeds, Automatically"
+sidebarTitle: "Introduction"
+description: "Feedseek builds, repairs, normalizes, enriches, and republishes RSS/Atom feeds with JSON Feed sidecars and a public reader."
+---
+
+Feedseek turns native feeds, public APIs, and selected web pages into stable, enriched feeds that are easier to consume.
+
+<CardGroup cols={2}>
+  <Card title="Feed registry" icon="list">
+    A maintained source registry drives generation rather than scattering source logic through workflows.
+  </Card>
+
+  <Card title="Dual output" icon="rss">
+    XML feeds ship alongside JSON Feed 1.1 sidecars with matching item counts.
+  </Card>
+
+  <Card title="Failure isolation" icon="shield">
+    One broken source does not block unrelated feeds, and failed refreshes do not replace the last good output with emptiness.
+  </Card>
+
+  <Card title="Public reader" icon="book-open">
+    GitHub Pages exposes the generated feeds, registry, and a lightweight browser reader.
+  </Card>
+</CardGroup>
+
+## How the pipeline works
+
+```text
+feeds.yaml
+   ↓
+fetch → parse → normalize → enrich → deduplicate
+   ↓
+feeds/*.xml + *.json
+   ↓
+GitHub Pages + reader
+```
+
+Feedseek prefers reliable native RSS/Atom when available, but treats it as upstream material rather than sacred final output. Useful metadata can be repaired or enriched when the source gives enough evidence.
+
+<Card title="Open Feedseek" icon="arrow-up-right-from-square" href="https://trvny.github.io/feedseek/">
+  Browse published feeds and the reader.
+</Card>

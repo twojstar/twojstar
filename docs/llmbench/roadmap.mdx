@@ -1,0 +1,68 @@
+---
+title: "LlmBench Roadmap and Development Plans"
+description: "Review what LlmBench has already shipped and what is planned next, including WebView improvements, new provider adapters, and provider compatibility documentation."
+sidebarTitle: "Roadmap"
+---
+
+LlmBench is an early prototype evolving quickly. This page tracks what has been completed and what is planned for upcoming releases so you can follow the project's direction and contribute effectively.
+
+## Completed
+
+<CardGroup>
+  <Card title="Repository cleanup" icon="check">
+    Removed generated and build-machine files from version control.
+  </Card>
+
+  <Card title="App normalization" icon="check">
+    Normalized app name, namespace, and application ID to LlmBench.
+  </Card>
+
+  <Card title="WebView security" icon="check">
+    Hardened WebView security while preserving provider login compatibility.
+  </Card>
+
+  <Card title="KMP migration" icon="check">
+    Migrated portable domain and provider logic to the KMP `shared` module.
+  </Card>
+
+  <Card title="File uploads" icon="check">
+    Implemented reliable provider file uploads through the Android platform file picker.
+  </Card>
+
+  <Card title="CI checks" icon="check">
+    Added continuous integration for build and lint checks.
+  </Card>
+</CardGroup>
+
+## Planned
+
+<Steps>
+  <Step title="WebView LRU and memory-pressure handling">
+    Add an LRU pool for provider WebViews with proper pause and eviction under memory pressure, so long chats stay responsive without leaking resources.
+  </Step>
+  <Step title="Gemini AI Studio browser flow">
+    Integrate Gemini AI Studio through a browser-backed platform flow rather than embedded OAuth, ensuring secure access.
+  </Step>
+  <Step title="AIHubMix and OpenRouter adapters">
+    Build free-provider adapters for OpenRouter-compatible services and AIHubMix, placing provider-specific logic behind clean adapter interfaces.
+  </Step>
+  <Step title="Provider-tweak/userscript interface">
+    Replace hard-coded WebView hacks with a public provider-tweak and userscript interface so the community can maintain mobile adaptations.
+  </Step>
+  <Step title="Provider compatibility documentation">
+    Document which providers work fully, which work partially, and which block embedded login so users know what to expect.
+  </Step>
+</Steps>
+
+## How to contribute
+
+Because LlmBench is an open-source project under the ISC license, you can contribute by:
+
+- Testing providers and reporting login or layout issues
+- Improving the shared KMP core for future desktop and iOS clients
+- Writing provider adapters for new free endpoints
+- Contributing to the provider-tweak/userscript interface
+
+<Tip>
+  Check the repository's issue tracker and pull requests for active discussions and tasks ready for contributions.
+</Tip>
