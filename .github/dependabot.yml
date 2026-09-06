@@ -43,6 +43,8 @@ updates:
       - "/feedboard/src/Feedboard.WidgetProvider"
       - "/paintdotnet-ico"
       - "/paintdotnet-ico/tests/CodecSmoke"
+      - "/paintdotnet-ai"
+      - "/paintdotnet-ai/tests/ModelSmoke"
     schedule:
       interval: "weekly"
       time: "21:37"

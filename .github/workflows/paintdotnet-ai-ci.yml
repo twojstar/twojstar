@@ -1,0 +1,131 @@
+---
+name: Paint.NET AI CI
+
+on: # yamllint disable-line rule:truthy
+  push:
+    branches: [main]
+    paths:
+      - paintdotnet-ai/**
+      - .github/workflows/paintdotnet-ai-ci.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - paintdotnet-ai/**
+      - .github/workflows/paintdotnet-ai-ci.yml
+  workflow_dispatch:
+
+concurrency:
+  group: paintdotnet-ai-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+env:
+  PLUGIN_DIR: paintdotnet-ai
+  PDN_51_URL: https://github.com/paintdotnet/release/releases/download/v5.1.12/paint.net.5.1.12.portable.x64.zip
+  PDN_51_SHA256: d5ae7043f2fb9d365b48dfe243a2aca1c74924de99b04b6445916c95354aefa3
+  MODEL_URL: https://huggingface.co/CoderViking/realesr-general-x4v3-onnx/resolve/main/realesr-general-x4v3.onnx?download=true
+  MODEL_SHA256: 1940a93ee08283a0a7286183186357b1688fe9fa8ede74604b424586aaddf112
+
+jobs:
+  build:
+    name: Build, smoke-test and package
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Download verified Paint.NET 5.1 SDK binaries
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'paintdotnet-5.1.zip'
+          Invoke-WebRequest $env:PDN_51_URL -OutFile $zip
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:PDN_51_SHA256) {
+            throw 'Paint.NET archive checksum mismatch.'
+          }
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP/pdn51"
+          $probe = Get-ChildItem "$env:RUNNER_TEMP/pdn51" -Recurse -Filter PaintDotNet.Data.dll | Select-Object -First 1
+          if (-not $probe) { throw 'Paint.NET reference assemblies not found.' }
+          "PDN_51_DIR=$($probe.Directory.FullName)" >> $env:GITHUB_ENV
+
+      - name: Build plugin
+        working-directory: ${{ env.PLUGIN_DIR }}
+        shell: pwsh
+        run: dotnet build .\PaintDotNetAi.csproj -c Release -p:PaintDotNetDir="$env:PDN_51_DIR" --nologo
+
+      - name: Download and verify Real-ESRGAN model
+        working-directory: ${{ env.PLUGIN_DIR }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .\model | Out-Null
+          $model = Join-Path $PWD 'model/realesr-general-x4v3.onnx'
+          Invoke-WebRequest $env:MODEL_URL -OutFile $model
+          if ((Get-FileHash $model -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:MODEL_SHA256) {
+            throw 'Real-ESRGAN model checksum mismatch.'
+          }
+
+      - name: Run model smoke test
+        working-directory: ${{ env.PLUGIN_DIR }}
+        shell: pwsh
+        run: dotnet run --project .\tests\ModelSmoke\ModelSmoke.csproj -c Release --nologo -- .\model\realesr-general-x4v3.onnx
+
+      - name: Package release asset
+        working-directory: ${{ env.PLUGIN_DIR }}
+        shell: pwsh
+        run: |
+          $build = Join-Path $PWD 'bin/Release/net9.0-windows'
+          $dist = Join-Path $PWD 'dist'
+          $package = Join-Path $dist 'Effects/Travny.PaintDotNet.AI'
+          New-Item -ItemType Directory -Force -Path $package | Out-Null
+
+          Copy-Item "$build/Travny.PaintDotNet.AI.dll" $package
+          Get-ChildItem $build -Filter 'Microsoft.ML.OnnxRuntime*.dll' | Copy-Item -Destination $package
+
+          $native = Get-ChildItem $build -Recurse -Filter onnxruntime.dll |
+            Where-Object { $_.FullName -match 'win-x64' } |
+            Select-Object -First 1
+          if (-not $native) { throw 'Windows x64 ONNX Runtime native library not found.' }
+          Copy-Item $native.FullName "$package/onnxruntime.dll"
+
+          $providerShared = Get-ChildItem $native.Directory.FullName -Filter onnxruntime_providers_shared.dll -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if ($providerShared) { Copy-Item $providerShared.FullName $package }
+
+          New-Item -ItemType Directory -Force -Path "$package/model" | Out-Null
+          Copy-Item .\model\realesr-general-x4v3.onnx "$package/model/"
+          Copy-Item .\licenses "$package/licenses" -Recurse
+          Copy-Item .\Install.bat "$dist/Install.bat"
+
+          if (-not (Test-Path "$package/Microsoft.ML.OnnxRuntime.dll")) { throw 'Managed ONNX Runtime assembly missing.' }
+          if (-not (Test-Path "$package/model/realesr-general-x4v3.onnx")) { throw 'Model missing from package.' }
+
+          @'
+          Paint.NET AI Restore
+
+          Run Install.bat to install the complete Effects\Travny.PaintDotNet.AI folder per-user.
+          Restart Paint.NET after installation.
+          '@ | Set-Content "$dist/INSTALL.txt"
+
+          Compress-Archive -Path "$dist/Effects", "$dist/Install.bat", "$dist/INSTALL.txt" -DestinationPath "$dist/paintdotnet-ai.zip" -CompressionLevel Optimal
+          (Get-FileHash "$dist/paintdotnet-ai.zip" -Algorithm SHA256).Hash.ToLowerInvariant() + '  paintdotnet-ai.zip' |
+            Set-Content "$dist/SHA256SUMS"
+
+      - name: Upload release package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: paintdotnet-ai-release
+          path: |
+            paintdotnet-ai/dist/paintdotnet-ai.zip
+            paintdotnet-ai/dist/SHA256SUMS
+          retention-days: 7

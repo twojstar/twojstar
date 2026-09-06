@@ -24,6 +24,7 @@
 | 📰 **Feedboard** | [`feedboard/`](feedboard/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/feedboard.zip) | Windows 11 feed widget/provider with RSS/Atom/JSON Feed support and a small settings app. |
 | 📱 **Xiaomi ADB Tools** | [`xiaomi-adb-tools/`](xiaomi-adb-tools/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/xiaomi-adb-tools.zip) | Maintained desktop ADB/Fastboot utility with platform-specific JavaFX builds. |
 | 🖼️ **Paint.NET ICO FileType** | [`paintdotnet-ico/`](paintdotnet-ico/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/paintdotnet-ico.zip) | ICO import/export plugin for Paint.NET 5.1 and 5.2+, shipped as verified dual adapters. |
+| ✨ **Paint.NET AI** | [`paintdotnet-ai/`](paintdotnet-ai/) | Local restoration effects for Paint.NET; first effect: Real-ESRGAN AI Restore. |
 
 ## 📦 One rolling release
 
@@ -41,7 +42,7 @@ The publisher assembles a complete draft first and moves the GitHub `Latest` poi
 
 ## ⚙️ Maintenance
 
-- **Dependabot** covers GitHub Actions, the Bench npm workspace, the Weather npm project, Xiaomi Gradle and Feedboard NuGet projects.
+- **Dependabot** covers GitHub Actions, the Bench npm workspace, the Weather npm project, Xiaomi Gradle and Feedboard/Paint.NET NuGet projects.
 - **CodeQL** uses GitHub default setup rather than a duplicate advanced workflow.
 - Project-specific CI remains path-filtered so unrelated workshop changes do not rebuild everything.
 - Cloudflare Worker builds for Weather and the three Benches read directly from this repository's `main` branch.
