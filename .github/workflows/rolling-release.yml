@@ -8,6 +8,7 @@ on: # yamllint disable-line rule:truthy
       - Feedboard CI
       - Xiaomi ADB Tools CI
       - Paint.NET ICO CI
+      - Paint.NET AI CI
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -126,7 +127,7 @@ jobs:
                  /<!-- rolling-provenance-end -->/ { capture=0 } \
                  capture' work/previous-body.md > "$previous_provenance"
             fi
-            for bundle in benches-portable.zip feedboard.zip xiaomi-adb-tools.zip paintdotnet-ico.zip; do
+            for bundle in benches-portable.zip feedboard.zip xiaomi-adb-tools.zip paintdotnet-ico.zip paintdotnet-ai.zip; do
               gh release download "$previous_tag" --repo "$GH_REPO" --pattern "$bundle" --dir assets >/dev/null 2>&1 || true
             done
           else
@@ -258,10 +259,20 @@ jobs:
             cp work/paintdotnet-ico/paintdotnet-ico.zip assets/paintdotnet-ico.zip
           }
 
+          bundle_paintdotnet_ai() {
+            local run_id="$1"
+            rm -rf work/paintdotnet-ai
+            mkdir -p work/paintdotnet-ai
+            gh run download "$run_id" --repo "$GH_REPO" --name paintdotnet-ai-release --dir work/paintdotnet-ai
+            test -s work/paintdotnet-ai/paintdotnet-ai.zip
+            cp work/paintdotnet-ai/paintdotnet-ai.zip assets/paintdotnet-ai.zip
+          }
+
           resolve_product Benches benches-release.yml benches-portable-release benches-portable.zip bundle_benches
           resolve_product Feedboard feedboard-ci.yml feedboard-msix-x64 feedboard.zip bundle_feedboard
           resolve_product Xiaomi-ADB-Tools xiaomi-adb-tools-ci.yml XiaomiADBFastbootTools xiaomi-adb-tools.zip bundle_xiaomi
           resolve_product Paint.NET-ICO paintdotnet-ico-ci.yml paintdotnet-ico-release paintdotnet-ico.zip bundle_paintdotnet
+          resolve_product Paint.NET-AI paintdotnet-ai-ci.yml paintdotnet-ai-release paintdotnet-ai.zip bundle_paintdotnet_ai
 
           if [ "$updated" -eq 0 ] && [ "$previous_format" = compact-v2 ]; then
             echo "No product source run, attempt or public bundle format changed."
@@ -269,13 +280,13 @@ jobs:
             exit 0
           fi
 
-          for file in benches-portable.zip feedboard.zip xiaomi-adb-tools.zip paintdotnet-ico.zip; do
+          for file in benches-portable.zip feedboard.zip xiaomi-adb-tools.zip paintdotnet-ico.zip paintdotnet-ai.zip; do
             test -s "assets/$file"
           done
 
           (
             cd assets
-            sha256sum benches-portable.zip feedboard.zip xiaomi-adb-tools.zip paintdotnet-ico.zip > SHA256SUMS
+            sha256sum benches-portable.zip feedboard.zip xiaomi-adb-tools.zip paintdotnet-ico.zip paintdotnet-ai.zip > SHA256SUMS
           )
           echo "publish=true" >> "$GITHUB_OUTPUT"
 
@@ -297,7 +308,8 @@ jobs:
             echo "- \`feedboard.zip\` - Feedboard sideload package, certificate, verified installer and dependencies"
             echo "- \`xiaomi-adb-tools.zip\` - all five Xiaomi ADB Tools platform JARs"
             echo "- \`paintdotnet-ico.zip\` - Paint.NET ICO plugin package"
-            echo "- \`SHA256SUMS\` - checksums for the four product bundles"
+            echo "- \`paintdotnet-ai.zip\` - Paint.NET AI Restore plugin package"
+            echo "- \`SHA256SUMS\` - checksums for the five product bundles"
             echo
             echo "### Feedboard"
             echo "Extract \`feedboard.zip\` and double-click \`Install-Feedboard.cmd\`."
@@ -325,7 +337,7 @@ jobs:
             --target main --title "twojstar · rolling" --notes-file release-notes.md
           gh release upload "$tag" --repo "$GH_REPO" \
             assets/benches-portable.zip assets/feedboard.zip assets/xiaomi-adb-tools.zip \
-            assets/paintdotnet-ico.zip assets/SHA256SUMS
+            assets/paintdotnet-ico.zip assets/paintdotnet-ai.zip assets/SHA256SUMS
           gh release edit "$tag" --repo "$GH_REPO" --draft=false --latest
           published=1
           trap - ERR INT TERM
