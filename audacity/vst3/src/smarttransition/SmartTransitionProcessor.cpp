@@ -7,6 +7,33 @@
 #include <array>
 
 namespace Travny::Vst3 {
+namespace {
+
+template <typename Sample>
+[[nodiscard]] bool hasWritableOutputBuffers(Sample** output, Steinberg::int32 channels) noexcept
+{
+    if (output == nullptr)
+    {
+        return false;
+    }
+
+    for (Steinberg::int32 channel = 0; channel < channels; ++channel)
+    {
+        if (output[channel] == nullptr)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+[[nodiscard]] Steinberg::uint64 channelMask(Steinberg::int32 channels) noexcept
+{
+    return (Steinberg::uint64{1} << static_cast<Steinberg::uint32>(channels)) - 1;
+}
+
+} // namespace
 
 SmartTransitionProcessor::SmartTransitionProcessor()
 {
@@ -120,11 +147,7 @@ bool SmartTransitionProcessor::processBlock(
         for (Steinberg::int32 channel = 0; channel < channelCount; ++channel)
         {
             const auto value = static_cast<Sample>(outputFrame[static_cast<std::size_t>(channel)]);
-            auto* channelOutput = output != nullptr ? output[channel] : nullptr;
-            if (channelOutput != nullptr)
-            {
-                channelOutput[sample] = value;
-            }
+            output[channel][sample] = value;
             allSilent = allSilent && value == static_cast<Sample>(0);
         }
     }
@@ -145,22 +168,37 @@ Steinberg::tresult PLUGIN_API SmartTransitionProcessor::process(Steinberg::Vst::
         return Steinberg::kResultFalse;
     }
 
+    const auto silenceMask = channelMask(channels);
     const auto inputSilenceFlags = data.inputs[0].silenceFlags;
     bool allSilent = false;
     if (data.symbolicSampleSize == Steinberg::Vst::kSample32)
     {
+        auto** output = data.outputs[0].channelBuffers32;
+        if (!hasWritableOutputBuffers(output, channels))
+        {
+            data.outputs[0].silenceFlags = silenceMask;
+            return Steinberg::kResultOk;
+        }
+
         allSilent = processBlock(
             data.inputs[0].channelBuffers32,
-            data.outputs[0].channelBuffers32,
+            output,
             channels,
             data.numSamples,
             inputSilenceFlags);
     }
     else if (data.symbolicSampleSize == Steinberg::Vst::kSample64)
     {
+        auto** output = data.outputs[0].channelBuffers64;
+        if (!hasWritableOutputBuffers(output, channels))
+        {
+            data.outputs[0].silenceFlags = silenceMask;
+            return Steinberg::kResultOk;
+        }
+
         allSilent = processBlock(
             data.inputs[0].channelBuffers64,
-            data.outputs[0].channelBuffers64,
+            output,
             channels,
             data.numSamples,
             inputSilenceFlags);
@@ -170,9 +208,7 @@ Steinberg::tresult PLUGIN_API SmartTransitionProcessor::process(Steinberg::Vst::
         return Steinberg::kResultFalse;
     }
 
-    data.outputs[0].silenceFlags = allSilent
-        ? ((Steinberg::uint64{1} << static_cast<Steinberg::uint32>(channels)) - 1)
-        : 0;
+    data.outputs[0].silenceFlags = allSilent ? silenceMask : 0;
     return Steinberg::kResultOk;
 }
 
