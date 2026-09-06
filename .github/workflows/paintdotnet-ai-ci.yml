@@ -5,12 +5,12 @@ on: # yamllint disable-line rule:truthy
   push:
     branches: [main]
     paths:
-      - paintdotnet-ai/**
+      - paintdotnet/ai/**
       - .github/workflows/paintdotnet-ai-ci.yml
   pull_request:
     branches: [main]
     paths:
-      - paintdotnet-ai/**
+      - paintdotnet/ai/**
       - .github/workflows/paintdotnet-ai-ci.yml
   workflow_dispatch:
 
@@ -21,7 +21,7 @@ concurrency:
 permissions: {}
 
 env:
-  PLUGIN_DIR: paintdotnet-ai
+  PLUGIN_DIR: paintdotnet/ai
   PDN_51_URL: https://github.com/paintdotnet/release/releases/download/v5.1.12/paint.net.5.1.12.portable.x64.zip
   PDN_51_SHA256: d5ae7043f2fb9d365b48dfe243a2aca1c74924de99b04b6445916c95354aefa3
   MODEL_URL: https://huggingface.co/CoderViking/realesr-general-x4v3-onnx/resolve/main/realesr-general-x4v3.onnx?download=true
@@ -126,6 +126,6 @@ jobs:
         with:
           name: paintdotnet-ai-release
           path: |
-            paintdotnet-ai/dist/paintdotnet-ai.zip
-            paintdotnet-ai/dist/SHA256SUMS
+            paintdotnet/ai/dist/paintdotnet-ai.zip
+            paintdotnet/ai/dist/SHA256SUMS
           retention-days: 7

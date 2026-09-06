@@ -23,8 +23,7 @@
 | 🌦️ **Weather Feed** | [`weather-feed/`](weather-feed/) · [weather.trfny.com](https://weather.trfny.com) | Multi-source weather, air-quality and IMGW alerts for Kościelec/Chrzanów, exposed as web, JSON and Atom. |
 | 📰 **Feedboard** | [`feedboard/`](feedboard/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/feedboard.zip) | Windows 11 feed widget/provider with RSS/Atom/JSON Feed support and a small settings app. |
 | 📱 **Xiaomi ADB Tools** | [`xiaomi-adb-tools/`](xiaomi-adb-tools/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/xiaomi-adb-tools.zip) | Maintained desktop ADB/Fastboot utility with platform-specific JavaFX builds. |
-| 🖼️ **Paint.NET ICO FileType** | [`paintdotnet-ico/`](paintdotnet-ico/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/paintdotnet-ico.zip) | ICO import/export plugin for Paint.NET 5.1 and 5.2+, shipped as verified dual adapters. |
-| ✨ **Paint.NET AI** | [`paintdotnet-ai/`](paintdotnet-ai/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/paintdotnet-ai.zip) | Local restoration effects for Paint.NET; first effect: Real-ESRGAN AI Restore. |
+| 🎨 **Paint.NET plugins** | [`paintdotnet/`](paintdotnet/) · [`ICO`](paintdotnet/ico/) · [`AI Restore`](paintdotnet/ai/) | Shared home for Paint.NET plugins: ICO import/export and local restoration effects. |
 
 ## 📦 One rolling release
 
