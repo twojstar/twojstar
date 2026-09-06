@@ -86,7 +86,8 @@ Steinberg::uint32 PLUGIN_API SmartTransitionProcessor::getLatencySamples()
 
 Steinberg::uint32 PLUGIN_API SmartTransitionProcessor::getTailSamples()
 {
-    return 0;
+    // Lookahead is reported as latency. Smart Transition generates no post-input effect tail.
+    return Steinberg::Vst::kNoTail;
 }
 
 template <typename Sample>
