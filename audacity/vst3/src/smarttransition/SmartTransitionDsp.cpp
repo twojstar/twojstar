@@ -75,14 +75,11 @@ void SmartTransitionDsp::drainFrame(double* output, std::size_t channels) noexce
     {
         drainStarted_ = true;
 
-        // End-of-input is the final deterministic commit boundary for a fully observed cluster.
         if (!planCommitted_ && clusterActive_ && inputCount_ > 0)
         {
             finalizeCluster(inputCount_ - 1);
         }
 
-        // Very short selections never accumulate the preferred context while streaming. They are
-        // still entirely inside lookahead here, so rescore them once with symmetric reduced context.
         if (!planCommitted_ && !clusterActive_)
         {
             scanShortSelection(channels);
@@ -155,17 +152,6 @@ double SmartTransitionDsp::sampleAt(std::size_t channel, std::int64_t index) con
     return ring_[channel][static_cast<std::size_t>(index) % kRingCapacity];
 }
 
-double SmartTransitionDsp::monoAt(std::int64_t index, std::size_t channels) const noexcept
-{
-    channels = std::clamp<std::size_t>(channels, 1, kMaxChannels);
-    double sum = 0.0;
-    for (std::size_t channel = 0; channel < channels; ++channel)
-    {
-        sum += sampleAt(channel, index);
-    }
-    return sum / static_cast<double>(channels);
-}
-
 SmartTransitionDsp::Candidate SmartTransitionDsp::scoreCandidate(
     std::int64_t anchor,
     std::size_t channels,
@@ -175,6 +161,7 @@ SmartTransitionDsp::Candidate SmartTransitionDsp::scoreCandidate(
     candidate.anchor = anchor;
     candidate.analysisRadius = radiusValue;
 
+    channels = std::clamp<std::size_t>(channels, 1, kMaxChannels);
     const auto radius = static_cast<std::int64_t>(radiusValue);
     if (radius < static_cast<std::int64_t>(kMinAnalysisRadiusSamples) ||
         anchor < radius + 2 || anchor + radius >= inputCount_)
@@ -182,49 +169,66 @@ SmartTransitionDsp::Candidate SmartTransitionDsp::scoreCandidate(
         return candidate;
     }
 
-    double leftSum = 0.0;
-    double rightSum = 0.0;
-    double leftSquares = 0.0;
-    double rightSquares = 0.0;
-    for (std::int64_t i = 0; i < radius; ++i)
+    double scoreSum = 0.0;
+    for (std::size_t channel = 0; channel < channels; ++channel)
     {
-        const auto left = monoAt(anchor - radius + i, channels);
-        const auto right = monoAt(anchor + i, channels);
-        leftSum += left;
-        rightSum += right;
-        leftSquares += left * left;
-        rightSquares += right * right;
+        double leftSum = 0.0;
+        double rightSum = 0.0;
+        double leftSquares = 0.0;
+        double rightSquares = 0.0;
+        for (std::int64_t i = 0; i < radius; ++i)
+        {
+            const auto left = sampleAt(channel, anchor - radius + i);
+            const auto right = sampleAt(channel, anchor + i);
+            leftSum += left;
+            rightSum += right;
+            leftSquares += left * left;
+            rightSquares += right * right;
+        }
+
+        const auto leftMean = leftSum / static_cast<double>(radius);
+        const auto rightMean = rightSum / static_cast<double>(radius);
+        const auto leftRms = std::sqrt(leftSquares / static_cast<double>(radius));
+        const auto rightRms = std::sqrt(rightSquares / static_cast<double>(radius));
+
+        candidate.leftMean += leftMean;
+        candidate.rightMean += rightMean;
+        candidate.leftRms += leftRms;
+        candidate.rightRms += rightRms;
+
+        double derivativeSum = 0.0;
+        std::int64_t derivativeCount = 0;
+        for (std::int64_t i = anchor - radius + 1; i < anchor; ++i)
+        {
+            derivativeSum += std::abs(sampleAt(channel, i) - sampleAt(channel, i - 1));
+            ++derivativeCount;
+        }
+        for (std::int64_t i = anchor + 1; i < anchor + radius; ++i)
+        {
+            derivativeSum += std::abs(sampleAt(channel, i) - sampleAt(channel, i - 1));
+            ++derivativeCount;
+        }
+
+        const auto baselineDerivative = derivativeCount > 0
+            ? derivativeSum / static_cast<double>(derivativeCount)
+            : 0.0;
+        const auto jump = std::abs(sampleAt(channel, anchor) - sampleAt(channel, anchor - 1));
+        const auto meanGap = std::abs(rightMean - leftMean);
+        const auto localLevel = 0.5 * (leftRms + rightRms);
+        const auto epsilon = 1e-9;
+
+        const auto jumpScore = jump / (jump + 4.0 * baselineDerivative + epsilon);
+        const auto meanScore = meanGap / (meanGap + 0.25 * localLevel + 4.0 * baselineDerivative + epsilon);
+        scoreSum += std::clamp(0.82 * jumpScore + 0.18 * meanScore, 0.0, 1.0);
     }
 
-    candidate.leftMean = leftSum / static_cast<double>(radius);
-    candidate.rightMean = rightSum / static_cast<double>(radius);
-    candidate.leftRms = std::sqrt(leftSquares / static_cast<double>(radius));
-    candidate.rightRms = std::sqrt(rightSquares / static_cast<double>(radius));
+    const auto channelScale = 1.0 / static_cast<double>(channels);
+    candidate.leftMean *= channelScale;
+    candidate.rightMean *= channelScale;
+    candidate.leftRms *= channelScale;
+    candidate.rightRms *= channelScale;
 
-    double derivativeSum = 0.0;
-    std::int64_t derivativeCount = 0;
-    for (std::int64_t i = anchor - radius + 1; i < anchor; ++i)
-    {
-        derivativeSum += std::abs(monoAt(i, channels) - monoAt(i - 1, channels));
-        ++derivativeCount;
-    }
-    for (std::int64_t i = anchor + 1; i < anchor + radius; ++i)
-    {
-        derivativeSum += std::abs(monoAt(i, channels) - monoAt(i - 1, channels));
-        ++derivativeCount;
-    }
-
-    const auto baselineDerivative = derivativeCount > 0
-        ? derivativeSum / static_cast<double>(derivativeCount)
-        : 0.0;
-    const auto jump = std::abs(monoAt(anchor, channels) - monoAt(anchor - 1, channels));
-    const auto meanGap = std::abs(candidate.rightMean - candidate.leftMean);
-    const auto localLevel = 0.5 * (candidate.leftRms + candidate.rightRms);
-    const auto epsilon = 1e-9;
-
-    const auto jumpScore = jump / (jump + 4.0 * baselineDerivative + epsilon);
-    const auto meanScore = meanGap / (meanGap + 0.25 * localLevel + 4.0 * baselineDerivative + epsilon);
-    const auto score = std::clamp(0.82 * jumpScore + 0.18 * meanScore, 0.0, 1.0);
+    const auto score = scoreSum * channelScale;
     if (!std::isfinite(score))
     {
         return candidate;

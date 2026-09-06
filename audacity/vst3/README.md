@@ -26,7 +26,7 @@ Smart Transition is the first implementation from the [`../smart-edit/`](../smar
 The prototype is deliberately deterministic DSP first:
 
 - 100 ms bounded lookahead, clamped to 1024–8192 samples,
-- mono/stereo shared seam detection,
+- mono/stereo shared seam detection without signed cross-channel cancellation,
 - block-partition-independent candidate ordering and score quantization,
 - short local DC and level matching,
 - a bounded S-curve/Hermite bridge around the accepted seam,
@@ -40,7 +40,9 @@ The effect currently uses conservative fixed defaults while the host contract is
 
 CI builds and packages `TravnySmartTransition.vst3` for Windows and Linux as an **experimental workflow artifact**, but the repository-wide rolling **Latest** release intentionally does not publish it yet.
 
-Before promotion, real Audacity testing must prove that preview and Apply start clean processing runs, reported latency is compensated without clipping selection ends, cancellation resets state, and different host block sizes produce the same plan/output contract. If Audacity does not bracket selections the way the VST3 contract needs, the adapter changes instead of papering over it with fake tail samples.
+There is one known blocking integration question: generic VST3 `ProcessData` does not provide a portable end-of-selection marker. The host-independent DSP core can finalize a late seam and shrink context for a short selection when its caller invokes `drainFrame()`, but the current VST3 adapter cannot safely infer when to do that. As a result, a short selection or a seam inside the final analysis window may still pass through unchanged in the experimental adapter. `setProcessing(false)` is too late to return audio, and latency is deliberately not misreported as an effect tail to manufacture extra process calls.
+
+Before promotion, real Audacity testing must prove how preview and Apply bracket selected-region processing, whether the host supplies enough compensated processing for the reported latency, that cancellation resets state, and that different host block sizes produce the same plan/output contract. If Audacity does not provide a usable boundary, the adapter design changes before release. Until that host gate passes, the workflow ZIP is a development artifact rather than a supported release.
 
 ## Released packages
 

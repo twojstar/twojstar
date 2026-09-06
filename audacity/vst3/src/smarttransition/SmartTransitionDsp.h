@@ -75,7 +75,6 @@ private:
     void processFrameInternal(const double* input, double* output, std::size_t channels, bool analyze) noexcept;
     void storeFrame(const double* input, std::size_t channels, std::int64_t index) noexcept;
     [[nodiscard]] double sampleAt(std::size_t channel, std::int64_t index) const noexcept;
-    [[nodiscard]] double monoAt(std::int64_t index, std::size_t channels) const noexcept;
     [[nodiscard]] Candidate scoreCandidate(
         std::int64_t anchor,
         std::size_t channels,

@@ -200,6 +200,28 @@ void testShortSelectionShrinksAnalysisSymmetrically()
             "short-selection seam anchor is incorrect");
 }
 
+void testAntiPhaseStereoSeamDoesNotCancelDetection()
+{
+    constexpr std::size_t seam = 500;
+    std::vector<Frame> input(1400);
+    for (std::size_t i = 0; i < input.size(); ++i)
+    {
+        input[i] = i < seam ? Frame{0.45, -0.45} : Frame{-0.45, 0.45};
+    }
+
+    const auto result = render(input, 2, {29, 3, 83});
+    require(result.hasPlan, "anti-phase stereo seam cancelled out of detection");
+    require(std::llabs(globalAnchor(result) - static_cast<std::int64_t>(seam)) <= 2,
+            "anti-phase stereo seam anchor is incorrect");
+
+    for (std::size_t channel = 0; channel < 2; ++channel)
+    {
+        const auto beforeJump = std::abs(input[seam][channel] - input[seam - 1][channel]);
+        const auto afterJump = std::abs(result.output[seam][channel] - result.output[seam - 1][channel]);
+        require(afterJump < beforeJump * 0.55, "anti-phase stereo seam was not smoothed on both channels");
+    }
+}
+
 void testMonoPath()
 {
     constexpr std::size_t seam = 420;
@@ -252,6 +274,7 @@ int main()
         testOverlappingCandidatesCompeteBeforeCommit();
         testFinalClusterCommitsDuringDrain();
         testShortSelectionShrinksAnalysisSymmetrically();
+        testAntiPhaseStereoSeamDoesNotCancelDetection();
         testMonoPath();
         testResetStartsFreshRun();
         std::cout << "SmartTransition DSP tests passed\n";
