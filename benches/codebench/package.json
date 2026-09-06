@@ -5,7 +5,7 @@
   "description": "QR & Barcode Studio — static, client-side.",
   "scripts": {
     "build:client": "tsc -p tsconfig.client.json",
-    "build": "npm run build:client && node scripts/vendor.mjs && node scripts/portable.mjs",
+    "build": "npm run build:client && node ../scripts/sync-i18n.mjs codebench && node scripts/vendor.mjs && node scripts/portable.mjs",
     "typecheck": "wrangler types && tsc --noEmit",
     "check": "npm run build && npm run typecheck && node scripts/check.mjs",
     "dev": "npm run build && wrangler dev",

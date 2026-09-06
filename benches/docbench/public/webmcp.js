@@ -119,7 +119,7 @@
       const before = editor.value;
       document.querySelector("#format-button")?.click();
       const result = snapshot({ includeText: true });
-      const failed = result.status === "Format failed" || result.status.startsWith("Invalid");
+      const failed = statusBadge.dataset.formatResult === "failed";
       return { ok: !failed, changed: editor.value !== before, ...result };
     },
   });
