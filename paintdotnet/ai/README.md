@@ -14,15 +14,17 @@ focused on cleaning up low-resolution or degraded images rather than generative 
 - downsamples the model's 4x reconstruction back to the current canvas and blends it with the source
 - **Strength** controls how much of the restored result is applied
 
-The first version targets Paint.NET 5.1 and CPU inference. True 2x/4x document enlargement and hardware acceleration can be added as separate operations later; a normal Paint.NET effect renders into the existing document bounds.
+The package now ships separate adapters for **Paint.NET 5.1.x** and **Paint.NET 5.2+**, while sharing one ONNX Runtime/model payload. True 2x/4x document enlargement remains a separate operation because a normal Paint.NET effect renders into the existing document bounds; it should not be faked by silently resizing outside the host's effect contract.
 
 ## Install
 
-Use the release ZIP and run `Install.bat`. It installs the complete plugin folder to:
+Use the release ZIP and run `Install.bat`, then choose your Paint.NET version. The installer combines the matching adapter with the shared runtime/model files and installs the complete plugin folder to:
 
 `Documents\Paint.NET App Files\Effects\Travny.PaintDotNet.AI`
 
-Paint.NET documents this per-user tree for the Microsoft Store build and as a supported alternative for Classic Paint.NET. Portable Paint.NET users can copy `Effects\Travny.PaintDotNet.AI` into the portable `Effects` directory.
+Paint.NET documents this per-user tree for the Microsoft Store build and as a supported alternative for Classic Paint.NET.
+
+Portable Paint.NET users can create `Effects\Travny.PaintDotNet.AI`, copy everything from `Common\Travny.PaintDotNet.AI` into it, then add the matching adapter DLL from `Paint.NET-5.1` or `Paint.NET-5.2+`.
 
 ## Model provenance
 
