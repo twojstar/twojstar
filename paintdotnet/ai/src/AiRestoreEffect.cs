@@ -25,7 +25,7 @@ public sealed class AiRestoreEffect : PropertyBasedBitmapEffect
         new(() => new RealEsrganSession(FindModelPath()), LazyThreadSafetyMode.ExecutionAndPublication);
 
     private readonly ConcurrentDictionary<TileKey, Lazy<RestoredTile>> tileCache = new();
-    private readonly ConcurrentQueue<TileKey> tileOrder = new();
+    private readonly ConcurrentQueue<KeyValuePair<TileKey, Lazy<RestoredTile>>> tileOrder = new();
     private IBitmapSource<ColorBgra32>? sourceBitmap;
     private int strength;
 
@@ -91,38 +91,55 @@ public sealed class AiRestoreEffect : PropertyBasedBitmapEffect
         RegionPtr<ColorBgra32> sourceRegion = sourceLock.AsRegionPtr();
         float amount = strength / 100f;
 
+        int outputLeft = output.Bounds.X;
+        int outputTop = output.Bounds.Y;
+        int outputRight = checked(outputLeft + outputRegion.Width);
+        int outputBottom = checked(outputTop + outputRegion.Height);
+        TileKey firstKey = TileKey.FromPixel(outputLeft, outputTop);
+
         try
         {
-            for (int y = 0; y < outputRegion.Height; y++)
+            // Traverse by restoration tile, not by scanline. This guarantees that an
+            // output region evaluates each expensive AI tile at most once even when
+            // the bounded cross-region cache is smaller than the image width.
+            for (int tileY = firstKey.Y; tileY < outputBottom; tileY += CoreTileSize)
             {
-                if (IsCancelRequested)
+                for (int tileX = firstKey.X; tileX < outputRight; tileX += CoreTileSize)
                 {
-                    return;
-                }
-
-                int globalY = output.Bounds.Y + y;
-                TileKey currentKey = default;
-                RestoredTile? currentTile = null;
-
-                for (int x = 0; x < outputRegion.Width; x++)
-                {
-                    int globalX = output.Bounds.X + x;
-                    TileKey key = TileKey.FromPixel(globalX, globalY);
-                    if (currentTile is null || key != currentKey)
+                    if (IsCancelRequested)
                     {
-                        currentKey = key;
-                        currentTile = GetRestoredTile(key);
+                        return;
                     }
 
-                    int tileX = globalX - key.X;
-                    int tileY = globalY - key.Y;
-                    ColorBgra32 original = sourceRegion[x, y];
+                    TileKey key = new(tileX, tileY);
+                    RestoredTile restored = GetRestoredTile(key);
+                    int startX = Math.Max(outputLeft, tileX);
+                    int endX = Math.Min(outputRight, checked(tileX + CoreTileSize));
+                    int startY = Math.Max(outputTop, tileY);
+                    int endY = Math.Min(outputBottom, checked(tileY + CoreTileSize));
 
-                    outputRegion[x, y] = ColorBgra32.FromBgra(
-                        Blend(original.B, currentTile.Get(tileX, tileY, 2), amount),
-                        Blend(original.G, currentTile.Get(tileX, tileY, 1), amount),
-                        Blend(original.R, currentTile.Get(tileX, tileY, 0), amount),
-                        original.A);
+                    for (int globalY = startY; globalY < endY; globalY++)
+                    {
+                        if (IsCancelRequested)
+                        {
+                            return;
+                        }
+
+                        int y = globalY - outputTop;
+                        int restoredY = globalY - tileY;
+                        for (int globalX = startX; globalX < endX; globalX++)
+                        {
+                            int x = globalX - outputLeft;
+                            int restoredX = globalX - tileX;
+                            ColorBgra32 original = sourceRegion[x, y];
+
+                            outputRegion[x, y] = ColorBgra32.FromBgra(
+                                Blend(original.B, restored.Get(restoredX, restoredY, 2), amount),
+                                Blend(original.G, restored.Get(restoredX, restoredY, 1), amount),
+                                Blend(original.R, restored.Get(restoredX, restoredY, 0), amount),
+                                original.A);
+                        }
+                    }
                 }
             }
         }
@@ -134,31 +151,46 @@ public sealed class AiRestoreEffect : PropertyBasedBitmapEffect
 
     private RestoredTile GetRestoredTile(TileKey key)
     {
-        if (tileCache.TryGetValue(key, out Lazy<RestoredTile>? cached))
+        Lazy<RestoredTile> actual;
+        if (!tileCache.TryGetValue(key, out actual!))
         {
-            return cached.Value;
+            var candidate = new Lazy<RestoredTile>(
+                () => RestoreTile(key),
+                LazyThreadSafetyMode.ExecutionAndPublication);
+            actual = tileCache.GetOrAdd(key, candidate);
+
+            if (ReferenceEquals(actual, candidate))
+            {
+                tileOrder.Enqueue(new KeyValuePair<TileKey, Lazy<RestoredTile>>(key, candidate));
+                TrimTileCache();
+            }
         }
 
-        var candidate = new Lazy<RestoredTile>(
-            () => RestoreTile(key),
-            LazyThreadSafetyMode.ExecutionAndPublication);
-        Lazy<RestoredTile> actual = tileCache.GetOrAdd(key, candidate);
-
-        if (ReferenceEquals(actual, candidate))
+        try
         {
-            tileOrder.Enqueue(key);
-            TrimTileCache();
+            return actual.Value;
         }
-
-        return actual.Value;
+        catch
+        {
+            RemoveCachedTile(key, actual);
+            throw;
+        }
     }
 
     private void TrimTileCache()
     {
-        while (tileCache.Count > MaxCachedTiles && tileOrder.TryDequeue(out TileKey oldest))
+        ICollection<KeyValuePair<TileKey, Lazy<RestoredTile>>> cacheEntries = tileCache;
+        while (tileCache.Count > MaxCachedTiles &&
+               tileOrder.TryDequeue(out KeyValuePair<TileKey, Lazy<RestoredTile>> oldest))
         {
-            tileCache.TryRemove(oldest, out _);
+            cacheEntries.Remove(oldest);
         }
+    }
+
+    private void RemoveCachedTile(TileKey key, Lazy<RestoredTile> value)
+    {
+        ICollection<KeyValuePair<TileKey, Lazy<RestoredTile>>> cacheEntries = tileCache;
+        cacheEntries.Remove(new KeyValuePair<TileKey, Lazy<RestoredTile>>(key, value));
     }
 
     private RestoredTile RestoreTile(TileKey key)
