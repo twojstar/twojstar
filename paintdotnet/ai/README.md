@@ -22,7 +22,7 @@ Use the release ZIP and run `Install.bat`. It installs the complete plugin folde
 
 `Documents\Paint.NET App Files\Effects\Travny.PaintDotNet.AI`
 
-Portable Paint.NET users can copy `Effects\Travny.PaintDotNet.AI` into the portable `Effects` directory.
+Paint.NET documents this per-user tree for the Microsoft Store build and as a supported alternative for Classic Paint.NET. Portable Paint.NET users can copy `Effects\Travny.PaintDotNet.AI` into the portable `Effects` directory.
 
 ## Model provenance
 
