@@ -1,2 +1,38 @@
+# Keep repository text deterministic across Windows and Unix hosts.
+# Git stores normalized LF; working trees also use LF unless a format requires CRLF.
+* text=auto eol=lf
+
+# Native Windows command scripts are the exception.
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# Known binary formats: never attempt text/EOL conversion.
+*.7z -text
+*.appx -text
+*.cer -text
+*.dll -text
+*.ear -text
+*.exe -text
+*.flac -text
+*.gif -text
+*.gz -text
+*.ico -text
+*.jar -text
+*.jpeg -text
+*.jpg -text
+*.mp3 -text
+*.mp4 -text
+*.msix -text
+*.nar -text
+*.onnx -text
+*.pdf -text
+*.png -text
+*.rar -text
+*.tar -text
+*.ttf -text
+*.war -text
+*.wav -text
+*.webp -text
+*.woff -text
+*.woff2 -text
+*.zip -text
