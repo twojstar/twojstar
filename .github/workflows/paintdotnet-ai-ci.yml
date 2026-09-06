@@ -112,9 +112,9 @@ jobs:
       - name: Run model smoke test
         working-directory: ${{ env.PLUGIN_DIR }}
         shell: pwsh
-        run: dotnet run --project .\tests\ModelSmoke\ModelSmoke.csproj -c Release -- .\model\realesr-general-x4v3.onnx
+        run: dotnet run --project .\tests\ModelSmoke\ModelSmoke.csproj -c Release -f net9.0-windows -- .\model\realesr-general-x4v3.onnx
 
-      - name: Package release asset
+      - name: Package release asset and smoke-test shared runtime
         working-directory: ${{ env.PLUGIN_DIR }}
         shell: pwsh
         run: |
@@ -154,6 +154,22 @@ jobs:
             "$common/model/realesr-general-x4v3.onnx"
           )) {
             if (-not (Test-Path $required -PathType Leaf)) { throw "Package file missing: $required" }
+          }
+
+          foreach ($tfm in @('net9.0-windows', 'net10.0-windows')) {
+            $smoke = Join-Path $dist "runtime-smoke-$tfm"
+            dotnet publish .\tests\ModelSmoke\ModelSmoke.csproj -c Release -f $tfm --no-self-contained -o $smoke --nologo
+
+            Get-ChildItem $smoke -Recurse -File |
+              Where-Object { $_.Name -like 'Microsoft.ML.OnnxRuntime*.dll' -or $_.Name -like 'onnxruntime*.dll' } |
+              Remove-Item -Force
+            Remove-Item (Join-Path $smoke 'runtimes') -Recurse -Force -ErrorAction SilentlyContinue
+
+            Get-ChildItem $common -File -Filter '*.dll' | Copy-Item -Destination $smoke
+            New-Item -ItemType Directory -Force -Path (Join-Path $smoke 'model') | Out-Null
+            Copy-Item "$common/model/realesr-general-x4v3.onnx" (Join-Path $smoke 'model/realesr-general-x4v3.onnx')
+
+            dotnet (Join-Path $smoke 'ModelSmoke.dll') (Join-Path $smoke 'model/realesr-general-x4v3.onnx')
           }
 
           @'
