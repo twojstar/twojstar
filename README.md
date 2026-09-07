@@ -45,10 +45,7 @@ The publisher assembles a complete draft first and moves the GitHub `Latest` poi
 
 ## ⚙️ Maintenance
 
-- **Dependabot** covers GitHub Actions, the Bench npm workspace, the Weather npm project, Xiaomi Gradle and Feedboard/Paint.NET NuGet projects.
-- **CodeQL** uses GitHub default setup rather than a duplicate advanced workflow.
 - Project-specific CI remains path-filtered so unrelated workshop changes do not rebuild everything.
-- Cloudflare Worker builds for Weather and the three Benches read directly from this repository's `main` branch.
 
 ## 📜 License
 
