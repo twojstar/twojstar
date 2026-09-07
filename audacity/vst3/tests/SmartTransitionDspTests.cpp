@@ -220,6 +220,34 @@ void testOverlapChainDoesNotPullInDistantSeam()
             "a distant seam replaced the earlier winner through a chained overlap");
 }
 
+void testProgressivelyStrongerOverlapChainKeepsSeedFrontier()
+{
+    constexpr std::size_t firstSeam = 500;
+    constexpr std::size_t bridgeSeam = 650;
+    constexpr std::size_t distantSeam = 800;
+    auto input = cleanSine(1800);
+    for (std::size_t i = firstSeam; i < input.size(); ++i)
+    {
+        input[i][0] += 0.20;
+        input[i][1] += 0.172;
+    }
+    for (std::size_t i = bridgeSeam; i < input.size(); ++i)
+    {
+        input[i][0] += 0.40;
+        input[i][1] += 0.344;
+    }
+    for (std::size_t i = distantSeam; i < input.size(); ++i)
+    {
+        input[i][0] -= 0.90;
+        input[i][1] -= 0.774;
+    }
+
+    const auto result = render(input, 2, {11, 53, 79});
+    require(result.hasPlan, "progressively-stronger overlap fixture did not produce a plan");
+    require(std::llabs(globalAnchor(result) - static_cast<std::int64_t>(bridgeSeam)) <= 2,
+            "a progressively stronger distant seam advanced the seed competition frontier");
+}
+
 void testFinalClusterCommitsDuringDrain()
 {
     constexpr std::size_t seam = 700;
@@ -361,6 +389,7 @@ int main()
         testBlockPartitionIsDeterministic();
         testOverlappingCandidatesCompeteBeforeCommit();
         testOverlapChainDoesNotPullInDistantSeam();
+        testProgressivelyStrongerOverlapChainKeepsSeedFrontier();
         testFinalClusterCommitsDuringDrain();
         testShortSelectionShrinksAnalysisSymmetrically();
         testAntiPhaseStereoSeamDoesNotCancelDetection();
