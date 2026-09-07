@@ -47,16 +47,11 @@ function attributeValue(tag, name) {
 }
 
 function linkHref(source, relation) {
-  let uncommented = source;
-  let previous;
-  do {
-    previous = uncommented;
-    uncommented = uncommented.replace(/<!--[\\s\\S]*?-->/gu, "");
-  } while (uncommented !== previous);
-  const links = uncommented.match(/<link\\b[^>]*>/giu) ?? [];
+  const uncommented = source.replace(/<!--[\s\S]*?-->/gu, "");
+  const links = uncommented.match(/<link\b[^>]*>/giu) ?? [];
   for (const link of links) {
     const rel = attributeValue(link, "rel");
-    if (!rel?.toLowerCase().split(/\\s+/u).includes(relation.toLowerCase())) continue;
+    if (!rel?.toLowerCase().split(/\s+/u).includes(relation.toLowerCase())) continue;
     const href = attributeValue(link, "href");
     if (href) return { href, tag: link };
   }
@@ -124,6 +119,14 @@ function validateScanlines(data, width, height, bitDepth, colorType, interlace, 
   assert(offset === data.length, `${label}: unexpected PNG scanline data length`);
 }
 
+function inflatePng(parts, label) {
+  try {
+    return inflateSync(Buffer.concat(parts));
+  } catch {
+    throw new Error(`${label}: corrupt PNG image data`);
+  }
+}
+
 function pngDimensions(buffer, label) {
   assert(buffer.length >= 33 && buffer.subarray(0, 8).equals(pngSignature), `${label}: invalid PNG signature`);
 
@@ -174,6 +177,8 @@ function pngDimensions(buffer, label) {
     }
 
     if (type === "PLTE") {
+      assert(!seenPalette, `${label}: duplicate PLTE chunk`);
+      assert(colorType !== 0 && colorType !== 4, `${label}: PLTE is not allowed for color type ${colorType}`);
       assert(!seenIdat, `${label}: PLTE appears after IDAT`);
       assert(length > 0 && length % 3 === 0 && length <= 768, `${label}: invalid PLTE chunk`);
       if (colorType === 3) assert(length / 3 <= 2 ** bitDepth, `${label}: PLTE exceeds indexed bit depth`);
@@ -201,18 +206,13 @@ function pngDimensions(buffer, label) {
   assert(compressedParts.length > 0, `${label}: PNG has no image data`);
   if (colorType === 3) assert(seenPalette, `${label}: indexed PNG has no PLTE chunk`);
 
-  let inflated;
-  try {
-    inflated = inflateSync(Buffer.concat(compressedParts));
-  } catch {
-    throw new Error(`${label}: corrupt PNG image data`);
-  }
+  const inflated = inflatePng(compressedParts, label);
   validateScanlines(inflated, dimensions[0], dimensions[1], bitDepth, colorType, interlace, label);
   return dimensions;
 }
 
 async function fetchOk(url, label, options = {}) {
-  let response;
+  let response = null;
   try {
     response = await fetch(url, { ...options, signal: AbortSignal.timeout(requestTimeoutMs) });
   } catch (error) {
