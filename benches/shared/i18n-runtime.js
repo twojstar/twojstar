@@ -75,31 +75,81 @@
     };
 
     const source = (value) => translate(value, baseLanguage);
+    const isKnownVariant = (canonical, value) =>
+      languages.some((target) => translate(canonical, target) === value);
+    const textSources = new WeakMap();
+    const attributeSources = new WeakMap();
+    const metaSources = new WeakMap();
+    let titleSource = null;
+
+    const canonicalText = (node) => {
+      const current = node.nodeValue;
+      let canonical = textSources.get(node);
+      if (canonical === undefined || !isKnownVariant(canonical, current)) {
+        canonical = source(current);
+        textSources.set(node, canonical);
+      }
+      return canonical;
+    };
+
+    const canonicalAttribute = (element, name, current) => {
+      let sources = attributeSources.get(element);
+      if (!sources) {
+        sources = new Map();
+        attributeSources.set(element, sources);
+      }
+      let canonical = sources.get(name);
+      if (canonical === undefined || !isKnownVariant(canonical, current)) {
+        canonical = source(current);
+        sources.set(name, canonical);
+      }
+      return canonical;
+    };
+
+    const translateAttribute = (element, name) => {
+      if (!element.hasAttribute(name)) return;
+      const before = element.getAttribute(name);
+      const canonical = canonicalAttribute(element, name, before);
+      const after = translate(canonical);
+      if (after !== before) element.setAttribute(name, after);
+    };
+
+    const translateTextNode = (node) => {
+      if (shouldSkip(node)) return;
+      const after = translate(canonicalText(node));
+      if (after !== node.nodeValue) node.nodeValue = after;
+    };
 
     const translateElement = (element) => {
       if (!(element instanceof Element) || shouldSkip(element)) return;
-      for (const name of ["placeholder", "title", "aria-label"]) {
-        if (!element.hasAttribute(name)) continue;
-        const before = element.getAttribute(name);
-        const after = translate(before);
-        if (after !== before) element.setAttribute(name, after);
-      }
+      for (const name of ["placeholder", "title", "aria-label"]) translateAttribute(element, name);
       element.querySelectorAll("*").forEach((child) => {
-        if (!shouldSkipAttributes(child)) for (const name of ["placeholder", "title", "aria-label"]) {
-          if (child.hasAttribute(name)) {
-            const before = child.getAttribute(name);
-            const after = translate(before);
-            if (after !== before) child.setAttribute(name, after);
-          }
+        if (!shouldSkipAttributes(child)) {
+          for (const name of ["placeholder", "title", "aria-label"]) translateAttribute(child, name);
         }
       });
       const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
       let node = null;
-      while ((node = walker.nextNode())) {
-        if (shouldSkip(node)) continue;
-        const after = translate(node.nodeValue);
-        if (after !== node.nodeValue) node.nodeValue = after;
+      while ((node = walker.nextNode())) translateTextNode(node);
+    };
+
+    const translateTitle = () => {
+      const current = document.title;
+      if (titleSource === null || !isKnownVariant(titleSource, current)) titleSource = source(current);
+      const after = translate(titleSource);
+      if (after !== current) document.title = after;
+    };
+
+    const translateMeta = (meta) => {
+      const current = meta.getAttribute("content");
+      if (typeof current !== "string") return;
+      let canonical = metaSources.get(meta);
+      if (canonical === undefined || !isKnownVariant(canonical, current)) {
+        canonical = source(current);
+        metaSources.set(meta, canonical);
       }
+      const after = translate(canonical);
+      if (after !== current) meta.setAttribute("content", after);
     };
 
     const apply = (root = document.body) => {
@@ -107,14 +157,10 @@
       applying = true;
       try {
         document.documentElement.lang = language;
-        document.title = translate(document.title);
-        document.querySelectorAll(metaSelector).forEach((meta) => {
-          const before = meta.getAttribute("content");
-          const after = translate(before);
-          if (after !== before) meta.setAttribute("content", after);
-        });
+        translateTitle();
+        document.querySelectorAll(metaSelector).forEach(translateMeta);
         if (root.nodeType === TEXT_NODE) {
-          if (!shouldSkip(root)) root.nodeValue = translate(root.nodeValue);
+          translateTextNode(root);
         } else {
           translateElement(root);
         }
