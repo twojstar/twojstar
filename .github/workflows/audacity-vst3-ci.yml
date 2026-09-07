@@ -53,12 +53,12 @@ jobs:
 
       - name: Configure VST3
         run: cmake -S audacity/vst3 -B audacity/vst3/build-sdk -DVST3_SDK_ROOT="${{ github.workspace }}/vst3sdk" -DBUILD_TESTING=ON -DSMTG_CREATE_PLUGIN_LINK=OFF
-      - name: Build Auto Declip and DSP tests
-        run: cmake --build audacity/vst3/build-sdk --config Release --target TravnyAutoDeclip AutoDeclipDspTests
+      - name: Build VST3 effects and DSP tests
+        run: cmake --build audacity/vst3/build-sdk --config Release --target TravnyAutoDeclip TravnySmartTransition AutoDeclipDspTests SmartTransitionDspTests
       - name: Run DSP tests in SDK build
         run: ctest --test-dir audacity/vst3/build-sdk -C Release --output-on-failure
 
-      - name: Package Windows VST3
+      - name: Package Windows Auto Declip VST3
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -71,7 +71,7 @@ jobs:
           ) | Set-Content (Join-Path $stage 'INSTALL.txt')
           Compress-Archive -Path "$stage/*" -DestinationPath "$env:RUNNER_TEMP/audacity-auto-declip-windows.zip" -Force
 
-      - name: Upload Windows package
+      - name: Upload Windows Auto Declip package
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -80,7 +80,30 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Package Linux VST3
+      - name: Package Windows Smart Transition VST3
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'audacity-smart-transition-windows'
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item 'audacity/vst3/build-sdk/VST3/Release/TravnySmartTransition.vst3' -Destination $stage -Recurse
+          @(
+            'Travny Smart Transition 0.1 experimental'
+            'Copy TravnySmartTransition.vst3 into a standard VST3 plug-in directory, then rescan effects in Audacity.'
+            'This artifact is for host testing. It is intentionally not published in the repository-wide Latest release until the Audacity latency/preview/apply compatibility gate passes.'
+          ) | Set-Content (Join-Path $stage 'INSTALL.txt')
+          Compress-Archive -Path "$stage/*" -DestinationPath "$env:RUNNER_TEMP/audacity-smart-transition-windows.zip" -Force
+
+      - name: Upload Windows Smart Transition package
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: audacity-smart-transition-Windows-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/audacity-smart-transition-windows.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Package Linux Auto Declip VST3
         if: runner.os == 'Linux'
         shell: bash
         run: |
@@ -98,11 +121,39 @@ jobs:
             zip -9 -r "$RUNNER_TEMP/audacity-auto-declip-linux.zip" .
           )
 
-      - name: Upload Linux package
+      - name: Upload Linux Auto Declip package
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: audacity-auto-declip-Linux-${{ github.run_attempt }}
           path: ${{ runner.temp }}/audacity-auto-declip-linux.zip
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Package Linux Smart Transition VST3
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/audacity-smart-transition-linux"
+          rm -rf "$stage"
+          mkdir -p "$stage"
+          cp -a audacity/vst3/build-sdk/VST3/Release/TravnySmartTransition.vst3 "$stage/"
+          printf '%s\n' \
+            'Travny Smart Transition 0.1 experimental' \
+            'Copy TravnySmartTransition.vst3 into a standard VST3 plug-in directory, then rescan effects in Audacity.' \
+            'This artifact is for host testing. It is intentionally not published in the repository-wide Latest release until the Audacity latency/preview/apply compatibility gate passes.' \
+            > "$stage/INSTALL.txt"
+          (
+            cd "$stage"
+            zip -9 -r "$RUNNER_TEMP/audacity-smart-transition-linux.zip" .
+          )
+
+      - name: Upload Linux Smart Transition package
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: audacity-smart-transition-Linux-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/audacity-smart-transition-linux.zip
           if-no-files-found: error
           retention-days: 7

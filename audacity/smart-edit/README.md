@@ -30,7 +30,7 @@ Version 0.1 is a bounded streaming audio effect, not a timeline editor.
 - **Latency:** report exactly the configured lookahead window through `getLatencySamples()`. No hidden additional latency.
 - **Tail:** report `kNoTail` / `0`. VST3 tail describes output generated after input stops and must not include lookahead latency. Smart Transition does not synthesize a reverb/delay-style tail.
 - **End of input:** delayed source samples are a latency-compensation concern, not fake tail. Before release, Audacity must be verified to compensate the reported latency and provide the processing/post-roll behavior needed to return the complete selected region. If it does not, v0.1 must change its buffering/adapter strategy instead of abusing `getTailSamples()`.
-- **Channels:** stereo analysis may use cross-channel correlation, but timing movement is shared by both channels so the effect cannot disturb stereo image by shifting channels independently.
+- **Channels:** seam coordinates are shared across the channel layout, while `affected_channels_mask` determines which channels are actually repaired. A clean stereo companion channel bypasses bit-identically. Any future timing movement affecting both stereo channels must remain shared so it cannot disturb stereo imaging by shifting the pair independently.
 - **Real-time safety:** no allocation, file I/O, locks on contended global state, network access or model loading on the audio thread. Any optional ML classifier is initialized outside processing and must have a deterministic DSP fallback.
 - **Offline vs preview:** for `EditPlan` v1, identical input samples, settings, sample format and plan must produce identical plan fields and rendered samples. Cross-format comparison uses the explicit tolerances below.
 - **Short selections:** when the host provides less than the preferred context, shrink the analysis window symmetrically. If either side lacks enough clean samples to make a confident plan, bypass unchanged.
@@ -47,6 +47,7 @@ Candidate selection must depend only on sample coordinates and sample values, ne
 - Candidate anchors are enumerated in ascending run-sample order. A candidate is scored only after its complete fixed analysis support is present in the ring buffer.
 - Scoring traverses samples and channels in a fixed order and uses the double-precision core for both VST3 sample formats.
 - Before ranking, the normalized candidate score in `[0,1]` is converted to an integer `score_key = round(score * 1_000_000)`. Non-finite scores invalidate the candidate.
+- Per-channel seam evidence is scored independently before channel aggregation, so anti-phase stereo cannot cancel to zero and a strong seam confined to one channel is not diluted by a clean companion. Only channels whose local evidence clears the confidence threshold are included in `affected_channels_mask` and in gain/DC correction statistics.
 - Candidates compete only when their maximum possible affected transition intervals overlap. A candidate is not eligible for commitment until the complete analysis support of every possible overlapping competitor is buffered.
 - The winner is selected lexicographically by **higher `score_key`**, then **lower run-sample anchor**. There is no arrival-order or block-order tie-break.
 - Commitment happens exactly when the oldest sample that the winning plan may modify reaches the emission frontier and the complete competitor set is known. If that condition cannot be satisfied within configured lookahead, the candidate is ineligible and those samples pass through unchanged rather than committing early.
@@ -61,7 +62,7 @@ Tests use one explicit definition instead of mixing “same” and “close enou
 - Internally, source samples are promoted to `double`; analysis, candidate scoring and render coefficients are evaluated in deterministic sample/channel order in `double`.
 - For the **same VST3 sample format**, identical input bytes and settings must yield exactly identical integer/enum/bool plan fields and bit-identical floating plan fields and output samples across preview/offline processing and arbitrary block partitions.
 - Cross-format tests use a common source first quantized to IEEE-754 `float32`; the identical numeric values are then supplied through `kSample32` and promoted to `kSample64`. This compares processing precision rather than two differently quantized source signals.
-- Across `kSample32` and `kSample64`, integer/enum/bool plan fields, including `seam_anchor_samples`, must match exactly.
+- Across `kSample32` and `kSample64`, integer/enum/bool plan fields, including `seam_anchor_samples` and `affected_channels_mask`, must match exactly.
 - Floating `EditPlan` fields compare with `abs(a-b) <= 1e-7 + 1e-6 * max(abs(a), abs(b))`.
 - Rendered cross-format samples compare after promotion to `double` with `abs(a-b) <= 2e-6 + 2e-6 * max(abs(a), abs(b))`.
 - NaN and infinity are always failures, never tolerance matches.
@@ -106,6 +107,7 @@ EditPlan v1
 schema_version:              1
 seam_anchor_samples:         signed sample index relative to the first sample of the analysis window
 confidence:                  float in [0.0, 1.0]
+affected_channels_mask:      bit 0 = mono/left, bit 1 = right; default 0
 left_gain_db:                finite dB adjustment applied gradually toward the seam; default 0.0
 right_gain_db:               finite dB adjustment applied gradually away from the seam; default 0.0
 dc_delta:                    mean(right) - mean(left) normalized sample DC; default 0.0
@@ -122,14 +124,15 @@ Rules:
 
 - Coordinates are always **samples**, never milliseconds. `seam_anchor_samples` is relative to the current bounded analysis-window start, not to an unknowable VST3 selection/timeline start. A future host adapter owns conversion to/from project coordinates.
 - `seam_anchor_samples` identifies the logical cut/join before timing correction. It must be inside the supplied analysis window and must be selected before the oldest sample affected by the plan leaves lookahead.
+- `affected_channels_mask` uses only the low two bits: bit `0` is mono/left and bit `1` is right. A mono plan may use only bit `0`. Channels not present in the mask bypass the renderer bit-identically; scalar gain/DC statistics are derived only from channels present in the mask.
 - VST3 v0.1 accepts at most one non-no-op plan per **processing run**. A run begins when `setProcessing(true)` starts processing after stopped state and ends at `setProcessing(false)` or deactivation.
-- `timing_offset_samples` is bounded by the configured Strength/maximum-search tolerance and always moves both stereo channels together.
+- `timing_offset_samples` is bounded by the configured Strength/maximum-search tolerance. If timing movement is later enabled for a stereo pair, both affected stereo channels move together.
 - Gains are dB, clamped by policy before rendering; non-finite values invalidate the plan.
-- `dc_delta = mean(right) - mean(left)` over the analysis windows. Positive means the right side has the more-positive DC level. The renderer uses the left side as the local reference and applies `-dc_delta` to the right side at the seam, tapering that correction continuously to `0` by the right edge of the transition.
+- `dc_delta = mean(right) - mean(left)` over the affected channels' analysis windows. Positive means the right side has the more-positive DC level. The renderer uses the left side as the local reference and applies `-dc_delta` to the right side at the seam, tapering that correction continuously to `0` by the right edge of the transition.
 - `confidence` is calibrated to `[0,1]`; `0` means no usable evidence and `1` means the deterministic checks strongly agree.
 - `confidence < 0.5` produces `no_op=true` by default. User-facing modes may raise that threshold, never silently lower it below a documented minimum.
-- `no_op=true` requires `left_gain_db=0`, `right_gain_db=0`, `dc_delta=0`, `timing_offset_samples=0`, `fade_length_samples=0`, `fade_curve=None`, `repair_mode=None`, `repair_start_offset_samples=0` and `repair_length_samples=0`. Rendering is pass-through apart from numeric format conversion required by the host.
-- `no_op=false` requires at least one executable action: a non-zero gain, DC correction, timing offset, non-zero fade, or repair operation. An all-neutral non-no-op plan is invalid.
+- `no_op=true` requires `affected_channels_mask=0`, `left_gain_db=0`, `right_gain_db=0`, `dc_delta=0`, `timing_offset_samples=0`, `fade_length_samples=0`, `fade_curve=None`, `repair_mode=None`, `repair_start_offset_samples=0` and `repair_length_samples=0`. Rendering is pass-through apart from numeric format conversion required by the host.
+- `no_op=false` requires a non-zero `affected_channels_mask` and at least one executable action: a non-zero gain, DC correction, timing offset, non-zero fade, or repair operation. An all-neutral non-no-op plan is invalid.
 - `fade_length_samples=0` requires `fade_curve=None` and all gain/DC/timing/repair actions to be neutral. Conversely, any gain, DC, timing or repair action requires `fade_length_samples > 0` and a non-`None` fade curve so the change has a bounded transition interval.
 - The transition interval is centred on `seam_anchor_samples`: `floor(fade_length_samples / 2)` samples on the left and the remainder on the right. The whole interval must fit inside the buffered analysis window after timing adjustment.
 - `repair_mode=None` requires both repair fields to be `0`.
@@ -138,12 +141,13 @@ Rules:
 - Unknown schema versions or enum values are rejected, not guessed.
 - Serialization, if added later, must include `schema_version`; the in-memory C++ type remains the source of truth.
 
-Example for a 48 kHz analysis window where the accepted seam is 2400 samples from its start:
+Example for a 48 kHz stereo analysis window where the accepted seam is 2400 samples from its start:
 
 ```text
 schema_version=1
 seam_anchor_samples=2400
 confidence=0.91
+affected_channels_mask=3
 left_gain_db=-0.7
 right_gain_db=0.0
 dc_delta=0.0021
