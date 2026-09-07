@@ -47,7 +47,12 @@ function attributeValue(tag, name) {
 }
 
 function linkHref(source, relation) {
-  const uncommented = source.replace(/<!--[\\s\\S]*?-->/gu, "");
+  let uncommented = source;
+  let previous;
+  do {
+    previous = uncommented;
+    uncommented = uncommented.replace(/<!--[\\s\\S]*?-->/gu, "");
+  } while (uncommented !== previous);
   const links = uncommented.match(/<link\\b[^>]*>/giu) ?? [];
   for (const link of links) {
     const rel = attributeValue(link, "rel");
