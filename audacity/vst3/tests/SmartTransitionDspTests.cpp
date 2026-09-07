@@ -105,6 +105,7 @@ void testCleanAudioIsBitTransparent()
     const auto result = render(input, 2, {1, 7, 64, 13, 128});
 
     require(!result.hasPlan, "clean sine should not produce a transition plan");
+    require(result.plan.affectedChannelsMask == 0, "no-op plan marked an affected channel");
     require(result.output.size() == input.size(), "clean output size changed");
     for (std::size_t i = 0; i < input.size(); ++i)
     {
@@ -121,6 +122,7 @@ void testHardSeamIsDetectedAndSmoothed()
 
     require(result.hasPlan, "hard seam was not detected");
     require(!result.plan.noOp, "hard seam produced a no-op plan");
+    require(result.plan.affectedChannelsMask == 0b11, "stereo hard seam did not mark both channels");
     require(result.plan.fadeLengthSamples > 0, "hard seam has no transition length");
     require(result.plan.confidence >= 0.62, "hard seam confidence below threshold");
     require(std::llabs(globalAnchor(result) - static_cast<std::int64_t>(seam)) <= 2,
@@ -157,6 +159,7 @@ void testBlockPartitionIsDeterministic()
     require(a.hasPlan && b.hasPlan, "partition test did not produce plans");
     require(a.planWindowStart == b.planWindowStart, "plan window changed with block partition");
     require(a.plan.seamAnchorSamples == b.plan.seamAnchorSamples, "seam changed with block partition");
+    require(a.plan.affectedChannelsMask == b.plan.affectedChannelsMask, "channel mask changed with block partition");
     require(a.plan.confidence == b.plan.confidence, "confidence changed with block partition");
     require(a.plan.rightGainDb == b.plan.rightGainDb, "gain plan changed with block partition");
     require(a.plan.dcDelta == b.plan.dcDelta, "DC plan changed with block partition");
@@ -225,6 +228,7 @@ void testAntiPhaseStereoSeamDoesNotCancelDetection()
 
     const auto result = render(input, 2, {29, 3, 83});
     require(result.hasPlan, "anti-phase stereo seam cancelled out of detection");
+    require(result.plan.affectedChannelsMask == 0b11, "anti-phase seam did not mark both channels");
     require(std::llabs(globalAnchor(result) - static_cast<std::int64_t>(seam)) <= 2,
             "anti-phase stereo seam anchor is incorrect");
 
@@ -241,6 +245,7 @@ void testSingleChannelStereoSeamQualifies()
     constexpr std::size_t seam = 500;
     for (std::size_t changedChannel = 0; changedChannel < 2; ++changedChannel)
     {
+        const auto companionChannel = 1U - changedChannel;
         std::vector<Frame> input(1400, Frame{0.20, 0.20});
         for (std::size_t i = seam; i < input.size(); ++i)
         {
@@ -249,12 +254,20 @@ void testSingleChannelStereoSeamQualifies()
 
         const auto result = render(input, 2, {43, 7, 101});
         require(result.hasPlan, "single-channel stereo seam was ignored");
+        require(result.plan.affectedChannelsMask == static_cast<std::uint8_t>(1U << changedChannel),
+                "single-channel seam marked the clean companion channel");
         require(std::llabs(globalAnchor(result) - static_cast<std::int64_t>(seam)) <= 2,
                 "single-channel stereo seam anchor is incorrect");
 
         const auto beforeJump = std::abs(input[seam][changedChannel] - input[seam - 1][changedChannel]);
         const auto afterJump = std::abs(result.output[seam][changedChannel] - result.output[seam - 1][changedChannel]);
         require(afterJump < beforeJump * 0.55, "single-channel stereo seam was not smoothed");
+
+        for (std::size_t i = 0; i < input.size(); ++i)
+        {
+            require(result.output[i][companionChannel] == input[i][companionChannel],
+                    "single-channel seam altered the clean companion channel");
+        }
     }
 }
 
@@ -269,6 +282,7 @@ void testMonoPath()
 
     const auto result = render(input, 1, {17, 63, 4});
     require(result.hasPlan, "mono seam was not detected");
+    require(result.plan.affectedChannelsMask == 0b01, "mono seam has invalid affected-channel mask");
     require(std::llabs(globalAnchor(result) - static_cast<std::int64_t>(seam)) <= 2,
             "mono seam anchor is incorrect");
 }
@@ -288,6 +302,7 @@ void testResetStartsFreshRun()
     dsp.reset();
     require(!dsp.hasPlan(), "reset retained the accepted plan");
     require(dsp.plan().noOp, "reset plan is not neutral");
+    require(dsp.plan().affectedChannelsMask == 0, "reset retained an affected-channel mask");
 
     const auto clean = cleanSine(300);
     for (const auto& frame : clean)
