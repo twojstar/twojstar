@@ -118,7 +118,7 @@
         makeNumber("ec", "Error correction %", values.ec, 5, 95),
         makeNumber("layers", "Layers · blank = auto", values.layers, 1, maxLayers),
       );
-      note.textContent = `Aztec error correction accepts 5–95%. ${format === "azteccodecompact" ? "Compact Aztec has 1–4 layers." : "Full Aztec has up to 32 layers."}`;
+      note.textContent = format === "azteccodecompact" ? "Compact Aztec has 1–4 layers." : "Full Aztec has up to 32 layers.";
     } else if (format === "pdf417" || format === "pdf417compact") {
       fields.append(
         makeSelect("ec", "Error correction", [["", "Auto"], ...Array.from({ length: 9 }, (_, index) => [String(index), `Level ${index}`])], values.ec),
