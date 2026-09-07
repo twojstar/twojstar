@@ -162,7 +162,7 @@
     ["Could not resolve the nested playlist.", "Nie udało się rozwiązać zagnieżdżonej playlisty."],
     ["HLS could not be fetched. With custom playlists this usually means CORS, mixed content, geoblocking or a dead address.", "HLS nie został pobrany. Przy własnych playlistach zwykle oznacza to CORS, mixed content, geoblokadę albo martwy adres."],
     ["The stream goes through Streambench's limited relay to bypass mixed content or HLS CORS.", "Stream przechodzi przez ograniczony przekaźnik Streambencha, aby ominąć mixed content lub CORS HLS."],
-    ["Stream audio", "Stream audio"],
+    ["Stream audio", "Dźwięk strumienia"],
     ["No group", "Bez grupy"],
     ["Local", "Lokalna"],
     ["Could not read the playlist file.", "Nie udało się odczytać pliku playlisty."],
@@ -183,7 +183,7 @@
       [/^Nie udało się pobrać katalogu (.+)\.$/, "Could not fetch the $1 catalog."],
       [/^Nie udało się pobrać playlisty (.+)\.$/, "Could not fetch the $1 playlist."],
       [/^Źródło: (.+)$/, "Source: $1"],
-      [/^Pobieranie: (.+)…$/, "Fetching: $1…"],
+      [/^Pobieranie: (.+)…$/u, "Fetching: $1…"],
       [/^(.+): M3U skopiowane$/, "$1: M3U copied"],
       [/^HLS: nieznany błąd$/, "HLS: unknown error"]
     ],
@@ -201,7 +201,7 @@
       [/^Could not fetch the (.+) catalog\.$/, "Nie udało się pobrać katalogu $1."],
       [/^Could not fetch the (.+) playlist\.$/, "Nie udało się pobrać playlisty $1."],
       [/^Source: (.+)$/, "Źródło: $1"],
-      [/^Fetching: (.+)…$/, "Pobieranie: $1…"],
+      [/^Fetching: (.+)…$/u, "Pobieranie: $1…"],
       [/^(.+): M3U copied$/, "$1: M3U skopiowane"],
       [/^HLS: unknown error$/, "HLS: nieznany błąd"]
     ]
