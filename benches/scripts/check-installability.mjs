@@ -11,17 +11,14 @@ const requestedProduct = process.argv[2];
 const products = requestedProduct ? [requestedProduct] : allProducts;
 const standaloneDisplays = new Set(["standalone", "minimal-ui", "fullscreen"]);
 const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-const wranglerBin = join(
-  benchesRoot,
-  "node_modules",
-  ".bin",
-  process.platform === "win32" ? "wrangler.cmd" : "wrangler",
-);
+const wranglerCli = join(benchesRoot, "node_modules", "wrangler", "bin", "wrangler.js");
+const requestTimeoutMs = 10_000;
+const readinessTimeoutMs = 1_000;
 
 if (requestedProduct && !allProducts.includes(requestedProduct)) {
   throw new Error(`Unknown Bench: ${requestedProduct}`);
 }
-assert(existsSync(wranglerBin), "Wrangler is not installed; run npm ci in benches first");
+assert(existsSync(wranglerCli), "Wrangler is not installed; run npm ci in benches first");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -44,12 +41,18 @@ async function freePort() {
   return port;
 }
 
+function attributeValue(tag, name) {
+  const match = tag.match(new RegExp(`\\b${name}\\s*=\\s*(?:["']([^"']*)["']|([^\\s>]+))`, "iu"));
+  return match?.[1] ?? match?.[2] ?? null;
+}
+
 function linkHref(source, relation) {
-  const links = source.match(/<link\b[^>]*>/giu) ?? [];
+  const uncommented = source.replace(/<!--[\\s\\S]*?-->/gu, "");
+  const links = uncommented.match(/<link\\b[^>]*>/giu) ?? [];
   for (const link of links) {
-    const rel = link.match(/\brel\s*=\s*["']([^"']+)["']/iu)?.[1];
-    if (!rel?.split(/\s+/u).includes(relation)) continue;
-    const href = link.match(/\bhref\s*=\s*["']([^"']+)["']/iu)?.[1];
+    const rel = attributeValue(link, "rel");
+    if (!rel?.toLowerCase().split(/\\s+/u).includes(relation.toLowerCase())) continue;
+    const href = attributeValue(link, "href");
     if (href) return { href, tag: link };
   }
   return null;
@@ -66,13 +69,69 @@ function crc32(buffer) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
+function colorChannels(colorType, label) {
+  const channels = new Map([[0, 1], [2, 3], [3, 1], [4, 2], [6, 4]]).get(colorType);
+  assert(channels, `${label}: unsupported PNG color type ${colorType}`);
+  return channels;
+}
+
+function validateBitDepth(bitDepth, colorType, label) {
+  const allowed = {
+    0: new Set([1, 2, 4, 8, 16]),
+    2: new Set([8, 16]),
+    3: new Set([1, 2, 4, 8]),
+    4: new Set([8, 16]),
+    6: new Set([8, 16]),
+  }[colorType];
+  assert(allowed?.has(bitDepth), `${label}: invalid PNG bit depth ${bitDepth} for color type ${colorType}`);
+}
+
+function passExtent(size, start, step) {
+  return size <= start ? 0 : Math.ceil((size - start) / step);
+}
+
+function validateScanlines(data, width, height, bitDepth, colorType, interlace, label) {
+  const channels = colorChannels(colorType, label);
+  const passes = interlace === 0
+    ? [[0, 0, 1, 1]]
+    : [
+        [0, 0, 8, 8],
+        [4, 0, 8, 8],
+        [0, 4, 4, 8],
+        [2, 0, 4, 4],
+        [0, 2, 2, 4],
+        [1, 0, 2, 2],
+        [0, 1, 1, 2],
+      ];
+
+  let offset = 0;
+  for (const [startX, startY, stepX, stepY] of passes) {
+    const passWidth = passExtent(width, startX, stepX);
+    const passHeight = passExtent(height, startY, stepY);
+    if (passWidth === 0 || passHeight === 0) continue;
+    const rowBytes = Math.ceil((passWidth * channels * bitDepth) / 8);
+    for (let row = 0; row < passHeight; row += 1) {
+      assert(offset + 1 + rowBytes <= data.length, `${label}: truncated PNG scanline data`);
+      assert(data[offset] <= 4, `${label}: invalid PNG filter type ${data[offset]}`);
+      offset += 1 + rowBytes;
+    }
+  }
+  assert(offset === data.length, `${label}: unexpected PNG scanline data length`);
+}
+
 function pngDimensions(buffer, label) {
   assert(buffer.length >= 33 && buffer.subarray(0, 8).equals(pngSignature), `${label}: invalid PNG signature`);
 
   let offset = 8;
   let dimensions = null;
+  let bitDepth = null;
+  let colorType = null;
+  let interlace = null;
   let seenHeader = false;
   let seenEnd = false;
+  let seenPalette = false;
+  let seenIdat = false;
+  let idatEnded = false;
   const compressedParts = [];
 
   while (offset < buffer.length) {
@@ -93,13 +152,37 @@ function pngDimensions(buffer, label) {
 
     if (!seenHeader) {
       assert(type === "IHDR" && length === 13, `${label}: PNG must start with a 13-byte IHDR`);
-      dimensions = [data.readUInt32BE(0), data.readUInt32BE(4)];
+      const width = data.readUInt32BE(0);
+      const height = data.readUInt32BE(4);
+      bitDepth = data[8];
+      colorType = data[9];
+      assert(width > 0 && height > 0, `${label}: invalid PNG dimensions`);
+      validateBitDepth(bitDepth, colorType, label);
+      assert(data[10] === 0, `${label}: unsupported PNG compression method`);
+      assert(data[11] === 0, `${label}: unsupported PNG filter method`);
+      assert(data[12] === 0 || data[12] === 1, `${label}: invalid PNG interlace method`);
+      interlace = data[12];
+      dimensions = [width, height];
       seenHeader = true;
     } else {
       assert(type !== "IHDR", `${label}: duplicate IHDR chunk`);
     }
 
-    if (type === "IDAT") compressedParts.push(data);
+    if (type === "PLTE") {
+      assert(!seenIdat, `${label}: PLTE appears after IDAT`);
+      assert(length > 0 && length % 3 === 0 && length <= 768, `${label}: invalid PLTE chunk`);
+      if (colorType === 3) assert(length / 3 <= 2 ** bitDepth, `${label}: PLTE exceeds indexed bit depth`);
+      seenPalette = true;
+    }
+
+    if (type === "IDAT") {
+      assert(!idatEnded, `${label}: non-consecutive IDAT chunks`);
+      seenIdat = true;
+      compressedParts.push(data);
+    } else if (seenIdat && type !== "IEND") {
+      idatEnded = true;
+    }
+
     if (type === "IEND") {
       assert(length === 0, `${label}: invalid IEND chunk`);
       assert(chunkEnd === buffer.length, `${label}: trailing data after IEND`);
@@ -111,16 +194,25 @@ function pngDimensions(buffer, label) {
 
   assert(seenHeader && seenEnd, `${label}: incomplete PNG structure`);
   assert(compressedParts.length > 0, `${label}: PNG has no image data`);
+  if (colorType === 3) assert(seenPalette, `${label}: indexed PNG has no PLTE chunk`);
+
+  let inflated;
   try {
-    inflateSync(Buffer.concat(compressedParts));
+    inflated = inflateSync(Buffer.concat(compressedParts));
   } catch {
     throw new Error(`${label}: corrupt PNG image data`);
   }
+  validateScanlines(inflated, dimensions[0], dimensions[1], bitDepth, colorType, interlace, label);
   return dimensions;
 }
 
-async function fetchOk(url, label) {
-  const response = await fetch(url);
+async function fetchOk(url, label, options = {}) {
+  let response;
+  try {
+    response = await fetch(url, { ...options, signal: AbortSignal.timeout(requestTimeoutMs) });
+  } catch (error) {
+    throw new Error(`${label}: request failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
   assert(response.ok, `${label}: HTTP ${response.status}`);
   return response;
 }
@@ -128,7 +220,8 @@ async function fetchOk(url, label) {
 async function validatePng(origin, href, expectedSize) {
   const url = new URL(href, origin).href;
   const response = await fetchOk(url, href);
-  assert(response.headers.get("content-type")?.toLowerCase().startsWith("image/png"), `${href}: response is not image/png`);
+  const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  assert(contentType === "image/png", `${href}: response is not image/png`);
   const dimensions = pngDimensions(Buffer.from(await response.arrayBuffer()), href);
   if (expectedSize) {
     assert(
@@ -138,11 +231,15 @@ async function validatePng(origin, href, expectedSize) {
   }
 }
 
-async function waitForWrangler(origin, child, logs) {
+async function waitForWrangler(origin, child, logs, launchError) {
   for (let attempt = 0; attempt < 120; attempt += 1) {
+    if (launchError()) throw new Error(`Wrangler failed to launch: ${launchError().message}`);
     if (child.exitCode !== null) throw new Error(`Wrangler exited before becoming ready:\n${logs()}`);
     try {
-      const response = await fetch(origin, { redirect: "manual" });
+      const response = await fetch(origin, {
+        redirect: "manual",
+        signal: AbortSignal.timeout(readinessTimeoutMs),
+      });
       if (response.status > 0) return;
     } catch {
       // The socket is expected to refuse connections briefly while workerd starts.
@@ -163,17 +260,19 @@ async function withWrangler(product, callback) {
   const root = join(benchesRoot, product);
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
-  const child = spawn(wranglerBin, ["dev", "--ip", "127.0.0.1", "--port", String(port)], {
+  const child = spawn(process.execPath, [wranglerCli, "dev", "--ip", "127.0.0.1", "--port", String(port)], {
     cwd: root,
     env: { ...process.env, NO_UPDATE_NOTIFIER: "1" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
+  let childError = null;
+  child.once("error", (error) => { childError = error; });
   child.stdout.on("data", (chunk) => { output += chunk.toString(); });
   child.stderr.on("data", (chunk) => { output += chunk.toString(); });
 
   try {
-    await waitForWrangler(origin, child, () => output);
+    await waitForWrangler(origin, child, () => output, () => childError);
     await callback(origin);
   } finally {
     await stopWrangler(child);
@@ -197,7 +296,7 @@ async function checkProduct(product, origin) {
 
   const touchIcon = linkHref(shell, "apple-touch-icon");
   assert(touchIcon, `${product}: Apple touch icon is not declared`);
-  const touchSize = touchIcon.tag.match(/\bsizes\s*=\s*["'](\d+)x(\d+)["']/iu);
+  const touchSize = attributeValue(touchIcon.tag, "sizes")?.match(/^(\d+)x(\d+)$/iu);
   await validatePng(
     origin,
     touchIcon.href,
