@@ -3,8 +3,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const benchesRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-const products = ["codebench", "docbench", "streambench"];
+const allProducts = ["codebench", "docbench", "streambench"];
+const requestedProduct = process.argv[2];
+const products = requestedProduct ? [requestedProduct] : allProducts;
 const standaloneDisplays = new Set(["standalone", "minimal-ui", "fullscreen"]);
+
+if (requestedProduct && !allProducts.includes(requestedProduct)) {
+  throw new Error(`Unknown Bench: ${requestedProduct}`);
+}
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
