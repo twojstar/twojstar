@@ -9,7 +9,8 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "check": "npm run check --workspaces --if-present",
+    "check": "node scripts/check-installability.mjs && npm run check --workspaces --if-present",
+    "check:web-apps": "node scripts/check-installability.mjs",
     "build:codebench": "npm run build --workspace=codebench",
     "build:docbench": "npm run build --workspace=docbench",
     "build:streambench": "npm run build --workspace=streambench",
