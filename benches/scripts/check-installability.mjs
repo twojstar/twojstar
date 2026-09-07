@@ -46,14 +46,32 @@ function attributeValue(tag, name) {
   return match?.[1] ?? match?.[2] ?? null;
 }
 
+function visibleHtmlSegments(source) {
+  const segments = [];
+  let cursor = 0;
+  while (cursor < source.length) {
+    const commentStart = source.indexOf("<!--", cursor);
+    if (commentStart === -1) {
+      segments.push(source.slice(cursor));
+      break;
+    }
+    segments.push(source.slice(cursor, commentStart));
+    const commentEnd = source.indexOf("-->", commentStart + 4);
+    if (commentEnd === -1) break;
+    cursor = commentEnd + 3;
+  }
+  return segments;
+}
+
 function linkHref(source, relation) {
-  const uncommented = source.replace(/<!--[\s\S]*?-->/gu, "");
-  const links = uncommented.match(/<link\b[^>]*>/giu) ?? [];
-  for (const link of links) {
-    const rel = attributeValue(link, "rel");
-    if (!rel?.toLowerCase().split(/\s+/u).includes(relation.toLowerCase())) continue;
-    const href = attributeValue(link, "href");
-    if (href) return { href, tag: link };
+  for (const segment of visibleHtmlSegments(source)) {
+    const links = segment.match(/<link\b[^>]*>/giu) ?? [];
+    for (const link of links) {
+      const rel = attributeValue(link, "rel");
+      if (!rel?.toLowerCase().split(/\s+/u).includes(relation.toLowerCase())) continue;
+      const href = attributeValue(link, "href");
+      if (href) return { href, tag: link };
+    }
   }
   return null;
 }
@@ -222,8 +240,8 @@ async function fetchOk(url, label, options = {}) {
   return response;
 }
 
-async function validatePng(origin, href, expectedSize) {
-  const url = new URL(href, origin).href;
+async function validatePng(baseUrl, href, expectedSize) {
+  const url = new URL(href, baseUrl).href;
   const response = await fetchOk(url, href);
   const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
   assert(contentType === "image/png", `${href}: response is not image/png`);
@@ -311,7 +329,7 @@ async function checkProduct(product, origin) {
   for (const size of [192, 512]) {
     const icon = manifest.icons?.find((entry) => entry.sizes === `${size}x${size}` && entry.type === "image/png");
     assert(icon?.src, `${product}: ${size}x${size} PNG manifest icon is missing`);
-    await validatePng(origin, icon.src, [size, size]);
+    await validatePng(manifestResponse.url, icon.src, [size, size]);
   }
 }
 
