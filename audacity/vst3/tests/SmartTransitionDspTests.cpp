@@ -139,15 +139,18 @@ void testHardSeamIsDetectedAndSmoothed()
 void testPlanWindowContainsTransition()
 {
     constexpr std::size_t seam = 500;
-    const auto result = render(withHardSeam(1400, seam), 2, {61, 17, 89});
+    const auto input = withHardSeam(1400, seam);
+    const auto result = render(input, 2, {61, 17, 89});
 
     require(result.hasPlan, "plan-window fixture did not produce a plan");
-    const auto halfFade = static_cast<std::int64_t>(result.plan.fadeLengthSamples / 2);
+    const auto fadeLength = static_cast<std::int64_t>(result.plan.fadeLengthSamples);
+    const auto halfFade = fadeLength / 2;
     const auto transitionStart = globalAnchor(result) - halfFade;
+    const auto transitionEnd = transitionStart + fadeLength;
     require(result.planWindowStart <= transitionStart,
             "transition starts before the advertised plan window");
-    require(result.plan.seamAnchorSamples >= halfFade,
-            "relative seam coordinate places transition before plan-window start");
+    require(transitionEnd + 1 < static_cast<std::int64_t>(input.size()),
+            "transition ends outside the buffered plan window");
 }
 
 void testBlockPartitionIsDeterministic()
