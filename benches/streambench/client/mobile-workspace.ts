@@ -10,7 +10,9 @@ const toolsPanel = document.querySelector<HTMLDetailsElement>("#toolsPanel");
 type ViewOptions = { scroll?: boolean };
 
 function playlistSize(): number {
-  const count = Number(entryCount.textContent?.trim() || "0");
+  const text = entryCount.textContent?.trim() || "0";
+  const total = text.includes("/") ? text.slice(text.lastIndexOf("/") + 1) : text;
+  const count = Number(total);
   return Number.isFinite(count) ? count : 0;
 }
 
