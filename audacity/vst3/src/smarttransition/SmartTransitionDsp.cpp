@@ -170,6 +170,7 @@ SmartTransitionDsp::Candidate SmartTransitionDsp::scoreCandidate(
     }
 
     double strongestScore = 0.0;
+    std::size_t affectedChannels = 0;
     for (std::size_t channel = 0; channel < channels; ++channel)
     {
         double leftSum = 0.0;
@@ -190,11 +191,6 @@ SmartTransitionDsp::Candidate SmartTransitionDsp::scoreCandidate(
         const auto rightMean = rightSum / static_cast<double>(radius);
         const auto leftRms = std::sqrt(leftSquares / static_cast<double>(radius));
         const auto rightRms = std::sqrt(rightSquares / static_cast<double>(radius));
-
-        candidate.leftMean += leftMean;
-        candidate.rightMean += rightMean;
-        candidate.leftRms += leftRms;
-        candidate.rightRms += rightRms;
 
         double derivativeSum = 0.0;
         std::int64_t derivativeCount = 0;
@@ -221,13 +217,27 @@ SmartTransitionDsp::Candidate SmartTransitionDsp::scoreCandidate(
         const auto meanScore = meanGap / (meanGap + 0.25 * localLevel + 4.0 * baselineDerivative + epsilon);
         const auto channelScore = std::clamp(0.82 * jumpScore + 0.18 * meanScore, 0.0, 1.0);
         strongestScore = std::max(strongestScore, channelScore);
+
+        if (channelScore >= kCandidateThreshold)
+        {
+            candidate.affectedChannelsMask = static_cast<std::uint8_t>(
+                candidate.affectedChannelsMask | static_cast<std::uint8_t>(std::uint8_t{1} << channel));
+            candidate.leftMean += leftMean;
+            candidate.rightMean += rightMean;
+            candidate.leftRms += leftRms;
+            candidate.rightRms += rightRms;
+            ++affectedChannels;
+        }
     }
 
-    const auto channelScale = 1.0 / static_cast<double>(channels);
-    candidate.leftMean *= channelScale;
-    candidate.rightMean *= channelScale;
-    candidate.leftRms *= channelScale;
-    candidate.rightRms *= channelScale;
+    if (affectedChannels > 0)
+    {
+        const auto channelScale = 1.0 / static_cast<double>(affectedChannels);
+        candidate.leftMean *= channelScale;
+        candidate.rightMean *= channelScale;
+        candidate.leftRms *= channelScale;
+        candidate.rightRms *= channelScale;
+    }
 
     const auto score = strongestScore;
     if (!std::isfinite(score))
@@ -237,7 +247,7 @@ SmartTransitionDsp::Candidate SmartTransitionDsp::scoreCandidate(
 
     candidate.scoreKey = static_cast<std::int64_t>(std::llround(score * static_cast<double>(kScoreScale)));
     candidate.confidence = static_cast<double>(candidate.scoreKey) / static_cast<double>(kScoreScale);
-    candidate.valid = candidate.confidence >= kCandidateThreshold;
+    candidate.valid = candidate.confidence >= kCandidateThreshold && candidate.affectedChannelsMask != 0;
     return candidate;
 }
 
@@ -362,7 +372,7 @@ void SmartTransitionDsp::finalizeCluster(std::int64_t currentInputIndex) noexcep
 SmartEditPlan SmartTransitionDsp::makePlan(const Candidate& candidate, std::size_t fadeLength) const noexcept
 {
     SmartEditPlan plan{};
-    if (!candidate.valid || fadeLength < kMinFadeLengthSamples)
+    if (!candidate.valid || candidate.affectedChannelsMask == 0 || fadeLength < kMinFadeLengthSamples)
     {
         return plan;
     }
@@ -376,6 +386,7 @@ SmartEditPlan SmartTransitionDsp::makePlan(const Candidate& candidate, std::size
     }
 
     plan.confidence = candidate.confidence;
+    plan.affectedChannelsMask = candidate.affectedChannelsMask;
     plan.leftGainDb = 0.0;
     plan.rightGainDb = rightGainDb;
     plan.dcDelta = clampFinite(candidate.rightMean - candidate.leftMean, -0.35, 0.35);
@@ -391,6 +402,12 @@ double SmartTransitionDsp::renderSample(std::size_t channel, std::int64_t output
 {
     const auto source = sampleAt(channel, outputIndex);
     if (!planCommitted_ || committedAnchor_ < 0 || plan_.fadeLengthSamples <= 0)
+    {
+        return source;
+    }
+
+    const auto channelBit = static_cast<std::uint8_t>(std::uint8_t{1} << channel);
+    if ((plan_.affectedChannelsMask & channelBit) == 0)
     {
         return source;
     }
