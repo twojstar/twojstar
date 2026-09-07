@@ -129,7 +129,10 @@
     ["Connecting", "Łączenie"],
     ["Press play", "Naciśnij play"],
     ["Playback", "Odtwarzanie"],
+    ["Buffering", "Buforowanie"],
     ["Stalled", "Przestój"],
+    ["Ended", "Koniec"],
+    ["Stopped", "Zatrzymano"],
     ["This browser does not support HLS or Media Source Extensions.", "Ta przeglądarka nie obsługuje HLS ani Media Source Extensions."],
     ["Native HLS · manifest details unavailable", "Natywne HLS · szczegóły manifestu niedostępne"],
     ["The player cannot open this source.", "Odtwarzacz nie może otworzyć tego źródła."],
@@ -138,6 +141,7 @@
     ["No items to export", "Brak pozycji do eksportu"],
     ["M3U copied to clipboard", "M3U skopiowane do schowka"],
     ["Could not copy M3U", "Nie udało się skopiować M3U"],
+    ["Could not copy library", "Nie udało się skopiować biblioteki"],
     ["This address is already on the current playlist", "Ten adres już jest na aktualnej playliście"],
     ["This address is already on the current playlist.", "Ten adres już jest na aktualnej playliście."],
     ["Enter a valid HTTP or HTTPS address and channel name.", "Podaj poprawny adres HTTP lub HTTPS i nazwę kanału."],
@@ -158,7 +162,11 @@
     ["Could not resolve the nested playlist.", "Nie udało się rozwiązać zagnieżdżonej playlisty."],
     ["HLS could not be fetched. With custom playlists this usually means CORS, mixed content, geoblocking or a dead address.", "HLS nie został pobrany. Przy własnych playlistach zwykle oznacza to CORS, mixed content, geoblokadę albo martwy adres."],
     ["The stream goes through Streambench's limited relay to bypass mixed content or HLS CORS.", "Stream przechodzi przez ograniczony przekaźnik Streambencha, aby ominąć mixed content lub CORS HLS."],
-    ["Stream audio", "Stream audio"]
+    ["Stream audio", "Stream audio"],
+    ["No group", "Bez grupy"],
+    ["Local", "Lokalna"],
+    ["Could not read the playlist file.", "Nie udało się odczytać pliku playlisty."],
+    ["Pasted text", "Wklejony tekst"]
   ];
   const patterns = {
     en: [
@@ -174,7 +182,10 @@
       [/^(.+): nie znaleziono poprawnych adresów HTTP lub HTTPS\.$/, "$1: no valid HTTP or HTTPS addresses found."],
       [/^Nie udało się pobrać katalogu (.+)\.$/, "Could not fetch the $1 catalog."],
       [/^Nie udało się pobrać playlisty (.+)\.$/, "Could not fetch the $1 playlist."],
-      [/^Źródło: (.+)$/, "Source: $1"]
+      [/^Źródło: (.+)$/, "Source: $1"],
+      [/^Pobieranie: (.+)…$/, "Fetching: $1…"],
+      [/^(.+): M3U skopiowane$/, "$1: M3U copied"],
+      [/^HLS: nieznany błąd$/, "HLS: unknown error"]
     ],
     pl: [
       [/^Loaded (\d+) of (\d+) items$/, "Wczytano $1 z $2 pozycji"],
@@ -189,7 +200,10 @@
       [/^(.+): no valid HTTP or HTTPS addresses found\.$/, "$1: nie znaleziono poprawnych adresów HTTP lub HTTPS."],
       [/^Could not fetch the (.+) catalog\.$/, "Nie udało się pobrać katalogu $1."],
       [/^Could not fetch the (.+) playlist\.$/, "Nie udało się pobrać playlisty $1."],
-      [/^Source: (.+)$/, "Źródło: $1"]
+      [/^Source: (.+)$/, "Źródło: $1"],
+      [/^Fetching: (.+)…$/, "Pobieranie: $1…"],
+      [/^(.+): M3U copied$/, "$1: M3U skopiowane"],
+      [/^HLS: unknown error$/, "HLS: nieznany błąd"]
     ]
   };
   globalThis.BenchI18n = globalThis.createBenchI18n({
