@@ -106,25 +106,36 @@
   ["counting…", "liczenie…"],
   ["token count unavailable", "liczba tokenów niedostępna"]
   ];
+
+  const plPlural = (value, one, few, many) => {
+    const count = Number(value);
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+    if (count === 1) return one;
+    if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) return few;
+    return many;
+  };
+  const enPlural = (value, one, many) => Number(value) === 1 ? one : many;
+
   const patterns = {
   pl: [
     [/^UTF-8 · LF · 1 line$/, "UTF-8 · LF · 1 linia"],
-    [/^(.+) · (\d+) lines$/, "$1 · $2 linii"],
-    [/^Added (\d+) attachment(?:s)?\.$/, "Dodano $1 załącznik(i)."],
-    [/^(\d+) bookmarks? to deleted pages were pruned\.$/, "Usunięto $1 zakładek prowadzących do usuniętych stron."],
-    [/^(\d+) words?$/, "$1 słów"],
-    [/^(\d+) chars?$/, "$1 znaków"],
-    [/^(\d+) tokens? · o200k$/, "$1 tokenów · o200k"],
+    [/^(.+) · (\d+) lines?$/, (_match, prefix, count) => `${prefix} · ${count} ${plPlural(count, "linia", "linie", "linii")}`],
+    [/^Added (\d+) attachments?\.$/, (_match, count) => `Dodano ${count} ${plPlural(count, "załącznik", "załączniki", "załączników")}.`],
+    [/^(\d+) bookmarks? to deleted pages were pruned\.$/, (_match, count) => `Usunięto ${count} ${plPlural(count, "zakładkę", "zakładki", "zakładek")} prowadzących do usuniętych stron.`],
+    [/^(\d+) words?$/, (_match, count) => `${count} ${plPlural(count, "słowo", "słowa", "słów")}`],
+    [/^(\d+) chars?$/, (_match, count) => `${count} ${plPlural(count, "znak", "znaki", "znaków")}`],
+    [/^(\d+) tokens? · o200k$/, (_match, count) => `${count} ${plPlural(count, "token", "tokeny", "tokenów")} · o200k`],
     [/^Inspect · (\d+\+?)$/, "Analiza · $1"]
   ],
   en: [
     [/^UTF-8 · LF · 1 linia$/, "UTF-8 · LF · 1 line"],
-    [/^(.+) · (\d+) linii$/, "$1 · $2 lines"],
-    [/^Dodano (\d+) załącznik\(i\)\.$/, "Added $1 attachments."],
-    [/^Usunięto (\d+) zakładek prowadzących do usuniętych stron\.$/, "$1 bookmarks to deleted pages were pruned."],
-    [/^(\d+) słów$/, "$1 words"],
-    [/^(\d+) znaków$/, "$1 chars"],
-    [/^(\d+) tokenów · o200k$/, "$1 tokens · o200k"],
+    [/^(.+) · (\d+) (?:linia|linie|linii)$/, (_match, prefix, count) => `${prefix} · ${count} ${enPlural(count, "line", "lines")}`],
+    [/^Dodano (\d+) (?:załącznik|załączniki|załączników)\.$/, (_match, count) => `Added ${count} ${enPlural(count, "attachment", "attachments")}.`],
+    [/^Usunięto (\d+) (?:zakładkę|zakładki|zakładek) prowadzących do usuniętych stron\.$/, (_match, count) => `${count} ${enPlural(count, "bookmark", "bookmarks")} to deleted pages were pruned.`],
+    [/^(\d+) (?:słowo|słowa|słów)$/, (_match, count) => `${count} ${enPlural(count, "word", "words")}`],
+    [/^(\d+) (?:znak|znaki|znaków)$/, (_match, count) => `${count} ${enPlural(count, "char", "chars")}`],
+    [/^(\d+) (?:token|tokeny|tokenów) · o200k$/, (_match, count) => `${count} ${enPlural(count, "token", "tokens")} · o200k`],
     [/^Analiza · (\d+\+?)$/, "Inspect · $1"]
   ]
 };
