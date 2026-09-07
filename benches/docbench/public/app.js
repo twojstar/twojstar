@@ -330,6 +330,7 @@
   }
 
   function formatDocument() {
+    statusBadge.dataset.formatResult = "failed";
     const result = parseCurrent();
     if (!result.ok) return renderValidation({ revealError: true });
     try {
@@ -345,6 +346,7 @@
       if (formatSelect.value === "xml") editor.value = `${formatXml(editor.value)}\n`;
       state.mixedEol = false;
       document.dispatchEvent(new Event("docbench:document-change"));
+      statusBadge.dataset.formatResult = "success";
       renderValidation();
     } catch (error) {
       statusBadge.className = "status bad";

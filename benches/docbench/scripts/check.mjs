@@ -106,7 +106,7 @@ for (const fidelityGuard of [
   "preservesXmlSpace",
   "PROCESSING_INSTRUCTION_NODE",
   "DOCUMENT_TYPE_NODE",
-  'statusBadge.textContent === "Format failed"',
+  'statusBadge.dataset.formatResult === "failed"',
 ]) {
   if (!documentEnhancements.includes(fidelityGuard)) {
     throw new Error(`Structured preview is missing fidelity guard: ${fidelityGuard}`);

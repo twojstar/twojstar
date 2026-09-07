@@ -1160,7 +1160,7 @@ eolSelect.addEventListener("change", () => {
 formatButton.addEventListener("click", () => {
   state.documentRevision += 1;
   queueMicrotask(() => {
-    if (statusBadge.textContent === "Format failed") {
+    if (statusBadge.dataset.formatResult === "failed") {
       updateMeta();
       return;
     }

@@ -231,8 +231,10 @@ function enhanceRows() {
     const hide = tools.querySelector('[data-workspace-action="hide"]');
     favorite.textContent = library.isFavorite(item) ? "★" : "☆";
     favorite.title = library.isFavorite(item) ? "Usuń z ulubionych" : "Dodaj do ulubionych";
+    favorite.setAttribute("aria-label", favorite.title);
     hide.textContent = library.isHidden(item) ? "↩" : "×";
     hide.title = library.isHidden(item) ? "Przywróć" : "Ukryj";
+    hide.setAttribute("aria-label", hide.title);
   }
 
   observer.observe(ui.entries, { childList: true, subtree: true });
@@ -380,11 +382,13 @@ function libraryRow(item) {
   edit.dataset.libraryAction = "edit";
   edit.textContent = "✎";
   edit.title = "Edytuj";
+  edit.setAttribute("aria-label", edit.title);
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.dataset.libraryAction = ui.libraryView.value === "hidden" ? "unhide" : "favorite";
   toggle.textContent = ui.libraryView.value === "hidden" ? "↩" : library.isFavorite(item) ? "★" : "☆";
   toggle.title = ui.libraryView.value === "hidden" ? "Przywróć" : "Ulubione";
+  toggle.setAttribute("aria-label", toggle.title);
   actions.append(edit, toggle);
 
   row.append(play, actions);
