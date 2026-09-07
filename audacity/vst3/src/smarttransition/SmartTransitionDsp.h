@@ -97,6 +97,7 @@ private:
     bool drainStarted_{false};
 
     Candidate clusterBest_{};
+    std::int64_t clusterSeedAnchor_{-1};
     bool clusterActive_{false};
     SmartEditPlan plan_{};
     bool planCommitted_{false};
