@@ -22,6 +22,7 @@ struct SmartEditPlan
     std::uint32_t schemaVersion{1};
     std::int64_t seamAnchorSamples{0};
     double confidence{0.0};
+    std::uint8_t affectedChannelsMask{0};
     double leftGainDb{0.0};
     double rightGainDb{0.0};
     double dcDelta{0.0};
@@ -64,6 +65,7 @@ private:
         std::int64_t anchor{0};
         std::int64_t scoreKey{0};
         double confidence{0.0};
+        std::uint8_t affectedChannelsMask{0};
         double leftMean{0.0};
         double rightMean{0.0};
         double leftRms{0.0};
