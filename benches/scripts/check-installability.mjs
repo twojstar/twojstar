@@ -1,6 +1,9 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, extname, join, resolve } from "node:path";
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { createServer } from "node:net";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { inflateSync } from "node:zlib";
 
 const benchesRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const allProducts = ["codebench", "docbench", "streambench"];
@@ -8,154 +11,37 @@ const requestedProduct = process.argv[2];
 const products = requestedProduct ? [requestedProduct] : allProducts;
 const standaloneDisplays = new Set(["standalone", "minimal-ui", "fullscreen"]);
 const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const wranglerBin = join(
+  benchesRoot,
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "wrangler.cmd" : "wrangler",
+);
 
 if (requestedProduct && !allProducts.includes(requestedProduct)) {
   throw new Error(`Unknown Bench: ${requestedProduct}`);
 }
+assert(existsSync(wranglerBin), "Wrangler is not installed; run npm ci in benches first");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-function parseJsonc(text) {
-  let output = "";
-  let inString = false;
-  let escaped = false;
-  let lineComment = false;
-  let blockComment = false;
-
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    const next = text[index + 1];
-
-    if (lineComment) {
-      if (char === "\n") {
-        lineComment = false;
-        output += char;
-      } else {
-        output += " ";
-      }
-      continue;
-    }
-    if (blockComment) {
-      if (char === "*" && next === "/") {
-        output += "  ";
-        blockComment = false;
-        index += 1;
-      } else {
-        output += char === "\n" ? "\n" : " ";
-      }
-      continue;
-    }
-    if (inString) {
-      output += char;
-      if (escaped) escaped = false;
-      else if (char === "\\") escaped = true;
-      else if (char === '"') inString = false;
-      continue;
-    }
-    if (char === '"') {
-      inString = true;
-      output += char;
-      continue;
-    }
-    if (char === "/" && next === "/") {
-      output += "  ";
-      lineComment = true;
-      index += 1;
-      continue;
-    }
-    if (char === "/" && next === "*") {
-      output += "  ";
-      blockComment = true;
-      index += 1;
-      continue;
-    }
-    output += char;
-  }
-
-  let normalized = "";
-  inString = false;
-  escaped = false;
-  for (let index = 0; index < output.length; index += 1) {
-    const char = output[index];
-    if (inString) {
-      normalized += char;
-      if (escaped) escaped = false;
-      else if (char === "\\") escaped = true;
-      else if (char === '"') inString = false;
-      continue;
-    }
-    if (char === '"') {
-      inString = true;
-      normalized += char;
-      continue;
-    }
-    if (char === ",") {
-      let lookahead = index + 1;
-      while (/\s/u.test(output[lookahead] ?? "")) lookahead += 1;
-      if (output[lookahead] === "}" || output[lookahead] === "]") continue;
-    }
-    normalized += char;
-  }
-
-  return JSON.parse(normalized);
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-function localImportPath(importer, specifier) {
-  if (!specifier.startsWith(".")) return null;
-  const original = resolve(dirname(importer), specifier);
-  const candidates = [original];
-  const extension = extname(original);
-  if (extension === ".js" || extension === ".mjs") {
-    candidates.push(original.slice(0, -extension.length) + ".ts");
-  } else if (!extension) {
-    candidates.push(`${original}.ts`, `${original}.js`, `${original}.mjs`);
-  }
-  return candidates.find((candidate) => existsSync(candidate)) ?? null;
-}
-
-function importedSpecifiers(source) {
-  const specifiers = [];
-  for (const pattern of [
-    /\b(?:import|export)\s+[^;]*?\bfrom\s*["']([^"']+)["']/gu,
-    /\bimport\s*["']([^"']+)["']/gu,
-  ]) {
-    let match;
-    while ((match = pattern.exec(source)) !== null) specifiers.push(match[1]);
-  }
-  return specifiers;
-}
-
-function workerGraph(root, main) {
-  const mainPath = join(root, main.replace(/^\.\//u, ""));
-  const graph = new Map();
-  const queue = [mainPath];
-
-  while (queue.length > 0) {
-    const path = queue.pop();
-    if (!path || graph.has(path) || !existsSync(path)) continue;
-    const source = readFileSync(path, "utf8");
-    const imports = importedSpecifiers(source)
-      .map((specifier) => localImportPath(path, specifier))
-      .filter(Boolean);
-    graph.set(path, { source, imports });
-    queue.push(...imports);
-  }
-
-  return { graph, mainPath };
-}
-
-function canReach(graph, from, target, visited = new Set()) {
-  if (from === target) return true;
-  if (visited.has(from)) return false;
-  visited.add(from);
-  return (graph.get(from)?.imports ?? []).some((next) => canReach(graph, next, target, visited));
-}
-
-function shellSource(root, main) {
-  const paths = [join(root, "public", "index.html"), join(root, main.replace(/^\.\//u, ""))];
-  return paths.filter(existsSync).map((path) => readFileSync(path, "utf8")).join("\n");
+async function freePort() {
+  const server = createServer();
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : null;
+  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  assert(port, "Could not allocate a local port for Wrangler");
+  return port;
 }
 
 function linkHref(source, relation) {
@@ -169,61 +55,139 @@ function linkHref(source, relation) {
   return null;
 }
 
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
 function pngDimensions(buffer, label) {
-  assert(buffer.length >= 24 && buffer.subarray(0, 8).equals(pngSignature), `${label}: not a valid PNG`);
-  return [buffer.readUInt32BE(16), buffer.readUInt32BE(20)];
-}
+  assert(buffer.length >= 33 && buffer.subarray(0, 8).equals(pngSignature), `${label}: invalid PNG signature`);
 
-function generatedPng(route, graph, mainPath) {
-  const routeFile = [...graph.entries()].find(([, entry]) => entry.source.includes(route))?.[0];
-  if (!routeFile) return null;
+  let offset = 8;
+  let dimensions = null;
+  let seenHeader = false;
+  let seenEnd = false;
+  const compressedParts = [];
 
-  const responder = [...graph.entries()].find(([, entry]) => /export function faviconResponse\s*\(/u.test(entry.source))?.[0];
-  const mainSource = graph.get(mainPath)?.source ?? "";
-  assert(responder && canReach(graph, mainPath, responder), `${route}: icon responder is not reachable from the Worker entry`);
-  assert(canReach(graph, responder, routeFile), `${route}: icon registry is not reachable from the responder`);
-  assert(/faviconResponse\s*\(\s*url\.pathname\s*\)/u.test(mainSource), `${route}: Worker entry does not route URL paths through the icon responder`);
+  while (offset < buffer.length) {
+    assert(offset + 12 <= buffer.length, `${label}: truncated PNG chunk header`);
+    const length = buffer.readUInt32BE(offset);
+    const typeStart = offset + 4;
+    const dataStart = offset + 8;
+    const dataEnd = dataStart + length;
+    const chunkEnd = dataEnd + 4;
+    assert(chunkEnd <= buffer.length, `${label}: truncated PNG chunk`);
 
-  const source = graph.get(routeFile).source;
-  const routeIndex = source.indexOf(route);
-  const assetSource = source.slice(routeIndex, routeIndex + 300_000);
-  const match = assetSource.match(/type\s*:\s*["']image\/png["'][\s\S]{0,200}?data\s*:\s*["']([A-Za-z0-9+/=]+)["']/u);
-  assert(match, `${route}: reachable Worker icon has no PNG payload`);
-  return Buffer.from(match[1], "base64");
-}
+    const typeBytes = buffer.subarray(typeStart, dataStart);
+    const type = typeBytes.toString("ascii");
+    const data = buffer.subarray(dataStart, dataEnd);
+    const expectedCrc = buffer.readUInt32BE(dataEnd);
+    const actualCrc = crc32(Buffer.concat([typeBytes, data]));
+    assert(actualCrc === expectedCrc, `${label}: invalid ${type} CRC`);
 
-function workerRunsFirst(wrangler, route) {
-  const setting = wrangler.assets?.run_worker_first;
-  return setting === true || setting?.includes?.(route) === true;
-}
+    if (!seenHeader) {
+      assert(type === "IHDR" && length === 13, `${label}: PNG must start with a 13-byte IHDR`);
+      dimensions = [data.readUInt32BE(0), data.readUInt32BE(4)];
+      seenHeader = true;
+    } else {
+      assert(type !== "IHDR", `${label}: duplicate IHDR chunk`);
+    }
 
-function deliveredPng(root, publicRoot, route, wrangler, worker, expectedSize) {
-  const staticPath = join(publicRoot, route.replace(/^\//u, ""));
-  let buffer = existsSync(staticPath) ? readFileSync(staticPath) : null;
-
-  if (!buffer) {
-    assert(workerRunsFirst(wrangler, route), `${route}: generated icon is not routed through the Worker`);
-    buffer = generatedPng(route, worker.graph, worker.mainPath);
+    if (type === "IDAT") compressedParts.push(data);
+    if (type === "IEND") {
+      assert(length === 0, `${label}: invalid IEND chunk`);
+      assert(chunkEnd === buffer.length, `${label}: trailing data after IEND`);
+      seenEnd = true;
+      break;
+    }
+    offset = chunkEnd;
   }
 
-  assert(buffer, `${route}: PNG asset is not delivered`);
-  const [width, height] = pngDimensions(buffer, route);
+  assert(seenHeader && seenEnd, `${label}: incomplete PNG structure`);
+  assert(compressedParts.length > 0, `${label}: PNG has no image data`);
+  try {
+    inflateSync(Buffer.concat(compressedParts));
+  } catch {
+    throw new Error(`${label}: corrupt PNG image data`);
+  }
+  return dimensions;
+}
+
+async function fetchOk(url, label) {
+  const response = await fetch(url);
+  assert(response.ok, `${label}: HTTP ${response.status}`);
+  return response;
+}
+
+async function validatePng(origin, href, expectedSize) {
+  const url = new URL(href, origin).href;
+  const response = await fetchOk(url, href);
+  assert(response.headers.get("content-type")?.toLowerCase().startsWith("image/png"), `${href}: response is not image/png`);
+  const dimensions = pngDimensions(Buffer.from(await response.arrayBuffer()), href);
   if (expectedSize) {
-    assert(width === expectedSize[0] && height === expectedSize[1], `${route}: expected ${expectedSize.join("x")}, got ${width}x${height}`);
+    assert(
+      dimensions[0] === expectedSize[0] && dimensions[1] === expectedSize[1],
+      `${href}: expected ${expectedSize.join("x")}, got ${dimensions.join("x")}`,
+    );
   }
 }
 
-for (const product of products) {
-  const root = join(benchesRoot, product);
-  const publicRoot = join(root, "public");
-  const manifestPath = join(publicRoot, "site.webmanifest");
-  const wranglerPath = join(root, "wrangler.jsonc");
+async function waitForWrangler(origin, child, logs) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    if (child.exitCode !== null) throw new Error(`Wrangler exited before becoming ready:\n${logs()}`);
+    try {
+      const response = await fetch(origin, { redirect: "manual" });
+      if (response.status > 0) return;
+    } catch {
+      // The socket is expected to refuse connections briefly while workerd starts.
+    }
+    await delay(100);
+  }
+  throw new Error(`Wrangler did not become ready:\n${logs()}`);
+}
 
-  assert(existsSync(manifestPath), `${product}: site.webmanifest is missing`);
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  const wrangler = parseJsonc(readFileSync(wranglerPath, "utf8"));
-  const shell = shellSource(root, wrangler.main);
-  const worker = workerGraph(root, wrangler.main);
+async function stopWrangler(child) {
+  if (child.exitCode !== null) return;
+  child.kill("SIGTERM");
+  for (let attempt = 0; attempt < 20 && child.exitCode === null; attempt += 1) await delay(50);
+  if (child.exitCode === null) child.kill("SIGKILL");
+}
+
+async function withWrangler(product, callback) {
+  const root = join(benchesRoot, product);
+  const port = await freePort();
+  const origin = `http://127.0.0.1:${port}`;
+  const child = spawn(wranglerBin, ["dev", "--ip", "127.0.0.1", "--port", String(port)], {
+    cwd: root,
+    env: { ...process.env, NO_UPDATE_NOTIFIER: "1" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let output = "";
+  child.stdout.on("data", (chunk) => { output += chunk.toString(); });
+  child.stderr.on("data", (chunk) => { output += chunk.toString(); });
+
+  try {
+    await waitForWrangler(origin, child, () => output);
+    await callback(origin);
+  } finally {
+    await stopWrangler(child);
+  }
+}
+
+async function checkProduct(product, origin) {
+  const shellResponse = await fetchOk(`${origin}/`, `${product}: app shell`);
+  const shell = await shellResponse.text();
+
+  const manifestLink = linkHref(shell, "manifest");
+  assert(manifestLink, `${product}: served app shell does not declare a manifest`);
+  const manifestResponse = await fetchOk(new URL(manifestLink.href, origin), `${product}: manifest`);
+  const manifest = await manifestResponse.json();
 
   assert(manifest.id, `${product}: manifest id is missing`);
   assert(manifest.name && manifest.short_name, `${product}: manifest app names are missing`);
@@ -231,24 +195,22 @@ for (const product of products) {
   assert(standaloneDisplays.has(manifest.display), `${product}: manifest is not standalone-capable`);
   assert(manifest.theme_color && manifest.background_color, `${product}: manifest colors are missing`);
 
-  const manifestLink = linkHref(shell, "manifest");
-  assert(manifestLink?.href === "/site.webmanifest", `${product}: served app shell does not discover /site.webmanifest`);
-
   const touchIcon = linkHref(shell, "apple-touch-icon");
   assert(touchIcon, `${product}: Apple touch icon is not declared`);
   const touchSize = touchIcon.tag.match(/\bsizes\s*=\s*["'](\d+)x(\d+)["']/iu);
-  deliveredPng(
-    root,
-    publicRoot,
+  await validatePng(
+    origin,
     touchIcon.href,
-    wrangler,
-    worker,
     touchSize ? [Number(touchSize[1]), Number(touchSize[2])] : null,
   );
 
   for (const size of [192, 512]) {
     const icon = manifest.icons?.find((entry) => entry.sizes === `${size}x${size}` && entry.type === "image/png");
     assert(icon?.src, `${product}: ${size}x${size} PNG manifest icon is missing`);
-    deliveredPng(root, publicRoot, icon.src, wrangler, worker, [size, size]);
+    await validatePng(origin, icon.src, [size, size]);
   }
+}
+
+for (const product of products) {
+  await withWrangler(product, (origin) => checkProduct(product, origin));
 }
