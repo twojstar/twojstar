@@ -1,5 +1,3 @@
-import { ICON as android192Icon } from "./favicon-android-192.ts";
-import { ICON as android512Icon } from "./favicon-android-512.ts";
 import { ICON as appleIcon } from "./favicon-apple.ts";
 import { ICON as icoIcon } from "./favicon-ico-data.ts";
 import { ICONS as smallIcons } from "./favicon-small.ts";
@@ -12,8 +10,6 @@ type Icon = {
 const ICONS = new Map<string, Icon>([
   ...Object.entries(smallIcons),
   [appleIcon.path, appleIcon],
-  [android192Icon.path, android192Icon],
-  [android512Icon.path, android512Icon],
   [icoIcon.path, icoIcon],
 ]);
 
