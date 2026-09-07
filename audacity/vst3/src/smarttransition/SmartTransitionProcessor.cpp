@@ -9,28 +9,23 @@
 namespace Travny::Vst3 {
 namespace {
 
-template <typename Sample>
-[[nodiscard]] bool hasWritableOutputBuffers(Sample** output, Steinberg::int32 channels) noexcept
-{
-    if (output == nullptr)
-    {
-        return false;
-    }
-
-    for (Steinberg::int32 channel = 0; channel < channels; ++channel)
-    {
-        if (output[channel] == nullptr)
-        {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 [[nodiscard]] Steinberg::uint64 channelMask(Steinberg::int32 channels) noexcept
 {
     return (Steinberg::uint64{1} << static_cast<Steinberg::uint32>(channels)) - 1;
+}
+
+template <typename Sample>
+[[nodiscard]] Steinberg::uint64 missingOutputMask(Sample** output, Steinberg::int32 channels) noexcept
+{
+    Steinberg::uint64 mask = 0;
+    for (Steinberg::int32 channel = 0; channel < channels; ++channel)
+    {
+        if (output == nullptr || output[channel] == nullptr)
+        {
+            mask |= Steinberg::uint64{1} << static_cast<Steinberg::uint32>(channel);
+        }
+    }
+    return mask;
 }
 
 } // namespace
@@ -142,12 +137,17 @@ bool SmartTransitionProcessor::processBlock(
                 : static_cast<double>(channelInput[sample]);
         }
 
-        // Read the complete input frame before writing output, so aliased in-place buffers are safe.
+        // Always advance the DSP clock. If a host supplies no writable buffer for a channel,
+        // outputFrame is the fixed-size discard sink for that channel and no allocation is needed.
         dsp_.processFrame(inputFrame.data(), outputFrame.data(), static_cast<std::size_t>(channelCount));
         for (Steinberg::int32 channel = 0; channel < channelCount; ++channel)
         {
             const auto value = static_cast<Sample>(outputFrame[static_cast<std::size_t>(channel)]);
-            output[channel][sample] = value;
+            auto* channelOutput = output != nullptr ? output[channel] : nullptr;
+            if (channelOutput != nullptr)
+            {
+                channelOutput[sample] = value;
+            }
             allSilent = allSilent && value == static_cast<Sample>(0);
         }
     }
@@ -170,16 +170,12 @@ Steinberg::tresult PLUGIN_API SmartTransitionProcessor::process(Steinberg::Vst::
 
     const auto silenceMask = channelMask(channels);
     const auto inputSilenceFlags = data.inputs[0].silenceFlags;
+    Steinberg::uint64 unavailableOutputs = 0;
     bool allSilent = false;
     if (data.symbolicSampleSize == Steinberg::Vst::kSample32)
     {
         auto** output = data.outputs[0].channelBuffers32;
-        if (!hasWritableOutputBuffers(output, channels))
-        {
-            data.outputs[0].silenceFlags = silenceMask;
-            return Steinberg::kResultOk;
-        }
-
+        unavailableOutputs = missingOutputMask(output, channels);
         allSilent = processBlock(
             data.inputs[0].channelBuffers32,
             output,
@@ -190,12 +186,7 @@ Steinberg::tresult PLUGIN_API SmartTransitionProcessor::process(Steinberg::Vst::
     else if (data.symbolicSampleSize == Steinberg::Vst::kSample64)
     {
         auto** output = data.outputs[0].channelBuffers64;
-        if (!hasWritableOutputBuffers(output, channels))
-        {
-            data.outputs[0].silenceFlags = silenceMask;
-            return Steinberg::kResultOk;
-        }
-
+        unavailableOutputs = missingOutputMask(output, channels);
         allSilent = processBlock(
             data.inputs[0].channelBuffers64,
             output,
@@ -208,7 +199,7 @@ Steinberg::tresult PLUGIN_API SmartTransitionProcessor::process(Steinberg::Vst::
         return Steinberg::kResultFalse;
     }
 
-    data.outputs[0].silenceFlags = allSilent ? silenceMask : 0;
+    data.outputs[0].silenceFlags = allSilent ? silenceMask : unavailableOutputs;
     return Steinberg::kResultOk;
 }
 
