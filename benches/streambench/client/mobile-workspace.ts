@@ -5,10 +5,14 @@ const nav = document.querySelector<HTMLElement>("#mobileWorkspaceNav");
 const buttons = [...document.querySelectorAll<HTMLElement>("[data-mobile-view-target]")];
 const playlistCount = document.querySelector<HTMLElement>("#mobilePlaylistCount");
 const entryCount = document.querySelector<HTMLElement>("#entryCount")!;
-const status = document.querySelector<HTMLElement>("#status")!;
 const toolsPanel = document.querySelector<HTMLDetailsElement>("#toolsPanel");
 
 type ViewOptions = { scroll?: boolean };
+
+function playlistSize(): number {
+  const count = Number(entryCount.textContent?.trim() || "0");
+  return Number.isFinite(count) ? count : 0;
+}
 
 function updateCount(): void {
   if (playlistCount) playlistCount.textContent = entryCount.textContent?.trim() || "0";
@@ -35,13 +39,12 @@ for (const button of buttons) {
 }
 
 mediaQuery.addEventListener("change", syncToolsDrawer);
-new MutationObserver(updateCount).observe(entryCount, { childList: true, subtree: true, characterData: true });
 new MutationObserver(() => {
-  if (status.textContent?.trim() !== "Playlista gotowa") return;
-  document.body.dataset.hasPlaylist = "true";
   updateCount();
+  if (playlistSize() <= 0) return;
+  document.body.dataset.hasPlaylist = "true";
   setView("playlist", { scroll: true });
-}).observe(status, { childList: true, subtree: true, characterData: true });
+}).observe(entryCount, { childList: true, subtree: true, characterData: true });
 
 window.addEventListener("streambench:channel", (event) => {
   const detail = (event as CustomEvent<{ title?: string }>).detail;
