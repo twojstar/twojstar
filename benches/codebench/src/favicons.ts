@@ -1,4 +1,3 @@
-import { ICONS as androidIcons } from "./favicon-android.js";
 import { ICONS as smallIcons } from "./favicon-small.js";
 
 type Icon = {
@@ -6,7 +5,7 @@ type Icon = {
   readonly data: string;
 };
 
-const ICONS: Record<string, Icon> = { ...smallIcons, ...androidIcons };
+const ICONS: Record<string, Icon> = { ...smallIcons };
 
 function decodeBase64(data: string): ArrayBuffer {
   const binary = atob(data);
