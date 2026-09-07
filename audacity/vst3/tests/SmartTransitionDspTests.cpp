@@ -187,6 +187,39 @@ void testOverlappingCandidatesCompeteBeforeCommit()
             "an earlier weaker overlapping seam committed before the stronger candidate");
 }
 
+void testOverlapChainDoesNotPullInDistantSeam()
+{
+    constexpr std::size_t firstSeam = 500;
+    constexpr std::size_t bridgeSeam = 650;
+    constexpr std::size_t distantSeam = 800;
+    auto input = cleanSine(1800);
+    for (auto& frame : input)
+    {
+        frame[0] *= 0.25;
+        frame[1] *= 0.25;
+    }
+    for (std::size_t i = firstSeam; i < input.size(); ++i)
+    {
+        input[i][0] += 0.35;
+        input[i][1] += 0.30;
+    }
+    for (std::size_t i = bridgeSeam; i < input.size(); ++i)
+    {
+        input[i][0] += 0.22;
+        input[i][1] += 0.19;
+    }
+    for (std::size_t i = distantSeam; i < input.size(); ++i)
+    {
+        input[i][0] -= 0.75;
+        input[i][1] -= 0.65;
+    }
+
+    const auto result = render(input, 2, {19, 47, 71});
+    require(result.hasPlan, "overlap-chain fixture did not produce a plan");
+    require(std::llabs(globalAnchor(result) - static_cast<std::int64_t>(firstSeam)) <= 2,
+            "a distant seam replaced the earlier winner through a chained overlap");
+}
+
 void testFinalClusterCommitsDuringDrain()
 {
     constexpr std::size_t seam = 700;
@@ -327,6 +360,7 @@ int main()
         testPlanWindowContainsTransition();
         testBlockPartitionIsDeterministic();
         testOverlappingCandidatesCompeteBeforeCommit();
+        testOverlapChainDoesNotPullInDistantSeam();
         testFinalClusterCommitsDuringDrain();
         testShortSelectionShrinksAnalysisSymmetrically();
         testAntiPhaseStereoSeamDoesNotCancelDetection();
