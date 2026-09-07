@@ -23,7 +23,8 @@
     }
 
     const browserLanguage = (navigator.languages?.length ? navigator.languages : [navigator.language])
-      .some((item) => /^pl(?:-|$)/i.test(item || "")) ? "pl" : "en";
+      .map((item) => /^pl(?:-|$)/i.test(item || "") ? "pl" : /^en(?:-|$)/i.test(item || "") ? "en" : null)
+      .find((item) => item !== null) || "en";
     const readStoredLanguage = () => {
       if (!storageKey) return null;
       try {
