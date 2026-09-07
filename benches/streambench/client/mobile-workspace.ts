@@ -41,7 +41,10 @@ for (const button of buttons) {
 mediaQuery.addEventListener("change", syncToolsDrawer);
 new MutationObserver(() => {
   updateCount();
-  if (playlistSize() <= 0) return;
+  if (playlistSize() <= 0) {
+    delete document.body.dataset.hasPlaylist;
+    return;
+  }
   document.body.dataset.hasPlaylist = "true";
   setView("playlist", { scroll: true });
 }).observe(entryCount, { childList: true, subtree: true, characterData: true });
