@@ -56,6 +56,7 @@ void SmartTransitionDsp::reset() noexcept
     inputCount_ = 0;
     drainStarted_ = false;
     clusterBest_ = {};
+    clusterSeedAnchor_ = -1;
     clusterActive_ = false;
     plan_ = {};
     planCommitted_ = false;
@@ -257,11 +258,11 @@ void SmartTransitionDsp::considerCandidate(const Candidate& candidate, std::int6
         return;
     }
 
-    // Finalize as soon as the scan passes every candidate that can directly overlap the
-    // current winner. This prevents single-linkage A-B-C chains from letting a distant C
-    // replace A merely because both happen to overlap B.
-    if (clusterActive_ &&
-        candidate.anchor - clusterBest_.anchor > static_cast<std::int64_t>(competitionRadius_))
+    // Keep the competition frontier pinned to the earliest qualifying candidate in this
+    // local group. A stronger overlapping winner may replace clusterBest_, but it must not
+    // slide the frontier forward and pull in a transitive A-B-C overlap chain.
+    if (clusterActive_ && clusterSeedAnchor_ >= 0 &&
+        candidate.anchor - clusterSeedAnchor_ > static_cast<std::int64_t>(competitionRadius_))
     {
         finalizeCluster(currentInputIndex);
         if (planCommitted_)
@@ -279,6 +280,7 @@ void SmartTransitionDsp::considerCandidate(const Candidate& candidate, std::int6
     {
         clusterActive_ = true;
         clusterBest_ = candidate;
+        clusterSeedAnchor_ = candidate.anchor;
         return;
     }
 
@@ -329,6 +331,7 @@ void SmartTransitionDsp::scanShortSelection(std::size_t channels) noexcept
     {
         clusterActive_ = true;
         clusterBest_ = best;
+        clusterSeedAnchor_ = best.anchor;
         finalizeCluster(inputCount_ - 1);
     }
 }
@@ -339,6 +342,7 @@ void SmartTransitionDsp::finalizeCluster(std::int64_t currentInputIndex) noexcep
     {
         clusterActive_ = false;
         clusterBest_ = {};
+        clusterSeedAnchor_ = -1;
         return;
     }
 
@@ -365,6 +369,7 @@ void SmartTransitionDsp::finalizeCluster(std::int64_t currentInputIndex) noexcep
 
     clusterActive_ = false;
     clusterBest_ = {};
+    clusterSeedAnchor_ = -1;
 }
 
 SmartEditPlan SmartTransitionDsp::makePlan(const Candidate& candidate, std::size_t fadeLength) const noexcept
