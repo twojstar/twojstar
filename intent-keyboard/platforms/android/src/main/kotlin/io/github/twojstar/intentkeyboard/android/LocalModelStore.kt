@@ -29,22 +29,18 @@ class LocalModelStoreException(
  *
  * Selected documents are copied into app-private storage so LiteRT-LM always receives a stable
  * filesystem path and the keyboard never depends on a long-lived external content URI grant.
+ * A previously working selection is retained as rollback metadata until the runtime confirms that
+ * its replacement initialized successfully.
  */
 class LocalModelStore(context: Context) {
     private val appContext = context.applicationContext
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
-    fun current(): LocalModelSelection? {
-        val path = preferences.getString(KEY_PATH, null) ?: return null
-        val displayName = preferences.getString(KEY_DISPLAY_NAME, null) ?: File(path).name
-        val sizeBytes = preferences.getLong(KEY_SIZE_BYTES, -1L)
-
-        return LocalModelSelection(
-            path = path,
-            displayName = displayName,
-            sizeBytes = sizeBytes,
-        )
-    }
+    fun current(): LocalModelSelection? = readSelection(
+        KEY_PATH,
+        KEY_DISPLAY_NAME,
+        KEY_SIZE_BYTES,
+    )
 
     fun registerChangeListener(onChanged: () -> Unit): SharedPreferences.OnSharedPreferenceChangeListener {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -62,11 +58,56 @@ class LocalModelStore(context: Context) {
         importModelOnIo(uri)
     }
 
+    suspend fun confirmSelection(path: String) = withContext(Dispatchers.IO) {
+        if (current()?.path != path) return@withContext
+
+        val committed = preferences.edit()
+            .remove(KEY_ROLLBACK_PATH)
+            .remove(KEY_ROLLBACK_DISPLAY_NAME)
+            .remove(KEY_ROLLBACK_SIZE_BYTES)
+            .commit()
+
+        if (!committed) {
+            throw LocalModelStoreException("Could not confirm the local model selection.")
+        }
+    }
+
+    suspend fun rollbackSelection(failedPath: String): LocalModelSelection? = withContext(Dispatchers.IO) {
+        if (current()?.path != failedPath) return@withContext null
+
+        val rollback = rollbackSelectionSnapshot()
+        val editor = preferences.edit()
+            .remove(KEY_ROLLBACK_PATH)
+            .remove(KEY_ROLLBACK_DISPLAY_NAME)
+            .remove(KEY_ROLLBACK_SIZE_BYTES)
+
+        if (rollback == null) {
+            editor
+                .remove(KEY_PATH)
+                .remove(KEY_DISPLAY_NAME)
+                .remove(KEY_SIZE_BYTES)
+        } else {
+            editor
+                .putString(KEY_PATH, rollback.path)
+                .putString(KEY_DISPLAY_NAME, rollback.displayName)
+                .putLong(KEY_SIZE_BYTES, rollback.sizeBytes)
+        }
+
+        if (!editor.commit()) {
+            throw LocalModelStoreException("Could not restore the previous local model selection.")
+        }
+
+        rollback
+    }
+
     suspend fun clearModel() = withContext(Dispatchers.IO) {
         val committed = preferences.edit()
             .remove(KEY_PATH)
             .remove(KEY_DISPLAY_NAME)
             .remove(KEY_SIZE_BYTES)
+            .remove(KEY_ROLLBACK_PATH)
+            .remove(KEY_ROLLBACK_DISPLAY_NAME)
+            .remove(KEY_ROLLBACK_SIZE_BYTES)
             .putLong(KEY_REVISION, nextRevision())
             .commit()
 
@@ -76,19 +117,22 @@ class LocalModelStore(context: Context) {
     }
 
     /**
-     * Deletes private model copies that are no longer selected.
+     * Deletes private model copies that are neither selected nor retained for rollback.
      *
      * Call this only after the runtime has released any engine that could still reference an older
      * model file.
      */
     suspend fun pruneObsoleteModels() = withContext(Dispatchers.IO) {
-        val selectedPath = current()?.path
+        val retainedPaths = setOfNotNull(
+            current()?.path,
+            rollbackSelectionSnapshot()?.path,
+        )
         val directory = modelsDirectory()
 
         directory.listFiles()
             ?.asSequence()
             ?.filter { it.isFile && it.extension.equals("litertlm", ignoreCase = true) }
-            ?.filter { it.absolutePath != selectedPath }
+            ?.filter { it.absolutePath !in retainedPaths }
             ?.forEach { it.delete() }
     }
 
@@ -128,13 +172,26 @@ class LocalModelStore(context: Context) {
 
             currentCoroutineContext().ensureActive()
 
-            committed = preferences.edit()
+            val rollback = rollbackSelectionSnapshot() ?: current()
+            val editor = preferences.edit()
                 .putString(KEY_PATH, target.absolutePath)
                 .putString(KEY_DISPLAY_NAME, displayName)
                 .putLong(KEY_SIZE_BYTES, copiedBytes)
                 .putLong(KEY_REVISION, nextRevision())
-                .commit()
 
+            if (rollback == null) {
+                editor
+                    .remove(KEY_ROLLBACK_PATH)
+                    .remove(KEY_ROLLBACK_DISPLAY_NAME)
+                    .remove(KEY_ROLLBACK_SIZE_BYTES)
+            } else {
+                editor
+                    .putString(KEY_ROLLBACK_PATH, rollback.path)
+                    .putString(KEY_ROLLBACK_DISPLAY_NAME, rollback.displayName)
+                    .putLong(KEY_ROLLBACK_SIZE_BYTES, rollback.sizeBytes)
+            }
+
+            committed = editor.commit()
             if (!committed) {
                 throw LocalModelStoreException("Could not save the local model selection.")
             }
@@ -181,6 +238,28 @@ class LocalModelStore(context: Context) {
         }
     }
 
+    private fun rollbackSelectionSnapshot(): LocalModelSelection? = readSelection(
+        KEY_ROLLBACK_PATH,
+        KEY_ROLLBACK_DISPLAY_NAME,
+        KEY_ROLLBACK_SIZE_BYTES,
+    )
+
+    private fun readSelection(
+        pathKey: String,
+        displayNameKey: String,
+        sizeKey: String,
+    ): LocalModelSelection? {
+        val path = preferences.getString(pathKey, null) ?: return null
+        val displayName = preferences.getString(displayNameKey, null) ?: File(path).name
+        val sizeBytes = preferences.getLong(sizeKey, -1L)
+
+        return LocalModelSelection(
+            path = path,
+            displayName = displayName,
+            sizeBytes = sizeBytes,
+        )
+    }
+
     private fun queryDisplayName(uri: Uri): String? =
         appContext.contentResolver.query(
             uri,
@@ -203,6 +282,9 @@ class LocalModelStore(context: Context) {
         const val KEY_PATH = "path"
         const val KEY_DISPLAY_NAME = "display_name"
         const val KEY_SIZE_BYTES = "size_bytes"
+        const val KEY_ROLLBACK_PATH = "rollback_path"
+        const val KEY_ROLLBACK_DISPLAY_NAME = "rollback_display_name"
+        const val KEY_ROLLBACK_SIZE_BYTES = "rollback_size_bytes"
         const val KEY_REVISION = "revision"
     }
 }
