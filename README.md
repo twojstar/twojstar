@@ -25,6 +25,7 @@
 | 📱 **Xiaomi ADB Tools** | [`xiaomi-adb-tools/`](xiaomi-adb-tools/) · [download](https://github.com/twojstar/twojstar/releases/latest/download/xiaomi-adb-tools.zip) | Maintained desktop ADB/Fastboot utility with platform-specific JavaFX builds. |
 | 🎨 **Paint.NET plugins** | [`paintdotnet/`](paintdotnet/) · [`ICO`](paintdotnet/ico/) · [`AI Restore`](paintdotnet/ai/) | Shared home for Paint.NET plugins: ICO import/export and local restoration effects. |
 | 🎚️ **Audacity plugins** | [`audacity/`](audacity/) · [`VST3`](audacity/vst3/) · [Windows](https://github.com/twojstar/twojstar/releases/latest/download/audacity-auto-declip-windows.zip) · [Linux](https://github.com/twojstar/twojstar/releases/latest/download/audacity-auto-declip-linux.zip) | Local-first audio restoration and workflow effects, starting with Auto Declip. |
+| ⌨️ **Intent Keyboard** | [`intent-keyboard/`](intent-keyboard/) | Multiplatform semantic input experiment: rough intent in, natural text out, with tone, translation and protected facts. |
 
 ## 📦 One rolling release
 
