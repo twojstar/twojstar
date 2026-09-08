@@ -36,6 +36,15 @@ updates:
     groups:
       xiaomi: { patterns: ["*"] }
 
+  - package-ecosystem: "gradle"
+    directory: "/intent-keyboard"
+    schedule:
+      interval: "weekly"
+      time: "21:37"
+      timezone: "Europe/Warsaw"
+    groups:
+      intent-keyboard: { patterns: ["*"] }
+
   - package-ecosystem: "nuget"
     directories:
       - "/feedboard/src/Feedboard.Core"
