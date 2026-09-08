@@ -4,6 +4,7 @@ import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class SemanticPipelineTest {
@@ -24,6 +25,30 @@ class SemanticPipelineTest {
         )
 
         assertTrue(result.warnings.any { "18:30" in it })
+    }
+
+    @Test
+    fun mechanicalRendererNormalizesNaturalDraft() = runTest {
+        val raw = "  jutro   byc 18:30  "
+        val result = SemanticPipeline(MechanicalRenderer()).render(
+            RenderRequest(
+                rawIntent = raw,
+                register = Register.NATURAL,
+                locks = ConservativeLockDetector.detect(raw),
+            ),
+        )
+
+        assertEquals("Jutro byc 18:30.", result.text)
+        assertTrue(result.warnings.isEmpty())
+    }
+
+    @Test
+    fun detectorLocksObviousTimeAndMoneyValues() {
+        val locks = ConservativeLockDetector.detect("jutro 18:30, budzet 120 zł")
+            .map { it.value }
+
+        assertTrue("18:30" in locks)
+        assertTrue("120 zł" in locks)
     }
 
     private fun runTest(block: suspend () -> Unit) {
