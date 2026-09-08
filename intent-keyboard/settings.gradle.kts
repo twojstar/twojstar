@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "intent-keyboard"
 include(":core")
+include(":platforms:android")
