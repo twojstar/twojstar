@@ -3,7 +3,7 @@ package io.github.twojstar.intentkeyboard
 import io.ktor.client.HttpClient
 import io.ktor.client.request.accept
 import io.ktor.client.request.header
-import io.ktor.client.request.post
+import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
@@ -15,6 +15,7 @@ import io.ktor.http.URLParserException
 import io.ktor.http.URLProtocol
 import io.ktor.http.Url
 import io.ktor.http.appendPathSegments
+import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.io.IOException
@@ -106,26 +107,26 @@ class OpenAiCompatibleCompletionClient(
 
     private suspend fun request(prompt: ModelPrompt): TransportOutcome = try {
         withTimeoutOrNull(config.requestTimeoutMillis) {
-            val response = httpClient.post(endpoint()) {
-                header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+            httpClient.preparePost(endpoint()) {
+                contentType(ContentType.Application.Json)
                 accept(ContentType.Application.Json)
                 tokenProvider.token()
                     ?.takeIf { it.isNotBlank() }
                     ?.let { header(HttpHeaders.Authorization, "Bearer $it") }
                 setBody(requestBody(prompt).toString())
-            }
+            }.execute { response ->
+                val body = if (response.status.isSuccess()) {
+                    response.bodyAsText()
+                } else {
+                    response.bodyAsChannel().cancel(null)
+                    ""
+                }
 
-            val body = if (response.status.isSuccess()) {
-                response.bodyAsText()
-            } else {
-                response.bodyAsChannel().cancel(null)
-                ""
+                TransportOutcome.Success(
+                    status = response.status,
+                    body = body,
+                )
             }
-
-            TransportOutcome.Success(
-                status = response.status,
-                body = body,
-            )
         } ?: TransportOutcome.Failure(
             CompletionOutcome.Failure(
                 message = "Provider request timed out.",
