@@ -11,38 +11,67 @@ final class KeyboardViewController: UIInputViewController {
     private var renderedCanCommit = true
     private var registerIndex = 1
     private var renderTask: Task<Void, Never>?
+    private var activeDocumentIdentifier: UUID?
 
     private let rawLabel = UILabel()
     private let previewLabel = UILabel()
     private let statusLabel = UILabel()
     private let registerButton = UIButton(type: .system)
+    private let enterButton = UIButton(type: .system)
+    private let rootStack = UIStackView()
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        activeDocumentIdentifier = textDocumentProxy.documentIdentifier
         configureView()
         refreshViews()
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        refreshCompactLayout()
+    }
+
     override func viewWillDisappear(_ animated: Bool) {
-        renderTask?.cancel()
-        renderTask = nil
+        clearBuffer()
+        activeDocumentIdentifier = nil
         super.viewWillDisappear(animated)
+    }
+
+    override func textDidChange(_ textInput: UITextInput?) {
+        super.textDidChange(textInput)
+        refreshHostContext(reason: "text")
+    }
+
+    override func selectionDidChange(_ textInput: UITextInput?) {
+        super.selectionDidChange(textInput)
+        refreshHostContext(reason: "selection")
     }
 
     private func configureView() {
         view.backgroundColor = .systemBackground
 
         rawLabel.font = .preferredFont(forTextStyle: .footnote)
-        rawLabel.numberOfLines = 2
+        rawLabel.numberOfLines = 1
+        rawLabel.adjustsFontSizeToFitWidth = true
+        rawLabel.minimumScaleFactor = 0.75
+        rawLabel.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
 
         previewLabel.font = .preferredFont(forTextStyle: .body)
-        previewLabel.numberOfLines = 2
+        previewLabel.numberOfLines = 1
+        previewLabel.adjustsFontSizeToFitWidth = true
+        previewLabel.minimumScaleFactor = 0.75
+        previewLabel.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
 
         statusLabel.font = .preferredFont(forTextStyle: .caption2)
         statusLabel.textAlignment = .center
-        statusLabel.numberOfLines = 2
+        statusLabel.numberOfLines = 1
+        statusLabel.adjustsFontSizeToFitWidth = true
+        statusLabel.minimumScaleFactor = 0.75
+        statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
 
-        registerButton.configuration = .bordered()
+        registerButton.configuration = compactButtonConfiguration(style: .bordered)
+        registerButton.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         registerButton.addAction(UIAction { [weak self] _ in
             self?.cycleRegister()
         }, for: .touchUpInside)
@@ -56,27 +85,25 @@ final class KeyboardViewController: UIInputViewController {
 
         let toolbar = makeRow([registerButton, renderButton, commitButton])
 
-        let root = UIStackView(arrangedSubviews: [
-            rawLabel,
-            previewLabel,
-            toolbar,
-            makeLetterRow("qwertyuiop"),
-            makeLetterRow("asdfghjkl"),
-            makeLetterRow("zxcvbnm"),
-            makePolishRow(),
-            makeBottomRow(),
-            statusLabel,
-        ])
-        root.axis = .vertical
-        root.spacing = 6
-        root.translatesAutoresizingMaskIntoConstraints = false
+        rootStack.addArrangedSubview(rawLabel)
+        rootStack.addArrangedSubview(previewLabel)
+        rootStack.addArrangedSubview(toolbar)
+        rootStack.addArrangedSubview(makeLetterRow("qwertyuiop"))
+        rootStack.addArrangedSubview(makeLetterRow("asdfghjkl"))
+        rootStack.addArrangedSubview(makeLetterRow("zxcvbnm"))
+        rootStack.addArrangedSubview(makePolishRow())
+        rootStack.addArrangedSubview(makeBottomRow())
+        rootStack.addArrangedSubview(statusLabel)
+        rootStack.axis = .vertical
+        rootStack.spacing = 4
+        rootStack.translatesAutoresizingMaskIntoConstraints = false
 
-        view.addSubview(root)
+        view.addSubview(rootStack)
         NSLayoutConstraint.activate([
-            root.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 6),
-            root.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -6),
-            root.topAnchor.constraint(equalTo: view.topAnchor, constant: 6),
-            root.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -6),
+            rootStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 4),
+            rootStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -4),
+            rootStack.topAnchor.constraint(equalTo: view.topAnchor, constant: 4),
+            rootStack.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -4),
         ])
     }
 
@@ -99,47 +126,75 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func makeBottomRow() -> UIStackView {
-        let globe = makeKeyButton("🌐") { [weak self] in
-            self?.advanceToNextInputMode()
-        }
+        let globe = makeKeyButton("🌐") {}
         globe.accessibilityLabel = "Next keyboard"
+        globe.addTarget(
+            self,
+            action: #selector(handleInputModeList(from:with:)),
+            for: .allTouchEvents
+        )
 
         let comma = makeKeyButton(",") { [weak self] in self?.append(",") }
         let space = makeKeyButton("space") { [weak self] in self?.append(" ") }
         let period = makeKeyButton(".") { [weak self] in self?.append(".") }
         let backspace = makeKeyButton("⌫") { [weak self] in self?.backspace() }
-        let enter = makeKeyButton("↵") { [weak self] in self?.handleEnter() }
+
+        enterButton.configuration = compactButtonConfiguration(style: .filled)
+        enterButton.configuration?.baseBackgroundColor = .secondarySystemBackground
+        enterButton.configuration?.baseForegroundColor = .label
+        enterButton.titleLabel?.adjustsFontSizeToFitWidth = true
+        enterButton.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        enterButton.addAction(UIAction { [weak self] _ in
+            self?.handleEnter()
+        }, for: .touchUpInside)
 
         space.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        return makeRow([globe, comma, space, period, backspace, enter])
+        return makeRow([globe, comma, space, period, backspace, enterButton])
     }
 
     private func makeRow(_ views: [UIView]) -> UIStackView {
         let row = UIStackView(arrangedSubviews: views)
         row.axis = .horizontal
-        row.spacing = 4
+        row.spacing = 3
         row.distribution = .fillEqually
+        row.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         return row
     }
 
     private func makeControlButton(_ title: String, action: @escaping () -> Void) -> UIButton {
         let button = UIButton(type: .system)
-        button.configuration = .bordered()
+        button.configuration = compactButtonConfiguration(style: .bordered)
         button.setTitle(title, for: .normal)
+        button.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         button.addAction(UIAction { _ in action() }, for: .touchUpInside)
         return button
     }
 
     private func makeKeyButton(_ title: String, action: @escaping () -> Void) -> UIButton {
         let button = UIButton(type: .system)
-        button.configuration = .filled()
+        button.configuration = compactButtonConfiguration(style: .filled)
         button.configuration?.baseBackgroundColor = .secondarySystemBackground
         button.configuration?.baseForegroundColor = .label
         button.setTitle(title, for: .normal)
         button.titleLabel?.adjustsFontSizeToFitWidth = true
-        button.heightAnchor.constraint(greaterThanOrEqualToConstant: 38).isActive = true
+        button.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        button.heightAnchor.constraint(greaterThanOrEqualToConstant: 28).isActive = true
         button.addAction(UIAction { _ in action() }, for: .touchUpInside)
         return button
+    }
+
+    private func compactButtonConfiguration(style: UIButton.Configuration.Style) -> UIButton.Configuration {
+        var configuration: UIButton.Configuration
+        switch style {
+        case .bordered:
+            configuration = .bordered()
+        case .filled:
+            configuration = .filled()
+        default:
+            configuration = .plain()
+        }
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 2, leading: 4, bottom: 2, trailing: 4)
+        return configuration
     }
 
     private func append(_ text: String) {
@@ -174,9 +229,11 @@ final class KeyboardViewController: UIInputViewController {
             return false
         }
 
-        textDocumentProxy.insertText(hasCurrentPreview ? renderedText : rawIntent)
+        let output = hasCurrentPreview ? renderedText : rawIntent
         clearBuffer()
+        textDocumentProxy.insertText(output)
         statusLabel.text = "Committed."
+        refreshCompactLayout()
         return true
     }
 
@@ -193,6 +250,7 @@ final class KeyboardViewController: UIInputViewController {
         let source = rawIntent
         let registerName = registerNames[registerIndex]
         statusLabel.text = "Rendering…"
+        refreshCompactLayout()
 
         renderTask = Task { [weak self] in
             guard let self else { return }
@@ -211,15 +269,58 @@ final class KeyboardViewController: UIInputViewController {
                 renderedText = result.text
                 renderedCanCommit = result.canCommit
                 refreshViews()
-                statusLabel.text = result.canCommit
-                    ? "Ready to commit."
-                    : "Commit blocked: protected value changed."
+
+                if !result.canCommit {
+                    statusLabel.text = "Commit blocked: protected value changed."
+                } else if let warning = result.warnings.first {
+                    statusLabel.text = warning
+                } else {
+                    statusLabel.text = "Ready to commit."
+                }
+                refreshCompactLayout()
             } catch is CancellationError {
                 return
             } catch {
                 guard !Task.isCancelled else { return }
                 statusLabel.text = "Render failed: \(error.localizedDescription)"
+                refreshCompactLayout()
             }
+        }
+    }
+
+    private func refreshHostContext(reason: String) {
+        let documentIdentifier = textDocumentProxy.documentIdentifier
+        let documentChanged = activeDocumentIdentifier != nil && activeDocumentIdentifier != documentIdentifier
+        let hasDraft = !rawIntent.isEmpty || !renderedText.isEmpty
+
+        if hasDraft && (documentChanged || reason == "text" || reason == "selection") {
+            clearBuffer()
+            statusLabel.text = "Draft cleared after host text context changed."
+        }
+
+        activeDocumentIdentifier = documentIdentifier
+        refreshReturnKey()
+        refreshCompactLayout()
+    }
+
+    private func refreshReturnKey() {
+        enterButton.setTitle(returnKeyLabel(returnKeyType), for: .normal)
+    }
+
+    private func returnKeyLabel(_ type: UIReturnKeyType) -> String {
+        switch type {
+        case .go: return "Go"
+        case .google: return "Google"
+        case .join: return "Join"
+        case .next: return "Next"
+        case .route: return "Route"
+        case .search: return "Search"
+        case .send: return "Send"
+        case .yahoo: return "Yahoo"
+        case .done: return "Done"
+        case .emergencyCall: return "SOS"
+        case .continue: return "Continue"
+        @unknown default: return "↵"
         }
     }
 
@@ -241,5 +342,23 @@ final class KeyboardViewController: UIInputViewController {
         rawLabel.text = rawIntent.isEmpty ? "intent: …" : "intent: \(rawIntent)"
         previewLabel.text = renderedText.isEmpty ? "preview: …" : "preview: \(renderedText)"
         registerButton.setTitle(registerNames[registerIndex].capitalized, for: .normal)
+        refreshReturnKey()
+        refreshCompactLayout()
+    }
+
+    private func refreshCompactLayout() {
+        guard isViewLoaded else { return }
+        let compactHeight = view.bounds.height > 0 && view.bounds.height < 260
+
+        rootStack.spacing = compactHeight ? 2 : 4
+        if compactHeight {
+            rawLabel.isHidden = !renderedText.isEmpty || rawIntent.isEmpty
+            previewLabel.isHidden = renderedText.isEmpty
+            statusLabel.isHidden = statusLabel.text?.isEmpty != false
+        } else {
+            rawLabel.isHidden = false
+            previewLabel.isHidden = false
+            statusLabel.isHidden = false
+        }
     }
 }
