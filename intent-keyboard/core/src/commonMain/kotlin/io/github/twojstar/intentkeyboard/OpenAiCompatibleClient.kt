@@ -184,9 +184,9 @@ class OpenAiCompatibleCompletionClient(
                 ?: return AssistantTextOutcome.InvalidContent
             else -> return AssistantTextOutcome.InvalidContent
         }
-        if (finishReason in NON_NORMAL_FINISH_REASONS) {
-            return AssistantTextOutcome.Incomplete(finishReason)
-        }
+        finishReason
+            ?.takeIf { it in NON_NORMAL_FINISH_REASONS }
+            ?.let { return AssistantTextOutcome.Incomplete(it) }
 
         val message = firstChoice["message"] as? JsonObject
             ?: return AssistantTextOutcome.Missing
