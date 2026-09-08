@@ -51,7 +51,7 @@ class MechanicalRenderer : SemanticRenderer {
 object ConservativeLockDetector {
     private val timePattern = Regex("""\b(?:[01]?\d|2[0-3]):[0-5]\d\b""")
     private val moneyPattern = Regex(
-        """(?<!\w)\d+(?:[.,]\d+)?\s?(?:zł|PLN|EUR|USD|€|\$)\b""",
+        """(?<!\w)\d+(?:[.,]\d+)?\s?(?:zł|PLN|EUR|USD|€|\$)(?!\w)""",
         RegexOption.IGNORE_CASE,
     )
 
