@@ -3,6 +3,7 @@ package io.github.twojstar.intentkeyboard.android
 import android.inputmethodservice.InputMethodService
 import android.text.InputType
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
@@ -15,6 +16,7 @@ import io.github.twojstar.intentkeyboard.PrototypeKeyboardLayout
 import io.github.twojstar.intentkeyboard.Register
 import io.github.twojstar.intentkeyboard.RenderRequest
 import io.github.twojstar.intentkeyboard.SemanticPipeline
+import io.github.twojstar.intentkeyboard.SemanticRenderException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +37,7 @@ class IntentKeyboardService : InputMethodService() {
     private var renderedText = ""
     private var renderedCanCommit = true
     private var sensitiveField = false
+    private var activeEditorInfo: EditorInfo? = null
     private var renderGeneration = 0L
     private var renderJob: Job? = null
 
@@ -44,6 +47,7 @@ class IntentKeyboardService : InputMethodService() {
     private var modeButton: Button? = null
     private var pageButton: Button? = null
     private var shiftButton: Button? = null
+    private var enterButton: Button? = null
     private var keysContainer: LinearLayout? = null
 
     override fun onCreateInputView(): View = LinearLayout(this).apply {
@@ -85,6 +89,7 @@ class IntentKeyboardService : InputMethodService() {
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
 
+        activeEditorInfo = attribute
         val nextSensitive = isSensitive(attribute)
         sensitiveField = nextSensitive
 
@@ -102,6 +107,7 @@ class IntentKeyboardService : InputMethodService() {
     override fun onFinishInput() {
         clearInternalBuffer()
         sensitiveField = false
+        activeEditorInfo = null
         super.onFinishInput()
     }
 
@@ -172,7 +178,10 @@ class IntentKeyboardService : InputMethodService() {
         addView(keyButton("space") { append(" ") }, weighted(dp(44), 3f))
         addView(keyButton(".") { append(".") }, weighted(dp(44)))
         addView(keyButton("⌫") { backspace() }, weighted(dp(44)))
-        addView(keyButton("↵") { append("\n") }, weighted(dp(44)))
+
+        enterButton = keyButton("↵") { handleEnter() }.also { button ->
+            addView(button, weighted(dp(44)))
+        }
 
         rebuildCharacterRows()
     }
@@ -222,6 +231,22 @@ class IntentKeyboardService : InputMethodService() {
         refreshViews()
     }
 
+    private fun handleEnter() {
+        if (supportsMultiline(activeEditorInfo)) {
+            append("\n")
+            return
+        }
+
+        if (!commitBuffer()) return
+
+        val connection = currentInputConnection ?: return
+        val action = editorAction(activeEditorInfo)
+        if (action != null && connection.performEditorAction(action)) return
+
+        connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+        connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+    }
+
     private fun renderBuffer() {
         if (sensitiveField) {
             statusView?.text = "Semantic rendering is disabled for sensitive fields."
@@ -269,35 +294,36 @@ class IntentKeyboardService : InputMethodService() {
                 }
             } catch (error: CancellationException) {
                 throw error
-            } catch (error: Throwable) {
+            } catch (error: SemanticRenderException) {
                 if (generation == renderGeneration) {
-                    statusView?.text = "Render failed: ${error.message ?: error::class.simpleName}"
+                    statusView?.text = "Render failed: ${error.message ?: "renderer error"}"
                 }
             }
         }
     }
 
-    private fun commitBuffer() {
-        if (sensitiveField) return
+    private fun commitBuffer(): Boolean {
+        if (sensitiveField) return true
 
         val raw = buffer.toString()
-        if (raw.isEmpty()) return
+        if (raw.isEmpty()) return true
 
         val hasCurrentPreview = renderedSource == raw && renderedText.isNotBlank()
         if (hasCurrentPreview && !renderedCanCommit) {
             statusView?.text = "Commit blocked until protected values are preserved."
-            return
+            return false
         }
 
         val output = if (hasCurrentPreview) renderedText else raw
         val connection = currentInputConnection
         if (connection == null || !connection.commitText(output, 1)) {
             statusView?.text = "Commit failed. Draft preserved."
-            return
+            return false
         }
 
         clearInternalBuffer()
         statusView?.text = "Committed."
+        return true
     }
 
     private fun cycleRegister() {
@@ -332,9 +358,48 @@ class IntentKeyboardService : InputMethodService() {
         pageButton?.text = if (characterPage == CharacterPage.LETTERS) "123" else "ABC"
         shiftButton?.isEnabled = characterPage == CharacterPage.LETTERS
         shiftButton?.text = if (uppercase) "⇧ ON" else "⇧"
+        enterButton?.text = enterLabel(activeEditorInfo)
 
         if (!sensitiveField && statusView?.text?.startsWith("Sensitive field") == true) {
             statusView?.text = ""
+        }
+    }
+
+    private fun supportsMultiline(info: EditorInfo?): Boolean {
+        val inputType = info?.inputType ?: return false
+        if (inputType and InputType.TYPE_MASK_CLASS != InputType.TYPE_CLASS_TEXT) return false
+
+        val multilineFlags = InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_IME_MULTI_LINE
+        return inputType and multilineFlags != 0
+    }
+
+    private fun editorAction(info: EditorInfo?): Int? {
+        info ?: return null
+        if (info.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION != 0) return null
+
+        return when (val action = info.imeOptions and EditorInfo.IME_MASK_ACTION) {
+            EditorInfo.IME_ACTION_GO,
+            EditorInfo.IME_ACTION_SEARCH,
+            EditorInfo.IME_ACTION_SEND,
+            EditorInfo.IME_ACTION_NEXT,
+            EditorInfo.IME_ACTION_DONE,
+            EditorInfo.IME_ACTION_PREVIOUS,
+            -> action
+            else -> null
+        }
+    }
+
+    private fun enterLabel(info: EditorInfo?): String {
+        if (supportsMultiline(info)) return "↵"
+
+        return when (editorAction(info)) {
+            EditorInfo.IME_ACTION_GO -> "Go"
+            EditorInfo.IME_ACTION_SEARCH -> "Search"
+            EditorInfo.IME_ACTION_SEND -> "Send"
+            EditorInfo.IME_ACTION_NEXT -> "Next"
+            EditorInfo.IME_ACTION_DONE -> "Done"
+            EditorInfo.IME_ACTION_PREVIOUS -> "Prev"
+            else -> "↵"
         }
     }
 
