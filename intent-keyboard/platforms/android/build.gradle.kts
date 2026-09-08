@@ -30,4 +30,5 @@ android {
 dependencies {
     implementation(project(":core"))
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.litert.lm.android)
 }
