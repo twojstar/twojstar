@@ -23,15 +23,17 @@ import kotlinx.coroutines.launch
 @Suppress("DEPRECATION")
 class SetupActivity : Activity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val modelStore by lazy(LazyThreadSafetyMode.NONE) {
+        LocalModelStore(applicationContext)
+    }
 
-    private lateinit var modelStore: LocalModelStore
+    private var modelOperationInProgress = false
     private var modelStatusView: TextView? = null
     private var importModelButton: Button? = null
     private var clearModelButton: Button? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        modelStore = LocalModelStore(applicationContext)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -109,7 +111,7 @@ class SetupActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (::modelStore.isInitialized) refreshModelStatus()
+        if (!modelOperationInProgress) refreshModelStatus()
     }
 
     override fun onDestroy() {
@@ -136,6 +138,7 @@ class SetupActivity : Activity() {
     }
 
     private fun importLocalModel(uri: Uri) {
+        modelOperationInProgress = true
         setModelControlsEnabled(false)
         modelStatusView?.text = getString(R.string.importing_local_model)
 
@@ -148,12 +151,14 @@ class SetupActivity : Activity() {
             } catch (error: LocalModelStoreException) {
                 modelStatusView?.text = error.message ?: getString(R.string.local_model_import_failed)
             } finally {
+                modelOperationInProgress = false
                 setModelControlsEnabled(true)
             }
         }
     }
 
     private fun clearLocalModel() {
+        modelOperationInProgress = true
         setModelControlsEnabled(false)
 
         scope.launch {
@@ -165,6 +170,7 @@ class SetupActivity : Activity() {
             } catch (error: LocalModelStoreException) {
                 modelStatusView?.text = error.message ?: getString(R.string.local_model_clear_failed)
             } finally {
+                modelOperationInProgress = false
                 setModelControlsEnabled(true)
             }
         }
