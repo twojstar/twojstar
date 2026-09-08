@@ -1,4 +1,10 @@
 pluginManagement {
+    val kotlinVersion = providers.gradleProperty("kotlinVersion").get()
+
+    plugins {
+        id("org.jetbrains.kotlin.multiplatform") version kotlinVersion
+    }
+
     repositories {
         google()
         mavenCentral()
