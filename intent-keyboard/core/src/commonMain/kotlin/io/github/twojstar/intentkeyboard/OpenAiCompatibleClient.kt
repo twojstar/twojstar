@@ -10,6 +10,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.URLBuilder
+import io.ktor.http.URLParserException
 import io.ktor.http.URLProtocol
 import io.ktor.http.Url
 import io.ktor.http.appendPathSegments
@@ -35,7 +36,7 @@ data class OpenAiCompatibleConfig(
     init {
         val parsedBaseUrl = try {
             Url(baseUrl)
-        } catch (error: IllegalArgumentException) {
+        } catch (error: URLParserException) {
             throw IllegalArgumentException("baseUrl must be a valid absolute HTTPS URL", error)
         }
 
@@ -114,7 +115,7 @@ class OpenAiCompatibleCompletionClient(
             }
             TransportOutcome.Success(
                 status = response.status,
-                body = response.bodyAsText(),
+                body = if (response.status.isSuccess()) response.bodyAsText() else "",
             )
         } ?: TransportOutcome.Failure(
             CompletionOutcome.Failure(
