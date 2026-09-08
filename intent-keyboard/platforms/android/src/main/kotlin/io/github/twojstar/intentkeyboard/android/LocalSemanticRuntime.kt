@@ -37,12 +37,18 @@ sealed interface LocalSemanticRuntimeState {
     ) : LocalSemanticRuntimeState
 }
 
+private data class LocalModelLoadFailure(
+    val message: String,
+    val cause: Throwable,
+)
+
 /**
  * Owns the Android semantic renderer and its optional LiteRT-LM engine.
  *
  * Engine swaps and renders share one mutex so an old native engine is never closed underneath an
  * in-flight render. Model initialization stays outside that mutex and is cancellation-safe through
- * [createCpuLiteRtLmEngine].
+ * [createCpuLiteRtLmEngine]. A newly selected model is not committed as the stable choice until its
+ * engine reaches Ready; failed replacements roll back to the previously working private copy.
  */
 class LocalSemanticRuntime(
     context: Context,
@@ -118,11 +124,12 @@ class LocalSemanticRuntime(
 
     private suspend fun load(selection: LocalModelSelection) {
         installFallback()
-        store.pruneObsoleteModels()
         currentCoroutineContext().ensureActive()
         publish(LocalSemanticRuntimeState.Loading(selection.displayName))
 
         var candidate: Engine? = null
+        var failure: LocalModelLoadFailure? = null
+
         try {
             val initialized = createCpuLiteRtLmEngine(
                 LiteRtLmCpuConfig(
@@ -147,35 +154,58 @@ class LocalSemanticRuntime(
                 releaseEngine(previous)
             }
 
+            try {
+                store.confirmSelection(selection.path)
+                store.pruneObsoleteModels()
+            } catch (error: LocalModelStoreException) {
+                Log.w(TAG, "Model is ready, but selection metadata cleanup failed", error)
+            }
+
             publish(LocalSemanticRuntimeState.Ready(selection.displayName))
         } catch (error: CancellationException) {
             throw error
         } catch (error: IllegalArgumentException) {
-            fail(selection, "Model file is unavailable.", error)
+            failure = LocalModelLoadFailure("Model file is unavailable.", error)
         } catch (error: LiteRtLmJniException) {
-            fail(selection, "LiteRT-LM could not initialize this model.", error)
+            failure = LocalModelLoadFailure("LiteRT-LM could not initialize this model.", error)
         } catch (error: IllegalStateException) {
-            fail(selection, "LiteRT-LM engine initialization failed.", error)
+            failure = LocalModelLoadFailure("LiteRT-LM engine initialization failed.", error)
         } catch (error: UnsatisfiedLinkError) {
-            fail(selection, "LiteRT-LM native runtime is unavailable on this device.", error)
+            failure = LocalModelLoadFailure("LiteRT-LM native runtime is unavailable on this device.", error)
         } finally {
             releaseEngine(candidate)
         }
+
+        failure?.let { recoverOrFail(selection, it) }
     }
 
-    private suspend fun fail(
-        selection: LocalModelSelection,
-        message: String,
-        cause: Throwable,
+    private suspend fun recoverOrFail(
+        rejected: LocalModelSelection,
+        failure: LocalModelLoadFailure,
     ) {
-        Log.w(TAG, "Local model load failed for ${selection.displayName}: $message", cause)
-        installFallback()
-        publish(
-            LocalSemanticRuntimeState.Failed(
-                displayName = selection.displayName,
-                message = message,
-            ),
-        )
+        Log.w(TAG, "Local model load failed for ${rejected.displayName}: ${failure.message}", failure.cause)
+
+        if (store.current()?.path != rejected.path) {
+            return
+        }
+
+        val rollback = try {
+            store.rollbackSelection(rejected.path)
+        } catch (error: LocalModelStoreException) {
+            Log.w(TAG, "Could not restore previous local model metadata", error)
+            installFallback()
+            publish(LocalSemanticRuntimeState.Failed(rejected.displayName, failure.message))
+            return
+        }
+
+        store.pruneObsoleteModels()
+
+        if (rollback != null && rollback.path != rejected.path) {
+            load(rollback)
+        } else {
+            installFallback()
+            publish(LocalSemanticRuntimeState.Failed(rejected.displayName, failure.message))
+        }
     }
 
     private suspend fun installFallback() {
