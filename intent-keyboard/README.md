@@ -69,7 +69,14 @@ The first Android slice is now real rather than a mock app:
 - `OpenAiCompatibleCompletionClient` talks to configurable Chat Completions-compatible endpoints over Ktor.
 - OkHttp, Darwin and CIO engines keep the transport available across Android, iOS and desktop targets.
 
-Remote providers are **not enabled by default yet**. Provider settings and platform credential storage are deliberately deferred to the next slice so no API key is embedded in source code, Gradle properties or the APK.
+Android also has an on-device model adapter based on LiteRT-LM 0.16.1:
+
+- `LiteRtLmCompletionClient` implements the same provider-neutral semantic completion contract.
+- `createCpuLiteRtLmEngine` initializes a caller-owned CPU engine off the main thread.
+- The model is supplied by local file path and is not bundled in the repository or APK.
+- Each render uses a fresh conversation, so previous keyboard drafts are not inherited as chat history.
+
+Remote providers and LiteRT-LM are **not enabled by default yet**. Provider credentials and local model selection/import are deliberately deferred to separate slices so no API key or multi-gigabyte model is embedded in source code or the APK.
 
 Regardless of provider, the model does not get the final word: exact time/money locks are validated again after rendering, and an unsafe preview cannot be committed. Sensitive/password fields bypass semantic buffering entirely.
 
