@@ -272,14 +272,19 @@ final class KeyboardViewController: UIInputViewController {
         let documentIdentifier = textDocumentProxy.documentIdentifier
         textDocumentProxy.insertText(output)
 
-        let insertionConfirmed =
-            textDocumentProxy.documentIdentifier == documentIdentifier &&
-            textDocumentProxy.documentContextBeforeInput?.hasSuffix(output) == true
+        if
+            textDocumentProxy.documentIdentifier == documentIdentifier,
+            let context = textDocumentProxy.documentContextBeforeInput,
+            !context.isEmpty
+        {
+            let visibleTailLength = min(16, context.count, output.count)
+            let visibleTail = String(output.suffix(visibleTailLength))
 
-        guard insertionConfirmed else {
-            statusLabel.text = "Commit not confirmed by host; draft kept."
-            refreshCompactLayout()
-            return false
+            if visibleTailLength > 0 && !context.hasSuffix(visibleTail) {
+                statusLabel.text = "Commit rejected by host; draft kept."
+                refreshCompactLayout()
+                return false
+            }
         }
 
         clearBuffer()
