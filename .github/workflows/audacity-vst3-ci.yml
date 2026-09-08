@@ -24,7 +24,7 @@ jobs:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Configure DSP tests
         run: cmake -S audacity/vst3 -B audacity/vst3/build -DBUILD_TESTING=ON
       - name: Build DSP tests
@@ -40,10 +40,10 @@ jobs:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check out VST3 SDK 3.8.0
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: steinbergmedia/vst3sdk
           ref: 9fad9770f2ae8542ab1a548a68c1ad1ac690abe0
