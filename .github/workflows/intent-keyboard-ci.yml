@@ -1,0 +1,44 @@
+name: Intent keyboard CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "intent-keyboard/**"
+      - ".github/workflows/intent-keyboard-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "intent-keyboard/**"
+      - ".github/workflows/intent-keyboard-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: intent-keyboard-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: intent-keyboard
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.5.0"
+
+      - run: gradle :core:desktopTest --stacktrace
