@@ -8,13 +8,17 @@ import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import io.github.twojstar.intentkeyboard.CharacterPage
 import io.github.twojstar.intentkeyboard.ConservativeLockDetector
 import io.github.twojstar.intentkeyboard.MechanicalRenderer
+import io.github.twojstar.intentkeyboard.PrototypeKeyboardLayout
 import io.github.twojstar.intentkeyboard.Register
 import io.github.twojstar.intentkeyboard.RenderRequest
 import io.github.twojstar.intentkeyboard.SemanticPipeline
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -25,14 +29,22 @@ class IntentKeyboardService : InputMethodService() {
     private val buffer = StringBuilder()
 
     private var register = Register.NATURAL
+    private var characterPage = CharacterPage.LETTERS
+    private var uppercase = false
     private var renderedSource = ""
     private var renderedText = ""
+    private var renderedCanCommit = true
     private var sensitiveField = false
+    private var renderGeneration = 0L
+    private var renderJob: Job? = null
 
     private var rawView: TextView? = null
     private var previewView: TextView? = null
     private var statusView: TextView? = null
     private var modeButton: Button? = null
+    private var pageButton: Button? = null
+    private var shiftButton: Button? = null
+    private var keysContainer: LinearLayout? = null
 
     override fun onCreateInputView(): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
@@ -51,9 +63,13 @@ class IntentKeyboardService : InputMethodService() {
         }
 
         addView(toolbar())
-        addView(keyRow("qwertyuiop"))
-        addView(keyRow("asdfghjkl"))
-        addView(keyRow("zxcvbnm"))
+
+        keysContainer = LinearLayout(context).also { container ->
+            container.orientation = LinearLayout.VERTICAL
+            addView(container, matchWidth())
+        }
+        rebuildCharacterRows()
+
         addView(bottomRow())
 
         statusView = TextView(context).also { view ->
@@ -68,9 +84,17 @@ class IntentKeyboardService : InputMethodService() {
 
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
-        sensitiveField = isSensitive(attribute)
-        clearInternalBuffer()
-        if (sensitiveField) {
+
+        val nextSensitive = isSensitive(attribute)
+        sensitiveField = nextSensitive
+
+        if (nextSensitive || !restarting) {
+            clearInternalBuffer()
+        } else {
+            refreshViews()
+        }
+
+        if (nextSensitive) {
             statusView?.text = "Sensitive field: semantic buffering disabled."
         }
     }
@@ -84,6 +108,7 @@ class IntentKeyboardService : InputMethodService() {
     override fun onEvaluateFullscreenMode(): Boolean = false
 
     override fun onDestroy() {
+        renderJob?.cancel()
         scope.cancel()
         super.onDestroy()
     }
@@ -110,21 +135,46 @@ class IntentKeyboardService : InputMethodService() {
         }, weighted())
     }
 
+    private fun rebuildCharacterRows() {
+        val container = keysContainer ?: return
+        container.removeAllViews()
+
+        PrototypeKeyboardLayout.layout(characterPage, uppercase).rows.forEach { row ->
+            container.addView(keyRow(row), matchWidth())
+        }
+
+        pageButton?.text = if (characterPage == CharacterPage.LETTERS) "123" else "ABC"
+        shiftButton?.isEnabled = characterPage == CharacterPage.LETTERS
+        shiftButton?.text = if (uppercase) "⇧ ON" else "⇧"
+    }
+
     private fun keyRow(keys: String): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         keys.forEach { key ->
-            addView(keyButton(key.toString()) { append(key.toString()) }, weighted(dp(46)))
+            addView(keyButton(key.toString()) { append(key.toString()) }, weighted(dp(42)))
         }
     }
 
     private fun bottomRow(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
-        addView(keyButton("🌐") { switchToNextInputMethod(false) }, weighted(dp(46)))
-        addView(keyButton(",") { append(",") }, weighted(dp(46)))
-        addView(keyButton("space") { append(" ") }, weighted(dp(46), 3f))
-        addView(keyButton(".") { append(".") }, weighted(dp(46)))
-        addView(keyButton("⌫") { backspace() }, weighted(dp(46)))
-        addView(keyButton("↵") { append("\n") }, weighted(dp(46)))
+
+        addView(keyButton("🌐") { switchToNextInputMethod(false) }, weighted(dp(44)))
+
+        pageButton = keyButton("123") { toggleCharacterPage() }.also { button ->
+            addView(button, weighted(dp(44)))
+        }
+
+        shiftButton = keyButton("⇧") { toggleUppercase() }.also { button ->
+            addView(button, weighted(dp(44)))
+        }
+
+        addView(keyButton(",") { append(",") }, weighted(dp(44)))
+        addView(keyButton("space") { append(" ") }, weighted(dp(44), 3f))
+        addView(keyButton(".") { append(".") }, weighted(dp(44)))
+        addView(keyButton("⌫") { backspace() }, weighted(dp(44)))
+        addView(keyButton("↵") { append("\n") }, weighted(dp(44)))
+
+        rebuildCharacterRows()
     }
 
     private fun keyButton(label: String, action: () -> Unit) = Button(this).apply {
@@ -133,6 +183,21 @@ class IntentKeyboardService : InputMethodService() {
         minWidth = 0
         setPadding(0, 0, 0, 0)
         setOnClickListener { action() }
+    }
+
+    private fun toggleCharacterPage() {
+        characterPage = when (characterPage) {
+            CharacterPage.LETTERS -> CharacterPage.NUMBERS
+            CharacterPage.NUMBERS -> CharacterPage.LETTERS
+        }
+        if (characterPage == CharacterPage.NUMBERS) uppercase = false
+        rebuildCharacterRows()
+    }
+
+    private fun toggleUppercase() {
+        if (characterPage != CharacterPage.LETTERS) return
+        uppercase = !uppercase
+        rebuildCharacterRows()
     }
 
     private fun append(text: String) {
@@ -148,7 +213,7 @@ class IntentKeyboardService : InputMethodService() {
 
     private fun backspace() {
         if (sensitiveField || buffer.isEmpty()) {
-            currentInputConnection?.deleteSurroundingText(1, 0)
+            currentInputConnection?.deleteSurroundingTextInCodePoints(1, 0)
             return
         }
 
@@ -166,23 +231,48 @@ class IntentKeyboardService : InputMethodService() {
         val raw = buffer.toString()
         if (raw.isBlank()) return
 
+        renderJob?.cancel()
+        val requestedRegister = register
+        val generation = ++renderGeneration
         statusView?.text = "Rendering…"
-        scope.launch {
-            runCatching {
-                pipeline.render(
+
+        renderJob = scope.launch {
+            try {
+                val result = pipeline.render(
                     RenderRequest(
                         rawIntent = raw,
-                        register = register,
+                        register = requestedRegister,
                         locks = ConservativeLockDetector.detect(raw),
                     ),
                 )
-            }.onSuccess { result ->
+
+                if (
+                    generation != renderGeneration ||
+                    raw != buffer.toString() ||
+                    requestedRegister != register
+                ) {
+                    return@launch
+                }
+
                 renderedSource = raw
                 renderedText = result.text
+                renderedCanCommit = result.canCommit
                 previewView?.text = "preview: ${result.text}"
-                statusView?.text = result.warnings.joinToString(" · ").ifBlank { "Ready to commit." }
-            }.onFailure { error ->
-                statusView?.text = "Render failed: ${error.message ?: error::class.simpleName}"
+
+                statusView?.text = when {
+                    !result.canCommit -> {
+                        val locked = result.violatedLocks.joinToString { it.value }
+                        "Commit blocked: protected value changed ($locked)."
+                    }
+                    result.warnings.isNotEmpty() -> result.warnings.joinToString(" · ")
+                    else -> "Ready to commit."
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                if (generation == renderGeneration) {
+                    statusView?.text = "Render failed: ${error.message ?: error::class.simpleName}"
+                }
             }
         }
     }
@@ -193,13 +283,19 @@ class IntentKeyboardService : InputMethodService() {
         val raw = buffer.toString()
         if (raw.isEmpty()) return
 
-        val output = if (renderedSource == raw && renderedText.isNotBlank()) {
-            renderedText
-        } else {
-            raw
+        val hasCurrentPreview = renderedSource == raw && renderedText.isNotBlank()
+        if (hasCurrentPreview && !renderedCanCommit) {
+            statusView?.text = "Commit blocked until protected values are preserved."
+            return
         }
 
-        currentInputConnection?.commitText(output, 1)
+        val output = if (hasCurrentPreview) renderedText else raw
+        val connection = currentInputConnection
+        if (connection == null || !connection.commitText(output, 1)) {
+            statusView?.text = "Commit failed. Draft preserved."
+            return
+        }
+
         clearInternalBuffer()
         statusView?.text = "Committed."
     }
@@ -215,8 +311,12 @@ class IntentKeyboardService : InputMethodService() {
     }
 
     private fun invalidateRenderedPreview() {
+        renderJob?.cancel()
+        renderJob = null
+        renderGeneration += 1
         renderedSource = ""
         renderedText = ""
+        renderedCanCommit = true
     }
 
     private fun clearInternalBuffer() {
@@ -229,6 +329,10 @@ class IntentKeyboardService : InputMethodService() {
         rawView?.text = if (buffer.isEmpty()) "intent: …" else "intent: $buffer"
         previewView?.text = if (renderedText.isEmpty()) "preview: …" else "preview: $renderedText"
         modeButton?.text = register.name.lowercase().replaceFirstChar { it.titlecase() }
+        pageButton?.text = if (characterPage == CharacterPage.LETTERS) "123" else "ABC"
+        shiftButton?.isEnabled = characterPage == CharacterPage.LETTERS
+        shiftButton?.text = if (uppercase) "⇧ ON" else "⇧"
+
         if (!sensitiveField && statusView?.text?.startsWith("Sensitive field") == true) {
             statusView?.text = ""
         }
