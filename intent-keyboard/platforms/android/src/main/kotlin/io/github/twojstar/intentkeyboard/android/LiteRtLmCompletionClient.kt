@@ -36,8 +36,11 @@ data class LiteRtLmCpuConfig(
  * Models are intentionally supplied by local file path and are never bundled by this adapter.
  */
 suspend fun createCpuLiteRtLmEngine(config: LiteRtLmCpuConfig): Engine {
-    val modelFile = File(config.modelPath)
-    require(modelFile.isFile) { "LiteRT-LM model does not exist: ${config.modelPath}" }
+    val modelFile = withContext(Dispatchers.IO) {
+        File(config.modelPath).also { file ->
+            require(file.isFile) { "LiteRT-LM model does not exist: ${config.modelPath}" }
+        }
+    }
 
     val engine = Engine(
         EngineConfig(
