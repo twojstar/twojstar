@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Intent Keyboard</string>
+    <string name="ime_name">Intent Keyboard</string>
+    <string name="setup_title">Intent Keyboard prototype</string>
+    <string name="setup_body">Enable the keyboard in Android settings, then choose it from the system input-method picker.</string>
+    <string name="open_keyboard_settings">Open keyboard settings</string>
+    <string name="choose_keyboard">Choose keyboard</string>
+</resources>
