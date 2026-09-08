@@ -1,5 +1,6 @@
 package io.github.twojstar.intentkeyboard
 
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -66,7 +67,7 @@ object SemanticPromptCompiler {
         val input = buildJsonObject {
             put("message", request.rawIntent)
             putJsonArray("protectedValues") {
-                verbatimLocks.forEach(::add)
+                verbatimLocks.forEach { add(JsonPrimitive(it)) }
             }
         }.toString()
 
