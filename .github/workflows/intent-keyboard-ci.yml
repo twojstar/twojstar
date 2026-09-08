@@ -48,3 +48,45 @@ jobs:
           name: intent-keyboard-android-debug
           path: intent-keyboard/platforms/android/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: intent-keyboard
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.6.0"
+
+      - name: Assemble shared iOS XCFramework
+        run: gradle :core:assembleIntentKeyboardCoreDebugXCFramework --stacktrace
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec platforms/ios/project.yml --project platforms/ios
+
+      - name: Build host and keyboard extension
+        run: >-
+          xcodebuild
+          -project platforms/ios/IntentKeyboard.xcodeproj
+          -scheme IntentKeyboard
+          -configuration Debug
+          -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          ARCHS=arm64
+          ONLY_ACTIVE_ARCH=YES
+          CODE_SIGNING_ALLOWED=NO
+          build
