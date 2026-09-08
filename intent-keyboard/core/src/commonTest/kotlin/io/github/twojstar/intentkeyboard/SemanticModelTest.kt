@@ -126,7 +126,7 @@ class SemanticModelTest {
 
             respond(
                 content = ByteReadChannel(
-                    "{\"choices\":[{\"message\":{\"content\":\"Jutro będę o $LOCKED_TIME.\"}}]}",
+                    "{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":\"Jutro będę o $LOCKED_TIME.\"}}]}",
                 ),
                 status = HttpStatusCode.OK,
                 headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
@@ -229,10 +229,35 @@ class SemanticModelTest {
     }
 
     @Test
-    fun openAiCompatibleClientRejectsNonStringCompletionContent() = runBlocking {
+    fun openAiCompatibleClientRejectsIncompleteCompletions() = runBlocking {
+        listOf("length", "content_filter", "tool_calls", "function_call").forEach { reason ->
+            val httpClient = HttpClient(
+                MockEngine {
+                    respond(
+                        content = ByteReadChannel(
+                            "{\"choices\":[{\"finish_reason\":\"$reason\",\"message\":{\"content\":\"partial\"}}]}",
+                        ),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
+                    )
+                },
+            )
+            val client = providerClient(httpClient)
+
+            val outcome = client.complete(ModelPrompt(TEST_INSTRUCTIONS, TEST_INPUT))
+
+            val failure = assertIs<CompletionOutcome.Failure>(outcome)
+            assertEquals("Provider completion ended with finish_reason=$reason.", failure.message)
+            httpClient.close()
+        }
+    }
+
+    @Test
+    fun openAiCompatibleClientRejectsMalformedCompletionContent() = runBlocking {
         val payloads = listOf(
             "{\"choices\":[{\"message\":{\"content\":123}}]}",
             "{\"choices\":[{\"message\":{\"content\":[{\"text\":false}]}}]}",
+            "{\"choices\":[{\"message\":{\"content\":[{\"text\":\"Hello\"},{\"text\":false}]}}]}",
         )
 
         payloads.forEach { payload ->
@@ -250,7 +275,7 @@ class SemanticModelTest {
             val outcome = client.complete(ModelPrompt(TEST_INSTRUCTIONS, TEST_INPUT))
 
             val failure = assertIs<CompletionOutcome.Failure>(outcome)
-            assertEquals("Provider returned no text completion.", failure.message)
+            assertEquals("Provider returned invalid completion content.", failure.message)
             httpClient.close()
         }
     }
