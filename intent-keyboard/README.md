@@ -78,7 +78,7 @@ Android can now use a local LiteRT-LM 0.16.1 model end to end:
 - Each render uses a fresh conversation, so previous keyboard drafts are not inherited as chat history.
 - The keyboard shows whether it is using the mechanical fallback, loading a model, or rendering with the selected local model.
 
-No model is bundled in the repository or APK. Removing or replacing the selected model releases the old engine and deletes the old private copy. Remote providers are still not enabled by default; provider credential storage remains a separate slice.
+No model is bundled in the repository or APK. The runtime prunes obsolete private model copies only after releasing any engine that could still reference them. Remote providers are still not enabled by default; provider credential storage remains a separate slice.
 
 Regardless of provider, the model does not get the final word: exact time/money locks are validated again after rendering, and an unsafe preview cannot be committed. Sensitive/password fields bypass semantic buffering entirely.
 
