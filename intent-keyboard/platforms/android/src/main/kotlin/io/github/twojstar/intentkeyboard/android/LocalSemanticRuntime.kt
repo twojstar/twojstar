@@ -151,19 +151,24 @@ class LocalSemanticRuntime(
         } catch (error: CancellationException) {
             throw error
         } catch (error: IllegalArgumentException) {
-            fail(selection, "Model file is unavailable.")
+            fail(selection, "Model file is unavailable.", error)
         } catch (error: LiteRtLmJniException) {
-            fail(selection, "LiteRT-LM could not initialize this model.")
+            fail(selection, "LiteRT-LM could not initialize this model.", error)
         } catch (error: IllegalStateException) {
-            fail(selection, "LiteRT-LM engine initialization failed.")
+            fail(selection, "LiteRT-LM engine initialization failed.", error)
         } catch (error: UnsatisfiedLinkError) {
-            fail(selection, "LiteRT-LM native runtime is unavailable on this device.")
+            fail(selection, "LiteRT-LM native runtime is unavailable on this device.", error)
         } finally {
             releaseEngine(candidate)
         }
     }
 
-    private suspend fun fail(selection: LocalModelSelection, message: String) {
+    private suspend fun fail(
+        selection: LocalModelSelection,
+        message: String,
+        cause: Throwable,
+    ) {
+        Log.w(TAG, "Local model load failed for ${selection.displayName}: $message", cause)
         installFallback()
         publish(
             LocalSemanticRuntimeState.Failed(
