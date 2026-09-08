@@ -4,25 +4,28 @@ The semantic engine is shared; text-system integration is not.
 
 ## Android
 
-Planned first executable adapter.
+Current first executable adapter.
 
 - `InputMethodService` owns keyboard lifecycle.
-- `InputConnection` reads/replaces composing text.
+- `InputConnection` inserts committed text and handles editor actions.
+- A private intent buffer keeps rough source text separate from the host field until commit.
 - Shared `SemanticPipeline` receives the raw intent and returns the rendered text.
-- The adapter must never send text to a provider on its own; provider policy belongs above the platform bridge.
+- The adapter never sends text to a provider on its own; provider policy stays behind the semantic runtime.
 
-Initial interaction should be explicit (`Render`) before experimenting with debounced live replacement. Cursor/selection correctness matters more than visual cleverness.
+Interaction remains explicit (`Render` → inspect → `Commit`) before experimenting with debounced live replacement. Cursor/selection correctness matters more than visual cleverness.
 
 ## iOS / iPadOS
 
-Second mobile adapter.
+Current second mobile adapter.
 
 - `UIInputViewController` hosts the keyboard extension.
-- `textDocumentProxy` inserts/deletes the rendered result.
-- Shared core is exported from Kotlin Multiplatform for Swift consumption.
-- Features that require Full Access must be isolated and clearly disclosed.
+- `textDocumentProxy` inserts committed text and handles host-side deletion.
+- `IntentKeyboardCore.xcframework` exports the same Kotlin Multiplatform core used by Android.
+- A tiny Swift-facing bridge keeps register parsing, automatic locks and integrity validation in shared Kotlin code.
+- `RequestsOpenAccess` is `false`, so the first extension does not request network or shared-container write access.
+- [`ios/project.yml`](ios/project.yml) is the maintained XcodeGen source; generated Xcode project files stay out of Git.
 
-The iOS adapter should consume the same `RenderRequest` / `RenderResult` contract used on Android.
+The iOS adapter consumes the same semantic pipeline and render result contract rather than duplicating transformation rules in Swift.
 
 ## Desktop
 
