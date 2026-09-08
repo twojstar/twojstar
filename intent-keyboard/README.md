@@ -57,26 +57,28 @@ See [`docs/concept.md`](docs/concept.md) for the architecture and MVP boundary.
 The first Android slice is now real rather than a mock app:
 
 1. Install the debug APK produced by `Intent keyboard CI`.
-2. Open **Intent Keyboard** and enable it in Android keyboard settings.
-3. Choose it from the system input-method picker.
+2. Open **Intent Keyboard** and optionally import a local `.litertlm` model.
+3. Enable the keyboard in Android settings and choose it from the system input-method picker.
 4. Type rough text into the keyboard's private intent buffer.
 5. Pick `Raw`, `Natural` or `Civilized`, press **Render**, inspect the preview, then **Commit** it into the host app.
 
-`MechanicalRenderer` remains the deterministic local fallback. The shared core now also contains a real model-backed path:
+`MechanicalRenderer` remains the deterministic local fallback. The shared core also contains a real model-backed path:
 
 - `SemanticPromptCompiler` converts a `RenderRequest` into strict model instructions plus untrusted source input.
 - `ModelSemanticRenderer` turns provider output back into the normal semantic pipeline.
 - `OpenAiCompatibleCompletionClient` talks to configurable Chat Completions-compatible endpoints over Ktor.
 - OkHttp, Darwin and CIO engines keep the transport available across Android, iOS and desktop targets.
 
-Android also has an on-device model adapter based on LiteRT-LM 0.16.1:
+Android can now use a local LiteRT-LM 0.16.1 model end to end:
 
-- `LiteRtLmCompletionClient` implements the same provider-neutral semantic completion contract.
-- `createCpuLiteRtLmEngine` initializes a caller-owned CPU engine off the main thread.
-- The model is supplied by local file path and is not bundled in the repository or APK.
+- The setup screen imports a user-selected `.litertlm` document into app-private storage; the source URI is not retained.
+- `LocalModelStore` is the single source of truth for the selected local model.
+- `LocalSemanticRuntime` watches that selection, loads the model on the CPU off the main thread and swaps renderers without closing an engine underneath an in-flight render.
+- `LiteRtLmCompletionClient` implements the same provider-neutral semantic completion contract as remote adapters.
 - Each render uses a fresh conversation, so previous keyboard drafts are not inherited as chat history.
+- The keyboard shows whether it is using the mechanical fallback, loading a model, or rendering with the selected local model.
 
-Remote providers and LiteRT-LM are **not enabled by default yet**. Provider credentials and local model selection/import are deliberately deferred to separate slices so no API key or multi-gigabyte model is embedded in source code or the APK.
+No model is bundled in the repository or APK. The runtime prunes obsolete private model copies only after releasing any engine that could still reference them. Remote providers are still not enabled by default; provider credential storage remains a separate slice.
 
 Regardless of provider, the model does not get the final word: exact time/money locks are validated again after rendering, and an unsafe preview cannot be committed. Sensitive/password fields bypass semantic buffering entirely.
 

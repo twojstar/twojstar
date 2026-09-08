@@ -11,11 +11,9 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import io.github.twojstar.intentkeyboard.CharacterPage
 import io.github.twojstar.intentkeyboard.ConservativeLockDetector
-import io.github.twojstar.intentkeyboard.MechanicalRenderer
 import io.github.twojstar.intentkeyboard.PrototypeKeyboardLayout
 import io.github.twojstar.intentkeyboard.Register
 import io.github.twojstar.intentkeyboard.RenderRequest
-import io.github.twojstar.intentkeyboard.SemanticPipeline
 import io.github.twojstar.intentkeyboard.SemanticRenderException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -27,8 +25,10 @@ import kotlinx.coroutines.launch
 
 class IntentKeyboardService : InputMethodService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val pipeline = SemanticPipeline(MechanicalRenderer())
     private val buffer = StringBuilder()
+
+    private var semanticRuntime: LocalSemanticRuntime? = null
+    private var semanticState: LocalSemanticRuntimeState = LocalSemanticRuntimeState.Mechanical
 
     private var register = Register.NATURAL
     private var characterPage = CharacterPage.LETTERS
@@ -43,12 +43,24 @@ class IntentKeyboardService : InputMethodService() {
 
     private var rawView: TextView? = null
     private var previewView: TextView? = null
+    private var engineView: TextView? = null
     private var statusView: TextView? = null
     private var modeButton: Button? = null
     private var pageButton: Button? = null
     private var shiftButton: Button? = null
     private var enterButton: Button? = null
     private var keysContainer: LinearLayout? = null
+
+    override fun onCreate() {
+        super.onCreate()
+
+        val runtime = LocalSemanticRuntime(applicationContext, scope) { state ->
+            semanticState = state
+            refreshEngineView()
+        }
+        semanticRuntime = runtime
+        runtime.start()
+    }
 
     override fun onCreateInputView(): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
@@ -62,7 +74,14 @@ class IntentKeyboardService : InputMethodService() {
 
         previewView = TextView(context).also { view ->
             view.textSize = 16f
-            view.setPadding(dp(8), dp(4), dp(8), dp(8))
+            view.setPadding(dp(8), dp(4), dp(8), dp(4))
+            addView(view, matchWidth())
+        }
+
+        engineView = TextView(context).also { view ->
+            view.textSize = 11f
+            view.gravity = Gravity.END
+            view.setPadding(dp(8), 0, dp(8), dp(6))
             addView(view, matchWidth())
         }
 
@@ -115,6 +134,8 @@ class IntentKeyboardService : InputMethodService() {
 
     override fun onDestroy() {
         renderJob?.cancel()
+        semanticRuntime?.close()
+        semanticRuntime = null
         scope.cancel()
         super.onDestroy()
     }
@@ -276,6 +297,12 @@ class IntentKeyboardService : InputMethodService() {
         val raw = buffer.toString()
         if (raw.isBlank()) return
 
+        val runtime = semanticRuntime
+        if (runtime == null) {
+            statusView?.text = "Semantic runtime unavailable."
+            return
+        }
+
         renderJob?.cancel()
         val requestedRegister = register
         val generation = ++renderGeneration
@@ -283,7 +310,7 @@ class IntentKeyboardService : InputMethodService() {
 
         renderJob = scope.launch {
             try {
-                val result = pipeline.render(
+                val result = runtime.render(
                     RenderRequest(
                         rawIntent = raw,
                         register = requestedRegister,
@@ -379,11 +406,24 @@ class IntentKeyboardService : InputMethodService() {
         shiftButton?.isEnabled = characterPage == CharacterPage.LETTERS
         shiftButton?.text = if (uppercase) "⇧ ON" else "⇧"
         enterButton?.text = enterLabel(activeEditorInfo)
+        refreshEngineView()
 
         if (!sensitiveField && statusView?.text?.startsWith("Sensitive field") == true) {
             statusView?.text = ""
         }
     }
+
+    private fun refreshEngineView() {
+        engineView?.text = when (val state = semanticState) {
+            LocalSemanticRuntimeState.Mechanical -> "engine: Mechanical"
+            is LocalSemanticRuntimeState.Loading -> "engine: Loading ${compactName(state.displayName)}…"
+            is LocalSemanticRuntimeState.Ready -> "engine: Local · ${compactName(state.displayName)}"
+            is LocalSemanticRuntimeState.Failed -> "engine: Mechanical · ${state.message}"
+        }
+    }
+
+    private fun compactName(name: String): String =
+        if (name.length <= 42) name else "${name.take(39)}…"
 
     private fun supportsMultiline(info: EditorInfo?): Boolean {
         val inputType = info?.inputType ?: return false
