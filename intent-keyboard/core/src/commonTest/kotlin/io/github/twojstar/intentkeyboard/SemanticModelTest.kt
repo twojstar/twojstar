@@ -6,6 +6,7 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.ByteReadChannel
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -223,6 +224,55 @@ class SemanticModelTest {
 
         val failure = assertIs<CompletionOutcome.Failure>(outcome)
         assertEquals("Provider returned invalid JSON.", failure.message)
+        httpClient.close()
+    }
+
+    @Test
+    fun openAiCompatibleClientRejectsNonStringCompletionContent() = runBlocking {
+        val payloads = listOf(
+            "{\"choices\":[{\"message\":{\"content\":123}}]}",
+            "{\"choices\":[{\"message\":{\"content\":[{\"text\":false}]}}]}",
+        )
+
+        payloads.forEach { payload ->
+            val httpClient = HttpClient(
+                MockEngine {
+                    respond(
+                        content = ByteReadChannel(payload),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
+                    )
+                },
+            )
+            val client = providerClient(httpClient)
+
+            val outcome = client.complete(ModelPrompt(TEST_INSTRUCTIONS, TEST_INPUT))
+
+            val failure = assertIs<CompletionOutcome.Failure>(outcome)
+            assertEquals("Provider returned no text completion.", failure.message)
+            httpClient.close()
+        }
+    }
+
+    @Test
+    fun openAiCompatibleClientCancelsHttpFailureBody() = runBlocking {
+        val responseBody = ByteChannel()
+        val httpClient = HttpClient(
+            MockEngine {
+                respond(
+                    content = responseBody,
+                    status = HttpStatusCode.TooManyRequests,
+                    headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
+                )
+            },
+        )
+        val client = providerClient(httpClient)
+
+        val outcome = client.complete(ModelPrompt(TEST_INSTRUCTIONS, TEST_INPUT))
+
+        val failure = assertIs<CompletionOutcome.Failure>(outcome)
+        assertEquals("Provider returned HTTP 429.", failure.message)
+        assertTrue(responseBody.isClosedForRead)
         httpClient.close()
     }
 
