@@ -116,6 +116,8 @@ class LocalSemanticRuntime(
     }
 
     private suspend fun load(selection: LocalModelSelection) {
+        installFallback()
+        currentCoroutineContext().ensureActive()
         publish(LocalSemanticRuntimeState.Loading(selection.displayName))
 
         var candidate: Engine? = null
