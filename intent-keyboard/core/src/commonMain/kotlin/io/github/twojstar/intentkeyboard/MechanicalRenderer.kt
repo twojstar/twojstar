@@ -8,7 +8,7 @@ package io.github.twojstar.intentkeyboard
  * exercise the real pipeline before an on-device or remote model is wired in.
  */
 class MechanicalRenderer : SemanticRenderer {
-    override suspend fun render(request: RenderRequest): RenderResult {
+    override suspend fun render(request: RenderRequest): RendererOutcome {
         val text = when (request.register) {
             Register.RAW -> request.rawIntent
             Register.NATURAL,
@@ -34,7 +34,7 @@ class MechanicalRenderer : SemanticRenderer {
             }
         }
 
-        return RenderResult(text = text, warnings = warnings)
+        return RendererOutcome.Success(RenderResult(text = text, warnings = warnings))
     }
 
     private fun String.sentenceCase(): String = replaceFirstChar { char ->
