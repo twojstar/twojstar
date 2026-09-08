@@ -8,6 +8,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
@@ -58,37 +59,54 @@ class OpenAiCompatibleCompletionClient(
     private val json: Json = Json,
 ) : SemanticCompletionClient {
     override suspend fun complete(prompt: ModelPrompt): CompletionOutcome {
-        return try {
-            val response = withTimeout(config.requestTimeoutMillis) {
-                httpClient.post(endpoint()) {
-                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                    accept(ContentType.Application.Json)
-                    tokenProvider.token()
-                        ?.takeIf { it.isNotBlank() }
-                        ?.let { header(HttpHeaders.Authorization, "Bearer $it") }
-                    setBody(requestBody(prompt).toString())
-                }
-            }
-
-            if (!response.status.isSuccess()) {
-                return CompletionOutcome.Failure(
-                    "Provider returned HTTP ${response.status.value}.",
-                )
-            }
-
-            val text = extractAssistantText(response.bodyAsText())
-            if (text.isNullOrBlank()) {
-                CompletionOutcome.Failure("Provider returned no text completion.")
-            } else {
-                CompletionOutcome.Success(text)
-            }
-        } catch (_: TimeoutCancellationException) {
-            CompletionOutcome.Failure("Provider request timed out.")
-        } catch (error: IOException) {
-            CompletionOutcome.Failure("Provider network request failed.", error)
-        } catch (_: SerializationException) {
-            CompletionOutcome.Failure("Provider returned invalid JSON.")
+        val transport = request(prompt)
+        if (transport is TransportOutcome.Failure) {
+            return transport.failure
         }
+
+        transport as TransportOutcome.Success
+        if (!transport.status.isSuccess()) {
+            return CompletionOutcome.Failure(
+                "Provider returned HTTP ${transport.status.value}.",
+            )
+        }
+
+        val text = try {
+            extractAssistantText(transport.body)
+        } catch (_: SerializationException) {
+            return CompletionOutcome.Failure("Provider returned invalid JSON.")
+        }
+
+        return if (text.isNullOrBlank()) {
+            CompletionOutcome.Failure("Provider returned no text completion.")
+        } else {
+            CompletionOutcome.Success(text)
+        }
+    }
+
+    private suspend fun request(prompt: ModelPrompt): TransportOutcome = try {
+        withTimeout(config.requestTimeoutMillis) {
+            val response = httpClient.post(endpoint()) {
+                header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                accept(ContentType.Application.Json)
+                tokenProvider.token()
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+                setBody(requestBody(prompt).toString())
+            }
+            TransportOutcome.Success(
+                status = response.status,
+                body = response.bodyAsText(),
+            )
+        }
+    } catch (_: TimeoutCancellationException) {
+        TransportOutcome.Failure(
+            CompletionOutcome.Failure("Provider request timed out."),
+        )
+    } catch (error: IOException) {
+        TransportOutcome.Failure(
+            CompletionOutcome.Failure("Provider network request failed.", error),
+        )
     }
 
     private fun endpoint(): String =
@@ -124,5 +142,16 @@ class OpenAiCompatibleCompletionClient(
             ((part as? JsonObject)?.get("text") as? JsonPrimitive)?.contentOrNull
         }.joinToString("").ifBlank { null }
         else -> null
+    }
+
+    private sealed interface TransportOutcome {
+        data class Success(
+            val status: HttpStatusCode,
+            val body: String,
+        ) : TransportOutcome
+
+        data class Failure(
+            val failure: CompletionOutcome.Failure,
+        ) : TransportOutcome
     }
 }
