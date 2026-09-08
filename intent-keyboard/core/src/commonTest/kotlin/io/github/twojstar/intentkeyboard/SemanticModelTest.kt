@@ -9,6 +9,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.writeFully
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
