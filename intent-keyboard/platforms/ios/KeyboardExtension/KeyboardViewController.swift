@@ -2,6 +2,11 @@ import IntentKeyboardCore
 import UIKit
 
 final class KeyboardViewController: UIInputViewController {
+    private enum CharacterPage {
+        case letters
+        case numbers
+    }
+
     private let semanticBridge = IosSemanticBridge()
     private let registerNames = ["RAW", "NATURAL", "CIVILIZED"]
 
@@ -10,6 +15,7 @@ final class KeyboardViewController: UIInputViewController {
     private var renderedText = ""
     private var renderedCanCommit = true
     private var registerIndex = 1
+    private var characterPage = CharacterPage.letters
     private var renderTask: Task<Void, Never>?
     private var activeDocumentIdentifier: UUID?
 
@@ -17,8 +23,10 @@ final class KeyboardViewController: UIInputViewController {
     private let previewLabel = UILabel()
     private let statusLabel = UILabel()
     private let registerButton = UIButton(type: .system)
+    private let pageButton = UIButton(type: .system)
     private let enterButton = UIButton(type: .system)
     private let rootStack = UIStackView()
+    private let keysStack = UIStackView()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -85,13 +93,15 @@ final class KeyboardViewController: UIInputViewController {
 
         let toolbar = makeRow([registerButton, renderButton, commitButton])
 
+        keysStack.axis = .vertical
+        keysStack.spacing = 3
+        keysStack.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        rebuildCharacterRows()
+
         rootStack.addArrangedSubview(rawLabel)
         rootStack.addArrangedSubview(previewLabel)
         rootStack.addArrangedSubview(toolbar)
-        rootStack.addArrangedSubview(makeLetterRow("qwertyuiop"))
-        rootStack.addArrangedSubview(makeLetterRow("asdfghjkl"))
-        rootStack.addArrangedSubview(makeLetterRow("zxcvbnm"))
-        rootStack.addArrangedSubview(makePolishRow())
+        rootStack.addArrangedSubview(keysStack)
         rootStack.addArrangedSubview(makeBottomRow())
         rootStack.addArrangedSubview(statusLabel)
         rootStack.axis = .vertical
@@ -107,22 +117,40 @@ final class KeyboardViewController: UIInputViewController {
         ])
     }
 
-    private func makeLetterRow(_ letters: String) -> UIStackView {
-        let buttons = letters.map { character in
-            makeKeyButton(String(character)) { [weak self] in
-                self?.append(String(character))
-            }
+    private func rebuildCharacterRows() {
+        keysStack.arrangedSubviews.forEach { row in
+            keysStack.removeArrangedSubview(row)
+            row.removeFromSuperview()
         }
-        return makeRow(buttons)
-    }
 
-    private func makePolishRow() -> UIStackView {
-        let buttons = ["ą", "ć", "ę", "ł", "ń", "ó", "ś", "ź", "ż"].map { character in
-            makeKeyButton(character) { [weak self] in
-                self?.append(character)
-            }
+        let rows: [[String]]
+        switch characterPage {
+        case .letters:
+            rows = [
+                "qwertyuiop".map(String.init),
+                "asdfghjkl".map(String.init),
+                "zxcvbnm".map(String.init),
+                ["ą", "ć", "ę", "ł", "ń", "ó", "ś", "ź", "ż"],
+            ]
+        case .numbers:
+            rows = [
+                "1234567890".map(String.init),
+                [":", ";", "-", "/", "(", ")", "€", "$", "@"],
+                ["+", "=", "_", "%", "&", "*", "#", "?", "!"],
+                ["[", "]", "{", "}", "<", ">", "\"", "'", "\\"],
+            ]
         }
-        return makeRow(buttons)
+
+        rows.forEach { symbols in
+            let buttons = symbols.map { symbol in
+                makeKeyButton(symbol) { [weak self] in
+                    self?.append(symbol)
+                }
+            }
+            keysStack.addArrangedSubview(makeRow(buttons))
+        }
+
+        pageButton.setTitle(characterPage == .letters ? "123" : "ABC", for: .normal)
     }
 
     private func makeBottomRow() -> UIStackView {
@@ -134,6 +162,14 @@ final class KeyboardViewController: UIInputViewController {
             action: #selector(handleInputModeList(from:with:)),
             for: .allTouchEvents
         )
+
+        pageButton.configuration = compactButtonConfiguration(filled: true)
+        pageButton.configuration?.baseBackgroundColor = .secondarySystemBackground
+        pageButton.configuration?.baseForegroundColor = .label
+        pageButton.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        pageButton.addAction(UIAction { [weak self] _ in
+            self?.toggleCharacterPage()
+        }, for: .touchUpInside)
 
         let comma = makeKeyButton(",") { [weak self] in self?.append(",") }
         let space = makeKeyButton("space") { [weak self] in self?.append(" ") }
@@ -150,7 +186,7 @@ final class KeyboardViewController: UIInputViewController {
         }, for: .touchUpInside)
 
         space.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        return makeRow([globe, comma, space, period, backspace, enterButton])
+        return makeRow([globe, pageButton, comma, space, period, backspace, enterButton])
     }
 
     private func makeRow(_ views: [UIView]) -> UIStackView {
@@ -190,6 +226,12 @@ final class KeyboardViewController: UIInputViewController {
         return configuration
     }
 
+    private func toggleCharacterPage() {
+        characterPage = characterPage == .letters ? .numbers : .letters
+        rebuildCharacterRows()
+        refreshCompactLayout()
+    }
+
     private func append(_ text: String) {
         rawIntent.append(text)
         invalidateRenderedPreview()
@@ -208,8 +250,12 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func handleEnter() {
+        let requestedReturnKey = returnKeyType
         guard commitBuffer() else { return }
         textDocumentProxy.insertText("\n")
+        if requestedReturnKey == .done {
+            dismissKeyboard()
+        }
     }
 
     @discardableResult
@@ -304,6 +350,7 @@ final class KeyboardViewController: UIInputViewController {
 
     private func returnKeyLabel(_ type: UIReturnKeyType) -> String {
         switch type {
+        case .default: return "↵"
         case .go: return "Go"
         case .google: return "Google"
         case .join: return "Join"
@@ -337,6 +384,7 @@ final class KeyboardViewController: UIInputViewController {
         rawLabel.text = rawIntent.isEmpty ? "intent: …" : "intent: \(rawIntent)"
         previewLabel.text = renderedText.isEmpty ? "preview: …" : "preview: \(renderedText)"
         registerButton.setTitle(registerNames[registerIndex].capitalized, for: .normal)
+        pageButton.setTitle(characterPage == .letters ? "123" : "ABC", for: .normal)
         refreshReturnKey()
         refreshCompactLayout()
     }
@@ -346,6 +394,7 @@ final class KeyboardViewController: UIInputViewController {
         let compactHeight = view.bounds.height > 0 && view.bounds.height < 260
 
         rootStack.spacing = compactHeight ? 2 : 4
+        keysStack.spacing = compactHeight ? 2 : 3
         if compactHeight {
             rawLabel.isHidden = !renderedText.isEmpty || rawIntent.isEmpty
             previewLabel.isHidden = renderedText.isEmpty
