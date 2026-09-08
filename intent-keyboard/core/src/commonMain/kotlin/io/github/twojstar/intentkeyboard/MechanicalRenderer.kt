@@ -47,15 +47,16 @@ class MechanicalRenderer : SemanticRenderer {
 
 /** Conservative automatic locks for obvious values a renderer must not alter. */
 object ConservativeLockDetector {
+    private const val CURRENCY_PATTERN = "(?:zł|PLN|EUR|USD|€|\\$)"
+    private const val NUMBER_PATTERN = "\\d+(?:[.,]\\d+)?"
+
     private val timePattern = Regex("""\b(?:[01]?\d|2[0-3]):[0-5]\d\b""")
-    private val currency = "(?:zł|PLN|EUR|USD|€|\\$)"
-    private val number = "\\d+(?:[.,]\\d+)?"
     private val suffixMoneyPattern = Regex(
-        """(?<!\w)[+-]?$number\s?$currency(?!\w)""",
+        """(?<!\w)[+-]?$NUMBER_PATTERN\s?$CURRENCY_PATTERN(?!\w)""",
         RegexOption.IGNORE_CASE,
     )
     private val prefixMoneyPattern = Regex(
-        """(?<!\w)[+-]?$currency\s?$number(?!\w)""",
+        """(?<!\w)[+-]?$CURRENCY_PATTERN\s?$NUMBER_PATTERN(?!\w)""",
         RegexOption.IGNORE_CASE,
     )
 
