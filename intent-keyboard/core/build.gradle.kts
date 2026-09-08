@@ -20,16 +20,22 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
         }
 
-        androidMain.dependencies {
-            implementation(libs.ktor.client.okhttp)
+        named("androidMain") {
+            dependencies {
+                implementation(libs.ktor.client.okhttp)
+            }
         }
 
-        desktopMain.dependencies {
-            implementation(libs.ktor.client.cio)
+        named("desktopMain") {
+            dependencies {
+                implementation(libs.ktor.client.cio)
+            }
         }
 
-        iosMain.dependencies {
-            implementation(libs.ktor.client.darwin)
+        named("iosMain") {
+            dependencies {
+                implementation(libs.ktor.client.darwin)
+            }
         }
 
         commonTest.dependencies {
