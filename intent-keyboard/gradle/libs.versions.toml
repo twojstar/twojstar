@@ -1,0 +1,9 @@
+[versions]
+kotlin = "2.4.20"
+androidGradlePlugin = "9.3.0"
+androidCompileSdk = "37"
+androidMinSdk = "26"
+
+[plugins]
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "androidGradlePlugin" }
