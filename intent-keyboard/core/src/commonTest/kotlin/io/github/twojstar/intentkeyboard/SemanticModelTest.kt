@@ -7,6 +7,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.errors.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -117,14 +118,7 @@ class SemanticModelTest {
             )
         }
         val httpClient = HttpClient(engine)
-        val client = OpenAiCompatibleCompletionClient(
-            config = OpenAiCompatibleConfig(
-                baseUrl = "$PROVIDER_URL/",
-                model = TEST_MODEL,
-            ),
-            tokenProvider = BearerTokenProvider { TEST_TOKEN },
-            httpClient = httpClient,
-        )
+        val client = providerClient(httpClient, tokenProvider = BearerTokenProvider { TEST_TOKEN })
 
         val outcome = client.complete(
             ModelPrompt(
@@ -151,19 +145,44 @@ class SemanticModelTest {
             )
         }
         val httpClient = HttpClient(engine)
-        val client = OpenAiCompatibleCompletionClient(
-            config = OpenAiCompatibleConfig(
-                baseUrl = PROVIDER_URL,
-                model = TEST_MODEL,
-                requestTimeoutMillis = 10,
-            ),
-            httpClient = httpClient,
-        )
+        val client = providerClient(httpClient, requestTimeoutMillis = 10)
 
         val outcome = client.complete(ModelPrompt(TEST_INSTRUCTIONS, TEST_INPUT))
 
         val failure = assertIs<CompletionOutcome.Failure>(outcome)
         assertEquals("Provider request timed out.", failure.message)
+        httpClient.close()
+    }
+
+    @Test
+    fun openAiCompatibleClientMapsNetworkFailure() = runTest {
+        val httpClient = HttpClient(MockEngine { throw IOException("network down") })
+        val client = providerClient(httpClient)
+
+        val outcome = client.complete(ModelPrompt(TEST_INSTRUCTIONS, TEST_INPUT))
+
+        val failure = assertIs<CompletionOutcome.Failure>(outcome)
+        assertEquals("Provider network request failed.", failure.message)
+        httpClient.close()
+    }
+
+    @Test
+    fun openAiCompatibleClientMapsInvalidJson() = runTest {
+        val httpClient = HttpClient(
+            MockEngine {
+                respond(
+                    content = ByteReadChannel("not-json"),
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
+                )
+            },
+        )
+        val client = providerClient(httpClient)
+
+        val outcome = client.complete(ModelPrompt(TEST_INSTRUCTIONS, TEST_INPUT))
+
+        val failure = assertIs<CompletionOutcome.Failure>(outcome)
+        assertEquals("Provider returned invalid JSON.", failure.message)
         httpClient.close()
     }
 
@@ -177,13 +196,7 @@ class SemanticModelTest {
             )
         }
         val httpClient = HttpClient(engine)
-        val client = OpenAiCompatibleCompletionClient(
-            config = OpenAiCompatibleConfig(
-                baseUrl = PROVIDER_URL,
-                model = TEST_MODEL,
-            ),
-            httpClient = httpClient,
-        )
+        val client = providerClient(httpClient)
 
         val outcome = client.complete(ModelPrompt(TEST_INSTRUCTIONS, TEST_INPUT))
 
@@ -191,6 +204,20 @@ class SemanticModelTest {
         assertEquals("Provider returned HTTP 429.", failure.message)
         httpClient.close()
     }
+
+    private fun providerClient(
+        httpClient: HttpClient,
+        requestTimeoutMillis: Long = 15_000,
+        tokenProvider: BearerTokenProvider = NoBearerTokenProvider,
+    ) = OpenAiCompatibleCompletionClient(
+        config = OpenAiCompatibleConfig(
+            baseUrl = PROVIDER_URL,
+            model = TEST_MODEL,
+            requestTimeoutMillis = requestTimeoutMillis,
+        ),
+        tokenProvider = tokenProvider,
+        httpClient = httpClient,
+    )
 
     private companion object {
         const val LOCKED_TIME = "18:30"
