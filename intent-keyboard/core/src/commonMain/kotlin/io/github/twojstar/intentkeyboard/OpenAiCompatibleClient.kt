@@ -195,22 +195,24 @@ class OpenAiCompatibleCompletionClient(
         return content.asTextContent()
     }
 
-    private fun JsonElement.asTextContent(): AssistantTextOutcome = when (this) {
-        is JsonPrimitive -> stringContentOrNull()
-            ?.let(AssistantTextOutcome::Text)
-            ?: AssistantTextOutcome.InvalidContent
-        is JsonArray -> {
-            val parts = ArrayList<String>(size)
-            for (part in this) {
-                val partObject = part as? JsonObject
-                    ?: return AssistantTextOutcome.InvalidContent
-                val text = (partObject["text"] as? JsonPrimitive)?.stringContentOrNull()
-                    ?: return AssistantTextOutcome.InvalidContent
-                parts += text
+    private fun JsonElement.asTextContent(): AssistantTextOutcome {
+        return when (this) {
+            is JsonPrimitive -> stringContentOrNull()
+                ?.let(AssistantTextOutcome::Text)
+                ?: AssistantTextOutcome.InvalidContent
+            is JsonArray -> {
+                val parts = ArrayList<String>(size)
+                for (part in this) {
+                    val partObject = part as? JsonObject
+                        ?: return AssistantTextOutcome.InvalidContent
+                    val text = (partObject["text"] as? JsonPrimitive)?.stringContentOrNull()
+                        ?: return AssistantTextOutcome.InvalidContent
+                    parts += text
+                }
+                AssistantTextOutcome.Text(parts.joinToString(""))
             }
-            AssistantTextOutcome.Text(parts.joinToString(""))
+            else -> AssistantTextOutcome.InvalidContent
         }
-        else -> AssistantTextOutcome.InvalidContent
     }
 
     private fun JsonPrimitive.stringContentOrNull(): String? =
