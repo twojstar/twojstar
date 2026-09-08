@@ -5,6 +5,7 @@ import io.ktor.client.request.accept
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -113,9 +114,17 @@ class OpenAiCompatibleCompletionClient(
                     ?.let { header(HttpHeaders.Authorization, "Bearer $it") }
                 setBody(requestBody(prompt).toString())
             }
+
+            val body = if (response.status.isSuccess()) {
+                response.bodyAsText()
+            } else {
+                response.bodyAsChannel().cancel()
+                ""
+            }
+
             TransportOutcome.Success(
                 status = response.status,
-                body = if (response.status.isSuccess()) response.bodyAsText() else "",
+                body = body,
             )
         } ?: TransportOutcome.Failure(
             CompletionOutcome.Failure(
@@ -158,12 +167,15 @@ class OpenAiCompatibleCompletionClient(
     }
 
     private fun JsonElement.asTextContent(): String? = when (this) {
-        is JsonPrimitive -> contentOrNull
+        is JsonPrimitive -> stringContentOrNull()
         is JsonArray -> mapNotNull { part ->
-            ((part as? JsonObject)?.get("text") as? JsonPrimitive)?.contentOrNull
+            ((part as? JsonObject)?.get("text") as? JsonPrimitive)?.stringContentOrNull()
         }.joinToString("").ifBlank { null }
         else -> null
     }
+
+    private fun JsonPrimitive.stringContentOrNull(): String? =
+        if (isString) contentOrNull else null
 
     private sealed interface TransportOutcome {
         data class Success(
