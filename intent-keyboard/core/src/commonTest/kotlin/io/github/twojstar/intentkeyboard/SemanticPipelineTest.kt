@@ -14,7 +14,7 @@ class SemanticPipelineTest {
         val pipeline = SemanticPipeline(
             renderer = object : SemanticRenderer {
                 override suspend fun render(request: RenderRequest) =
-                    RenderResult("Jutro powinienem być około 19:00.")
+                    RendererOutcome.Success(RenderResult("Jutro powinienem być około 19:00."))
             },
         )
 
@@ -31,10 +31,30 @@ class SemanticPipelineTest {
     }
 
     @Test
+    fun rendererFailureBecomesSemanticRenderException() = runTest {
+        val pipeline = SemanticPipeline(
+            renderer = object : SemanticRenderer {
+                override suspend fun render(request: RenderRequest) =
+                    RendererOutcome.Failure("provider unavailable")
+            },
+        )
+
+        var failure: SemanticRenderException? = null
+        try {
+            pipeline.render(RenderRequest(rawIntent = "hej"))
+        } catch (error: SemanticRenderException) {
+            failure = error
+        }
+
+        assertEquals("provider unavailable", failure?.message)
+    }
+
+    @Test
     fun exactLockDoesNotPassAsPartOfLargerValue() = runTest {
         val pipeline = SemanticPipeline(
             renderer = object : SemanticRenderer {
-                override suspend fun render(request: RenderRequest) = RenderResult("Koszt to 17€.")
+                override suspend fun render(request: RenderRequest) =
+                    RendererOutcome.Success(RenderResult("Koszt to 17€."))
             },
         )
 
@@ -53,7 +73,8 @@ class SemanticPipelineTest {
     fun repeatedLocksPreserveMultiplicity() = runTest {
         val pipeline = SemanticPipeline(
             renderer = object : SemanticRenderer {
-                override suspend fun render(request: RenderRequest) = RenderResult("7€")
+                override suspend fun render(request: RenderRequest) =
+                    RendererOutcome.Success(RenderResult("7€"))
             },
         )
 
