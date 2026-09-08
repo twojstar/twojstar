@@ -13,6 +13,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 
 class SemanticModelTest {
@@ -135,6 +136,35 @@ class SemanticModelTest {
 
         val success = assertIs<CompletionOutcome.Success>(outcome)
         assertEquals("Jutro będę o 18:30.", success.text)
+        httpClient.close()
+    }
+
+    @Test
+    fun openAiCompatibleClientEnforcesConfiguredDeadline() = runTest {
+        val engine = MockEngine {
+            delay(100)
+            respond(
+                content = ByteReadChannel(
+                    """{"choices":[{"message":{"content":"too late"}}]}""",
+                ),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val httpClient = HttpClient(engine)
+        val client = OpenAiCompatibleCompletionClient(
+            config = OpenAiCompatibleConfig(
+                baseUrl = "https://provider.example/v1",
+                model = TEST_MODEL,
+                requestTimeoutMillis = 10,
+            ),
+            httpClient = httpClient,
+        )
+
+        val outcome = client.complete(ModelPrompt("instructions", "input"))
+
+        val failure = assertIs<CompletionOutcome.Failure>(outcome)
+        assertEquals("Provider request timed out.", failure.message)
         httpClient.close()
     }
 
