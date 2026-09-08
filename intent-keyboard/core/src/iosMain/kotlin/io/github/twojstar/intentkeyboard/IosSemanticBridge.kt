@@ -1,5 +1,7 @@
 package io.github.twojstar.intentkeyboard
 
+import kotlin.coroutines.cancellation.CancellationException
+
 /**
  * Small Swift-friendly façade over the shared semantic pipeline.
  *
@@ -9,7 +11,7 @@ package io.github.twojstar.intentkeyboard
 class IosSemanticBridge {
     private val pipeline = SemanticPipeline(MechanicalRenderer())
 
-    @Throws(SemanticRenderException::class)
+    @Throws(SemanticRenderException::class, CancellationException::class)
     suspend fun render(
         rawIntent: String,
         registerName: String,
