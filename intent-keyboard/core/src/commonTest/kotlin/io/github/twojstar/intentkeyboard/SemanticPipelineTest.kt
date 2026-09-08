@@ -31,6 +31,55 @@ class SemanticPipelineTest {
     }
 
     @Test
+    fun exactLockDoesNotPassAsPartOfLargerValue() = runTest {
+        val pipeline = SemanticPipeline(
+            renderer = object : SemanticRenderer {
+                override suspend fun render(request: RenderRequest) = RenderResult("Koszt to 17€.")
+            },
+        )
+
+        val result = pipeline.render(
+            RenderRequest(
+                rawIntent = "koszt 7€",
+                locks = listOf(SemanticLock("7€")),
+            ),
+        )
+
+        assertFalse(result.canCommit)
+        assertEquals(listOf("7€"), result.violatedLocks.map { it.value })
+    }
+
+    @Test
+    fun repeatedLocksPreserveMultiplicity() = runTest {
+        val pipeline = SemanticPipeline(
+            renderer = object : SemanticRenderer {
+                override suspend fun render(request: RenderRequest) = RenderResult("7€")
+            },
+        )
+
+        val result = pipeline.render(
+            RenderRequest(
+                rawIntent = "7€ i 7€",
+                locks = listOf(SemanticLock("7€"), SemanticLock("7€")),
+            ),
+        )
+
+        assertFalse(result.canCommit)
+        assertEquals(1, result.violatedLocks.size)
+    }
+
+    @Test
+    fun rawRegisterPreservesSourceExactly() = runTest {
+        val raw = "  jutro   byc 18:30  \n"
+        val result = SemanticPipeline(MechanicalRenderer()).render(
+            RenderRequest(rawIntent = raw, register = Register.RAW),
+        )
+
+        assertEquals(raw, result.text)
+        assertTrue(result.canCommit)
+    }
+
+    @Test
     fun mechanicalRendererNormalizesNaturalDraft() = runTest {
         val raw = "  jutro   byc 18:30  "
         val result = SemanticPipeline(MechanicalRenderer()).render(
@@ -47,14 +96,22 @@ class SemanticPipelineTest {
     }
 
     @Test
-    fun detectorLocksObviousTimeAndMoneyValues() {
-        val locks = ConservativeLockDetector.detect("jutro 18:30, budzet 120 zł, 7€ i 12\$")
-            .map { it.value }
+    fun detectorLocksTimesAndSignedPrefixOrSuffixMoney() {
+        val locks = ConservativeLockDetector.detect(
+            "jutro 18:30, 120 zł, 7€, 12$, $12, €7, -12€, -$14 i +20 USD",
+        ).map { it.value }
 
-        assertTrue("18:30" in locks)
-        assertTrue("120 zł" in locks)
-        assertTrue("7€" in locks)
-        assertTrue("12\$" in locks)
+        listOf(
+            "18:30",
+            "120 zł",
+            "7€",
+            "12$",
+            "$12",
+            "€7",
+            "-12€",
+            "-$14",
+            "+20 USD",
+        ).forEach { expected -> assertTrue(expected in locks, "Missing lock: $expected") }
     }
 
     @Test
