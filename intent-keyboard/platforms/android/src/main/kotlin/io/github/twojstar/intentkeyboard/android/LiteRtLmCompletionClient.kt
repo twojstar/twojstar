@@ -36,35 +36,33 @@ data class LiteRtLmCpuConfig(
  * Models are intentionally supplied by local file path and are never bundled by this adapter.
  */
 suspend fun createCpuLiteRtLmEngine(config: LiteRtLmCpuConfig): Engine {
-    var createdEngine: Engine? = null
+    val modelFile = File(config.modelPath)
+    require(modelFile.isFile) { "LiteRT-LM model does not exist: ${config.modelPath}" }
+
+    val engine = Engine(
+        EngineConfig(
+            modelPath = modelFile.absolutePath,
+            backend = Backend.CPU(threadCount = config.threadCount),
+            cacheDir = config.cacheDir,
+        ),
+    )
 
     return try {
         withContext(Dispatchers.IO) {
-            val modelFile = File(config.modelPath)
-            require(modelFile.isFile) { "LiteRT-LM model does not exist: ${config.modelPath}" }
-
-            Engine(
-                EngineConfig(
-                    modelPath = modelFile.absolutePath,
-                    backend = Backend.CPU(threadCount = config.threadCount),
-                    cacheDir = config.cacheDir,
-                ),
-            ).also { engine ->
-                createdEngine = engine
-                engine.initialize()
-            }
+            engine.initialize()
         }
+        engine
     } catch (error: CancellationException) {
-        closeCancelledInitialization(createdEngine, error)
+        closeCancelledInitialization(engine, error)
         throw error
     }
 }
 
 private suspend fun closeCancelledInitialization(
-    engine: Engine?,
+    engine: Engine,
     cancellation: CancellationException,
 ) {
-    if (engine?.isInitialized() != true) return
+    if (!engine.isInitialized()) return
 
     withContext(Dispatchers.IO + NonCancellable) {
         try {
@@ -73,7 +71,7 @@ private suspend fun closeCancelledInitialization(
             cancellation.addSuppressed(error)
         } catch (error: IllegalStateException) {
             cancellation.addSuppressed(error)
-        } catch (error: LinkageError) {
+        } catch (error: UnsatisfiedLinkError) {
             cancellation.addSuppressed(error)
         }
     }
@@ -119,7 +117,7 @@ class LiteRtLmCompletionClient(
             CompletionOutcome.Failure("LiteRT-LM inference failed.", error)
         } catch (error: IllegalStateException) {
             CompletionOutcome.Failure("LiteRT-LM engine is unavailable.", error)
-        } catch (error: LinkageError) {
+        } catch (error: UnsatisfiedLinkError) {
             CompletionOutcome.Failure("LiteRT-LM native runtime is unavailable.", error)
         }
     }
