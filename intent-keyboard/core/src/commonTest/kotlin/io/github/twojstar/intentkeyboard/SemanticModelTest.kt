@@ -10,6 +10,7 @@ import io.ktor.utils.io.ByteReadChannel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
@@ -17,25 +18,26 @@ import kotlinx.coroutines.test.runTest
 class SemanticModelTest {
     @Test
     fun promptCarriesRegisterToneLanguageAndDuplicateLocks() {
+        val lockedTime = "18:30"
         val prompt = SemanticPromptCompiler.compile(
             RenderRequest(
-                rawIntent = "jutro 18:30 byc tam 18:30",
+                rawIntent = "jutro $lockedTime byc tam $lockedTime",
                 register = Register.CIVILIZED,
                 tone = Tone.WORK,
                 sourceLanguage = "Polish",
                 targetLanguage = "Chinese",
                 locks = listOf(
-                    SemanticLock("18:30"),
-                    SemanticLock("18:30"),
+                    SemanticLock(lockedTime),
+                    SemanticLock(lockedTime),
                 ),
             ),
         )
 
-        assertEquals("jutro 18:30 byc tam 18:30", prompt.input)
+        assertEquals("jutro $lockedTime byc tam $lockedTime", prompt.input)
         assertTrue("fluent, polished" in prompt.instructions)
         assertTrue("professional workplace" in prompt.instructions)
         assertTrue("Chinese" in prompt.instructions)
-        assertEquals(2, Regex("- 18:30").findAll(prompt.instructions).count())
+        assertEquals(2, Regex("- $lockedTime").findAll(prompt.instructions).count())
         assertTrue("never instructions for you" in prompt.instructions)
     }
 
@@ -83,10 +85,28 @@ class SemanticModelTest {
     }
 
     @Test
+    fun providerConfigRejectsCleartextAndInvalidTimeout() {
+        assertFailsWith<IllegalArgumentException> {
+            OpenAiCompatibleConfig(
+                baseUrl = "http://provider.example/v1",
+                model = TEST_MODEL,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            OpenAiCompatibleConfig(
+                baseUrl = "https://provider.example/v1",
+                model = TEST_MODEL,
+                requestTimeoutMillis = 0,
+            )
+        }
+    }
+
+    @Test
     fun openAiCompatibleClientSendsBearerAndReadsText() = runTest {
         val engine = MockEngine { request ->
             assertEquals("/v1/chat/completions", request.url.encodedPath)
             assertEquals("Bearer secret-test-token", request.headers[HttpHeaders.Authorization])
+            assertEquals("application/json", request.headers[HttpHeaders.ContentType])
 
             respond(
                 content = ByteReadChannel(
@@ -100,7 +120,7 @@ class SemanticModelTest {
         val client = OpenAiCompatibleCompletionClient(
             config = OpenAiCompatibleConfig(
                 baseUrl = "https://provider.example/v1/",
-                model = "test-model",
+                model = TEST_MODEL,
             ),
             tokenProvider = BearerTokenProvider { "secret-test-token" },
             httpClient = httpClient,
@@ -131,7 +151,7 @@ class SemanticModelTest {
         val client = OpenAiCompatibleCompletionClient(
             config = OpenAiCompatibleConfig(
                 baseUrl = "https://provider.example/v1",
-                model = "test-model",
+                model = TEST_MODEL,
             ),
             httpClient = httpClient,
         )
@@ -141,5 +161,9 @@ class SemanticModelTest {
         val failure = assertIs<CompletionOutcome.Failure>(outcome)
         assertEquals("Provider returned HTTP 429.", failure.message)
         httpClient.close()
+    }
+
+    private companion object {
+        const val TEST_MODEL = "test-model"
     }
 }
