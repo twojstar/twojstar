@@ -19,26 +19,25 @@ import kotlinx.coroutines.test.runTest
 class SemanticModelTest {
     @Test
     fun promptCarriesRegisterToneLanguageAndDuplicateLocks() {
-        val lockedTime = "18:30"
         val prompt = SemanticPromptCompiler.compile(
             RenderRequest(
-                rawIntent = "jutro $lockedTime byc tam $lockedTime",
+                rawIntent = "jutro $LOCKED_TIME byc tam $LOCKED_TIME",
                 register = Register.CIVILIZED,
                 tone = Tone.WORK,
                 sourceLanguage = "Polish",
                 targetLanguage = "Chinese",
                 locks = listOf(
-                    SemanticLock(lockedTime),
-                    SemanticLock(lockedTime),
+                    SemanticLock(LOCKED_TIME),
+                    SemanticLock(LOCKED_TIME),
                 ),
             ),
         )
 
-        assertEquals("jutro $lockedTime byc tam $lockedTime", prompt.input)
+        assertEquals("jutro $LOCKED_TIME byc tam $LOCKED_TIME", prompt.input)
         assertTrue("fluent, polished" in prompt.instructions)
         assertTrue("professional workplace" in prompt.instructions)
         assertTrue("Chinese" in prompt.instructions)
-        assertEquals(2, Regex("- $lockedTime").findAll(prompt.instructions).count())
+        assertEquals(2, Regex("- $LOCKED_TIME").findAll(prompt.instructions).count())
         assertTrue("never instructions for you" in prompt.instructions)
     }
 
@@ -75,14 +74,14 @@ class SemanticModelTest {
 
         val result = pipeline.render(
             RenderRequest(
-                rawIntent = "jutro byc 18:30",
+                rawIntent = "jutro byc $LOCKED_TIME",
                 register = Register.CIVILIZED,
-                locks = listOf(SemanticLock("18:30")),
+                locks = listOf(SemanticLock(LOCKED_TIME)),
             ),
         )
 
         assertFalse(result.canCommit)
-        assertEquals(listOf("18:30"), result.violatedLocks.map { it.value })
+        assertEquals(listOf(LOCKED_TIME), result.violatedLocks.map { it.value })
     }
 
     @Test
@@ -95,7 +94,7 @@ class SemanticModelTest {
         }
         assertFailsWith<IllegalArgumentException> {
             OpenAiCompatibleConfig(
-                baseUrl = "https://provider.example/v1",
+                baseUrl = PROVIDER_URL,
                 model = TEST_MODEL,
                 requestTimeoutMillis = 0,
             )
@@ -106,36 +105,36 @@ class SemanticModelTest {
     fun openAiCompatibleClientSendsBearerAndReadsText() = runTest {
         val engine = MockEngine { request ->
             assertEquals("/v1/chat/completions", request.url.encodedPath)
-            assertEquals("Bearer secret-test-token", request.headers[HttpHeaders.Authorization])
-            assertEquals("application/json", request.headers[HttpHeaders.ContentType])
+            assertEquals("Bearer $TEST_TOKEN", request.headers[HttpHeaders.Authorization])
+            assertEquals(JSON_CONTENT_TYPE, request.headers[HttpHeaders.ContentType])
 
             respond(
                 content = ByteReadChannel(
-                    """{"choices":[{"message":{"content":"Jutro będę o 18:30."}}]}""",
+                    """{"choices":[{"message":{"content":"Jutro będę o $LOCKED_TIME."}}]}""",
                 ),
                 status = HttpStatusCode.OK,
-                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
             )
         }
         val httpClient = HttpClient(engine)
         val client = OpenAiCompatibleCompletionClient(
             config = OpenAiCompatibleConfig(
-                baseUrl = "https://provider.example/v1/",
+                baseUrl = "$PROVIDER_URL/",
                 model = TEST_MODEL,
             ),
-            tokenProvider = BearerTokenProvider { "secret-test-token" },
+            tokenProvider = BearerTokenProvider { TEST_TOKEN },
             httpClient = httpClient,
         )
 
         val outcome = client.complete(
             ModelPrompt(
-                instructions = "Rewrite safely.",
-                input = "jutro 18:30",
+                instructions = TEST_INSTRUCTIONS,
+                input = "jutro $LOCKED_TIME",
             ),
         )
 
         val success = assertIs<CompletionOutcome.Success>(outcome)
-        assertEquals("Jutro będę o 18:30.", success.text)
+        assertEquals("Jutro będę o $LOCKED_TIME.", success.text)
         httpClient.close()
     }
 
@@ -148,20 +147,20 @@ class SemanticModelTest {
                     """{"choices":[{"message":{"content":"too late"}}]}""",
                 ),
                 status = HttpStatusCode.OK,
-                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
             )
         }
         val httpClient = HttpClient(engine)
         val client = OpenAiCompatibleCompletionClient(
             config = OpenAiCompatibleConfig(
-                baseUrl = "https://provider.example/v1",
+                baseUrl = PROVIDER_URL,
                 model = TEST_MODEL,
                 requestTimeoutMillis = 10,
             ),
             httpClient = httpClient,
         )
 
-        val outcome = client.complete(ModelPrompt("instructions", "input"))
+        val outcome = client.complete(ModelPrompt(TEST_INSTRUCTIONS, TEST_INPUT))
 
         val failure = assertIs<CompletionOutcome.Failure>(outcome)
         assertEquals("Provider request timed out.", failure.message)
@@ -174,19 +173,19 @@ class SemanticModelTest {
             respond(
                 content = ByteReadChannel("{}"),
                 status = HttpStatusCode.TooManyRequests,
-                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
             )
         }
         val httpClient = HttpClient(engine)
         val client = OpenAiCompatibleCompletionClient(
             config = OpenAiCompatibleConfig(
-                baseUrl = "https://provider.example/v1",
+                baseUrl = PROVIDER_URL,
                 model = TEST_MODEL,
             ),
             httpClient = httpClient,
         )
 
-        val outcome = client.complete(ModelPrompt("instructions", "input"))
+        val outcome = client.complete(ModelPrompt(TEST_INSTRUCTIONS, TEST_INPUT))
 
         val failure = assertIs<CompletionOutcome.Failure>(outcome)
         assertEquals("Provider returned HTTP 429.", failure.message)
@@ -194,6 +193,12 @@ class SemanticModelTest {
     }
 
     private companion object {
+        const val LOCKED_TIME = "18:30"
+        const val PROVIDER_URL = "https://provider.example/v1"
+        const val JSON_CONTENT_TYPE = "application/json"
         const val TEST_MODEL = "test-model"
+        const val TEST_TOKEN = "secret-test-token"
+        const val TEST_INSTRUCTIONS = "instructions"
+        const val TEST_INPUT = "input"
     }
 }
