@@ -36,7 +36,11 @@ data class RenderRequest(
 data class RenderResult(
     val text: String,
     val warnings: List<String> = emptyList(),
-)
+    val violatedLocks: List<SemanticLock> = emptyList(),
+) {
+    val canCommit: Boolean
+        get() = violatedLocks.isEmpty()
+}
 
 interface SemanticRenderer {
     suspend fun render(request: RenderRequest): RenderResult
@@ -47,17 +51,21 @@ class SemanticPipeline(
 ) {
     suspend fun render(request: RenderRequest): RenderResult {
         val result = renderer.render(request)
-        val missingVerbatimLocks = request.locks
+        val violatedLocks = request.locks
             .asSequence()
             .filter { it.mode == LockMode.VERBATIM }
             .filterNot { result.text.contains(it.value) }
-            .map { "Renderer changed or removed locked value: ${it.value}" }
             .toList()
 
-        return if (missingVerbatimLocks.isEmpty()) {
+        return if (violatedLocks.isEmpty()) {
             result
         } else {
-            result.copy(warnings = result.warnings + missingVerbatimLocks)
+            result.copy(
+                warnings = result.warnings + violatedLocks.map {
+                    "Renderer changed or removed locked value: ${it.value}"
+                },
+                violatedLocks = (result.violatedLocks + violatedLocks).distinct(),
+            )
         }
     }
 }
