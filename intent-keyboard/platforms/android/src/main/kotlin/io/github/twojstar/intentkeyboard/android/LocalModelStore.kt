@@ -63,7 +63,6 @@ class LocalModelStore(context: Context) {
     }
 
     suspend fun clearModel() = withContext(Dispatchers.IO) {
-        val previous = current()
         val committed = preferences.edit()
             .remove(KEY_PATH)
             .remove(KEY_DISPLAY_NAME)
@@ -74,8 +73,23 @@ class LocalModelStore(context: Context) {
         if (!committed) {
             throw LocalModelStoreException("Could not clear the local model selection.")
         }
+    }
 
-        deleteManagedFile(previous?.path)
+    /**
+     * Deletes private model copies that are no longer selected.
+     *
+     * Call this only after the runtime has released any engine that could still reference an older
+     * model file.
+     */
+    suspend fun pruneObsoleteModels() = withContext(Dispatchers.IO) {
+        val selectedPath = current()?.path
+        val directory = modelsDirectory()
+
+        directory.listFiles()
+            ?.asSequence()
+            ?.filter { it.isFile && it.extension.equals("litertlm", ignoreCase = true) }
+            ?.filter { it.absolutePath != selectedPath }
+            ?.forEach { it.delete() }
     }
 
     private suspend fun importModelOnIo(uri: Uri): LocalModelSelection {
@@ -98,7 +112,6 @@ class LocalModelStore(context: Context) {
 
         val target = File(directory, "model-${UUID.randomUUID()}.litertlm")
         val partial = File(directory, "${target.name}.part")
-        val previous = current()
         var committed = false
 
         try {
@@ -125,8 +138,6 @@ class LocalModelStore(context: Context) {
             if (!committed) {
                 throw LocalModelStoreException("Could not save the local model selection.")
             }
-
-            deleteManagedFile(previous?.path)
 
             return LocalModelSelection(
                 path = target.absolutePath,
@@ -183,14 +194,6 @@ class LocalModelStore(context: Context) {
         }?.takeIf { it.isNotBlank() }
 
     private fun modelsDirectory(): File = File(appContext.filesDir, MODELS_DIRECTORY)
-
-    private fun deleteManagedFile(path: String?) {
-        path ?: return
-        val file = File(path)
-        if (file.parentFile?.absoluteFile == modelsDirectory().absoluteFile) {
-            file.delete()
-        }
-    }
 
     private fun nextRevision(): Long = preferences.getLong(KEY_REVISION, 0L) + 1L
 
