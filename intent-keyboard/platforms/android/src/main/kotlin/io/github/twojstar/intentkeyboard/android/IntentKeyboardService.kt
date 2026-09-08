@@ -222,13 +222,24 @@ class IntentKeyboardService : InputMethodService() {
 
     private fun backspace() {
         if (sensitiveField || buffer.isEmpty()) {
-            currentInputConnection?.deleteSurroundingTextInCodePoints(1, 0)
+            deleteHostSelectionOrPreviousCodePoint()
             return
         }
 
         buffer.deleteCharAt(buffer.lastIndex)
         invalidateRenderedPreview()
         refreshViews()
+    }
+
+    private fun deleteHostSelectionOrPreviousCodePoint() {
+        val connection = currentInputConnection ?: return
+        val selected = connection.getSelectedText(0)
+
+        if (selected != null && selected.isNotEmpty()) {
+            connection.commitText("", 1)
+        } else {
+            connection.deleteSurroundingTextInCodePoints(1, 0)
+        }
     }
 
     private fun handleEnter() {
