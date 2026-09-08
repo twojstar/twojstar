@@ -21,9 +21,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 
@@ -55,10 +52,7 @@ class OpenAiCompatibleCompletionClient(
     private val config: OpenAiCompatibleConfig,
     private val tokenProvider: BearerTokenProvider = NoBearerTokenProvider,
     private val httpClient: HttpClient = HttpClient(),
-    private val json: Json = Json {
-        ignoreUnknownKeys = true
-        exceptionsWithDebugInfo = false
-    },
+    private val json: Json = Json,
 ) : SemanticCompletionClient {
     override suspend fun complete(prompt: ModelPrompt): CompletionOutcome {
         return try {
@@ -89,8 +83,8 @@ class OpenAiCompatibleCompletionClient(
             CompletionOutcome.Failure("Provider request timed out.", error)
         } catch (error: IOException) {
             CompletionOutcome.Failure("Provider network request failed.", error)
-        } catch (error: SerializationException) {
-            CompletionOutcome.Failure("Provider returned invalid JSON.", error)
+        } catch (_: SerializationException) {
+            CompletionOutcome.Failure("Provider returned invalid JSON.")
         }
     }
 
@@ -112,15 +106,11 @@ class OpenAiCompatibleCompletionClient(
     }
 
     private fun extractAssistantText(payload: String): String? {
-        val root = json.parseToJsonElement(payload).jsonObject
-        val content = root["choices"]
-            ?.jsonArray
-            ?.firstOrNull()
-            ?.jsonObject
-            ?.get("message")
-            ?.jsonObject
-            ?.get("content")
-            ?: return null
+        val root = json.parseToJsonElement(payload) as? JsonObject ?: return null
+        val choices = root["choices"] as? JsonArray ?: return null
+        val firstChoice = choices.firstOrNull() as? JsonObject ?: return null
+        val message = firstChoice["message"] as? JsonObject ?: return null
+        val content = message["content"] ?: return null
 
         return content.asTextContent()
     }
@@ -128,10 +118,7 @@ class OpenAiCompatibleCompletionClient(
     private fun JsonElement.asTextContent(): String? = when (this) {
         is JsonPrimitive -> contentOrNull
         is JsonArray -> mapNotNull { part ->
-            (part as? JsonObject)
-                ?.get("text")
-                ?.jsonPrimitive
-                ?.contentOrNull
+            ((part as? JsonObject)?.get("text") as? JsonPrimitive)?.contentOrNull
         }.joinToString("").ifBlank { null }
         else -> null
     }
