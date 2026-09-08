@@ -36,28 +36,90 @@ data class RenderRequest(
 data class RenderResult(
     val text: String,
     val warnings: List<String> = emptyList(),
-)
+    val violatedLocks: List<SemanticLock> = emptyList(),
+) {
+    val canCommit: Boolean
+        get() = violatedLocks.isEmpty()
+}
 
+class SemanticRenderException(
+    message: String,
+    cause: Throwable? = null,
+) : Exception(message, cause)
+
+sealed interface RendererOutcome {
+    data class Success(val result: RenderResult) : RendererOutcome
+
+    data class Failure(
+        val message: String,
+        val cause: Throwable? = null,
+    ) : RendererOutcome
+}
+
+/**
+ * Renderer boundary for semantic providers.
+ *
+ * Expected operational failures are returned as [RendererOutcome.Failure].
+ * Unexpected programmer errors may still propagate normally.
+ */
 interface SemanticRenderer {
-    suspend fun render(request: RenderRequest): RenderResult
+    suspend fun render(request: RenderRequest): RendererOutcome
 }
 
 class SemanticPipeline(
     private val renderer: SemanticRenderer,
 ) {
     suspend fun render(request: RenderRequest): RenderResult {
-        val result = renderer.render(request)
-        val missingVerbatimLocks = request.locks
-            .asSequence()
-            .filter { it.mode == LockMode.VERBATIM }
-            .filterNot { result.text.contains(it.value) }
-            .map { "Renderer changed or removed locked value: ${it.value}" }
-            .toList()
+        val result = when (val outcome = renderer.render(request)) {
+            is RendererOutcome.Success -> outcome.result
+            is RendererOutcome.Failure -> throw SemanticRenderException(outcome.message, outcome.cause)
+        }
 
-        return if (missingVerbatimLocks.isEmpty()) {
+        val requiredOccurrences = mutableMapOf<SemanticLock, Int>()
+        val violatedLocks = buildList {
+            request.locks
+                .asSequence()
+                .filter { it.mode == LockMode.VERBATIM }
+                .forEach { lock ->
+                    val requiredCount = (requiredOccurrences[lock] ?: 0) + 1
+                    requiredOccurrences[lock] = requiredCount
+
+                    if (countExactOccurrences(result.text, lock.value) < requiredCount) {
+                        add(lock)
+                    }
+                }
+        }
+
+        return if (violatedLocks.isEmpty()) {
             result
         } else {
-            result.copy(warnings = result.warnings + missingVerbatimLocks)
+            result.copy(
+                warnings = result.warnings + violatedLocks.map {
+                    "Renderer changed or removed locked value: ${it.value}"
+                },
+                violatedLocks = result.violatedLocks + violatedLocks,
+            )
         }
+    }
+
+    private fun countExactOccurrences(text: String, value: String): Int {
+        if (value.isEmpty() || text.length < value.length) return 0
+
+        var count = 0
+        var searchFrom = 0
+
+        while (searchFrom <= text.length - value.length) {
+            val index = text.indexOf(value, startIndex = searchFrom)
+            if (index < 0) break
+
+            val end = index + value.length
+            val leftBoundary = index == 0 || !text[index - 1].isLetterOrDigit()
+            val rightBoundary = end == text.length || !text[end].isLetterOrDigit()
+
+            if (leftBoundary && rightBoundary) count += 1
+            searchFrom = end
+        }
+
+        return count
     }
 }

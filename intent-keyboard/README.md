@@ -24,7 +24,7 @@ Example:
 jutro chyba byc 18 nie wiem jeszcze
 ```
 
-can become:
+can eventually become:
 
 ```text
 Jutro powinienem być około 18:00, ale jeszcze nie mam pewności.
@@ -42,7 +42,7 @@ Jutro powinienem być około 18:00, ale jeszcze nie mam pewności.
 
 ## Multiplatform from day one
 
-The shared engine lives in Kotlin Multiplatform-style `commonMain` code. Platform integrations are deliberately thin:
+The shared engine lives in Kotlin Multiplatform `commonMain` code. Platform integrations are deliberately thin:
 
 - **Android**: system IME using `InputMethodService`.
 - **iOS/iPadOS**: Keyboard Extension using `UIInputViewController`.
@@ -52,11 +52,30 @@ The keyboard UI and operating-system hooks stay platform-specific. Intent parsin
 
 See [`docs/concept.md`](docs/concept.md) for the architecture and MVP boundary.
 
-## Status
+## Current prototype
 
-🧪 Concept / foundation. No distributable keyboard yet.
+The first Android slice is now real rather than a mock app:
 
-The first useful milestone is intentionally small: one shared semantic pipeline plus one Android prototype that can turn rough Polish input into natural Polish while preserving locked facts. iOS should consume the same core rather than reimplementing the transformation logic.
+1. Install the debug APK produced by `Intent keyboard CI`.
+2. Open **Intent Keyboard** and enable it in Android keyboard settings.
+3. Choose it from the system input-method picker.
+4. Type rough text into the keyboard's private intent buffer.
+5. Pick `Raw`, `Natural` or `Civilized`, press **Render**, inspect the preview, then **Commit** it into the host app.
+
+The current `MechanicalRenderer` only normalizes whitespace, sentence casing and punctuation. It deliberately warns instead of pretending to perform semantic rewriting or translation. A model-backed renderer comes next.
+
+Obvious times and money values are automatically protected with verbatim locks. Sensitive/password fields bypass semantic buffering entirely.
+
+## Project layout
+
+```text
+intent-keyboard/
+├── core/                 # shared semantic contracts, locks and renderers
+├── platforms/
+│   └── android/          # installable Android IME prototype
+├── docs/
+└── gradle/
+```
 
 ## License
 
