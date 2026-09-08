@@ -5,12 +5,14 @@ import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.LiteRtLmJniException
 import io.github.twojstar.intentkeyboard.CompletionOutcome
 import io.github.twojstar.intentkeyboard.ModelPrompt
 import io.github.twojstar.intentkeyboard.SemanticCompletionClient
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -33,19 +35,49 @@ data class LiteRtLmCpuConfig(
  * The caller owns the returned [Engine] and must close it after all completions have stopped.
  * Models are intentionally supplied by local file path and are never bundled by this adapter.
  */
-suspend fun createCpuLiteRtLmEngine(config: LiteRtLmCpuConfig): Engine =
-    withContext(Dispatchers.IO) {
-        val modelFile = File(config.modelPath)
-        require(modelFile.isFile) { "LiteRT-LM model does not exist: ${config.modelPath}" }
+suspend fun createCpuLiteRtLmEngine(config: LiteRtLmCpuConfig): Engine {
+    var createdEngine: Engine? = null
 
-        Engine(
-            EngineConfig(
-                modelPath = modelFile.absolutePath,
-                backend = Backend.CPU(threadCount = config.threadCount),
-                cacheDir = config.cacheDir,
-            ),
-        ).also { it.initialize() }
+    return try {
+        withContext(Dispatchers.IO) {
+            val modelFile = File(config.modelPath)
+            require(modelFile.isFile) { "LiteRT-LM model does not exist: ${config.modelPath}" }
+
+            Engine(
+                EngineConfig(
+                    modelPath = modelFile.absolutePath,
+                    backend = Backend.CPU(threadCount = config.threadCount),
+                    cacheDir = config.cacheDir,
+                ),
+            ).also { engine ->
+                createdEngine = engine
+                engine.initialize()
+            }
+        }
+    } catch (error: CancellationException) {
+        closeCancelledInitialization(createdEngine, error)
+        throw error
     }
+}
+
+private suspend fun closeCancelledInitialization(
+    engine: Engine?,
+    cancellation: CancellationException,
+) {
+    if (engine?.isInitialized() != true) return
+
+    withContext(Dispatchers.IO + NonCancellable) {
+        try {
+            engine.close()
+        } catch (error: LiteRtLmJniException) {
+            cancellation.addSuppressed(error)
+        } catch (error: IllegalStateException) {
+            cancellation.addSuppressed(error)
+        } catch (error: LinkageError) {
+            cancellation.addSuppressed(error)
+        }
+    }
+}
 
 /**
  * Android LiteRT-LM adapter for the provider-neutral semantic completion contract.
@@ -83,10 +115,10 @@ class LiteRtLmCompletionClient(
             }
         } catch (error: CancellationException) {
             throw error
+        } catch (error: LiteRtLmJniException) {
+            CompletionOutcome.Failure("LiteRT-LM inference failed.", error)
         } catch (error: IllegalStateException) {
             CompletionOutcome.Failure("LiteRT-LM engine is unavailable.", error)
-        } catch (error: RuntimeException) {
-            CompletionOutcome.Failure("LiteRT-LM inference failed.", error)
         } catch (error: LinkageError) {
             CompletionOutcome.Failure("LiteRT-LM native runtime is unavailable.", error)
         }
