@@ -114,15 +114,17 @@ class SemanticModelTest {
 
     @Test
     fun openAiCompatibleClientSendsBearerAndReadsText() = runBlocking {
+        var capturedPath: String? = null
+        var capturedAuthorization: String? = null
+        var capturedContentType: String? = null
         val engine = MockEngine { request ->
-            assertEquals("/v1/chat/completions", request.url.encodedPath)
-            assertEquals("Bearer $TEST_TOKEN", request.headers[HttpHeaders.Authorization])
-            assertTrue(request.headers[HttpHeaders.ContentType]?.startsWith(JSON_CONTENT_TYPE) == true)
+            capturedPath = request.url.encodedPath
+            capturedAuthorization = request.headers[HttpHeaders.Authorization]
+            capturedContentType = request.headers[HttpHeaders.ContentType]
 
             respond(
                 content = ByteReadChannel(
-                    """{"choices":[{"message":{"content":"Jutro będę o $LOCKED_TIME."}}]}"""
-                        .replace("\\\"", "\""),
+                    "{\"choices\":[{\"message\":{\"content\":\"Jutro będę o $LOCKED_TIME.\"}}]}",
                 ),
                 status = HttpStatusCode.OK,
                 headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
@@ -140,6 +142,9 @@ class SemanticModelTest {
 
         val success = assertIs<CompletionOutcome.Success>(outcome)
         assertEquals("Jutro będę o $LOCKED_TIME.", success.text)
+        assertEquals("/v1/chat/completions", capturedPath)
+        assertEquals("Bearer $TEST_TOKEN", capturedAuthorization)
+        assertTrue(capturedContentType?.startsWith(JSON_CONTENT_TYPE) == true)
         httpClient.close()
     }
 
@@ -149,8 +154,7 @@ class SemanticModelTest {
             delay(100)
             respond(
                 content = ByteReadChannel(
-                    """{"choices":[{"message":{"content":"too late"}}]}"""
-                        .replace("\\\"", "\""),
+                    "{\"choices\":[{\"message\":{\"content\":\"too late\"}}]}",
                 ),
                 status = HttpStatusCode.OK,
                 headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
@@ -173,8 +177,7 @@ class SemanticModelTest {
             delay(100)
             respond(
                 content = ByteReadChannel(
-                    """{"choices":[{"message":{"content":"too late"}}]}"""
-                        .replace("\\\"", "\""),
+                    "{\"choices\":[{\"message\":{\"content\":\"too late\"}}]}",
                 ),
                 status = HttpStatusCode.OK,
                 headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
