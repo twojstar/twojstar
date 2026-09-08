@@ -2,6 +2,7 @@ package io.github.twojstar.intentkeyboard
 
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpRequestTimeoutException
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.accept
 import io.ktor.client.request.contentType
 import io.ktor.client.request.header
@@ -27,10 +28,14 @@ import kotlinx.serialization.json.putJsonArray
 data class OpenAiCompatibleConfig(
     val baseUrl: String,
     val model: String,
+    val requestTimeoutMillis: Long = 15_000,
 ) {
     init {
-        require(baseUrl.isNotBlank()) { "baseUrl must not be blank" }
+        require(baseUrl.startsWith("https://", ignoreCase = true)) {
+            "baseUrl must use HTTPS"
+        }
         require(model.isNotBlank()) { "model must not be blank" }
+        require(requestTimeoutMillis > 0) { "requestTimeoutMillis must be positive" }
     }
 }
 
@@ -46,17 +51,20 @@ object NoBearerTokenProvider : BearerTokenProvider {
  * Minimal Chat Completions transport for OpenAI-compatible providers.
  *
  * Credentials are supplied at request time and are never persisted by this class.
- * The caller owns [httpClient] and its lifecycle.
+ * The caller owns [httpClient], should reuse it across requests, and must close it.
  */
 class OpenAiCompatibleCompletionClient(
     private val config: OpenAiCompatibleConfig,
+    private val httpClient: HttpClient,
     private val tokenProvider: BearerTokenProvider = NoBearerTokenProvider,
-    private val httpClient: HttpClient = HttpClient(),
     private val json: Json = Json,
 ) : SemanticCompletionClient {
     override suspend fun complete(prompt: ModelPrompt): CompletionOutcome {
         return try {
             val response = httpClient.post(endpoint()) {
+                timeout {
+                    requestTimeoutMillis = config.requestTimeoutMillis
+                }
                 contentType(ContentType.Application.Json)
                 accept(ContentType.Application.Json)
                 tokenProvider.token()
@@ -77,14 +85,14 @@ class OpenAiCompatibleCompletionClient(
             } else {
                 CompletionOutcome.Success(text)
             }
-        } catch (error: CancellationException) {
-            throw error
         } catch (error: HttpRequestTimeoutException) {
             CompletionOutcome.Failure("Provider request timed out.", error)
         } catch (error: IOException) {
             CompletionOutcome.Failure("Provider network request failed.", error)
         } catch (_: SerializationException) {
             CompletionOutcome.Failure("Provider returned invalid JSON.")
+        } catch (error: CancellationException) {
+            throw error
         }
     }
 
