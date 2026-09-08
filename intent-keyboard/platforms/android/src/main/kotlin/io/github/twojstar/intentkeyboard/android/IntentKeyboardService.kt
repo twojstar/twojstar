@@ -232,6 +232,18 @@ class IntentKeyboardService : InputMethodService() {
     }
 
     private fun handleEnter() {
+        val action = editorAction(activeEditorInfo)
+        if (action != null) {
+            if (!commitBuffer()) return
+
+            val connection = currentInputConnection ?: return
+            if (connection.performEditorAction(action)) return
+
+            connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+            connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+            return
+        }
+
         if (supportsMultiline(activeEditorInfo)) {
             append("\n")
             return
@@ -240,9 +252,6 @@ class IntentKeyboardService : InputMethodService() {
         if (!commitBuffer()) return
 
         val connection = currentInputConnection ?: return
-        val action = editorAction(activeEditorInfo)
-        if (action != null && connection.performEditorAction(action)) return
-
         connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
         connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
     }
@@ -389,18 +398,14 @@ class IntentKeyboardService : InputMethodService() {
         }
     }
 
-    private fun enterLabel(info: EditorInfo?): String {
-        if (supportsMultiline(info)) return "↵"
-
-        return when (editorAction(info)) {
-            EditorInfo.IME_ACTION_GO -> "Go"
-            EditorInfo.IME_ACTION_SEARCH -> "Search"
-            EditorInfo.IME_ACTION_SEND -> "Send"
-            EditorInfo.IME_ACTION_NEXT -> "Next"
-            EditorInfo.IME_ACTION_DONE -> "Done"
-            EditorInfo.IME_ACTION_PREVIOUS -> "Prev"
-            else -> "↵"
-        }
+    private fun enterLabel(info: EditorInfo?): String = when (editorAction(info)) {
+        EditorInfo.IME_ACTION_GO -> "Go"
+        EditorInfo.IME_ACTION_SEARCH -> "Search"
+        EditorInfo.IME_ACTION_SEND -> "Send"
+        EditorInfo.IME_ACTION_NEXT -> "Next"
+        EditorInfo.IME_ACTION_DONE -> "Done"
+        EditorInfo.IME_ACTION_PREVIOUS -> "Prev"
+        else -> "↵"
     }
 
     private fun isSensitive(info: EditorInfo?): Boolean {
