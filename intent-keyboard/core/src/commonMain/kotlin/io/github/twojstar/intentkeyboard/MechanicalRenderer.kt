@@ -9,19 +9,17 @@ package io.github.twojstar.intentkeyboard
  */
 class MechanicalRenderer : SemanticRenderer {
     override suspend fun render(request: RenderRequest): RenderResult {
-        val normalized = request.rawIntent
-            .trim()
-            .replace(Regex("\\s+"), " ")
-
-        if (normalized.isEmpty()) return RenderResult("")
-
         val text = when (request.register) {
-            Register.RAW -> normalized
+            Register.RAW -> request.rawIntent
             Register.NATURAL,
             Register.CIVILIZED,
-            -> normalized
-                .sentenceCase()
-                .withTerminalPunctuation()
+            -> request.rawIntent
+                .trim()
+                .replace(Regex("\\s+"), " ")
+                .let { normalized ->
+                    if (normalized.isEmpty()) normalized
+                    else normalized.sentenceCase().withTerminalPunctuation()
+                }
         }
 
         val warnings = buildList {
@@ -50,15 +48,19 @@ class MechanicalRenderer : SemanticRenderer {
 /** Conservative automatic locks for obvious values a renderer must not alter. */
 object ConservativeLockDetector {
     private val timePattern = Regex("""\b(?:[01]?\d|2[0-3]):[0-5]\d\b""")
-    private val moneyPattern = Regex(
-        """(?<!\w)\d+(?:[.,]\d+)?\s?(?:zł|PLN|EUR|USD|€|\$)(?!\w)""",
+    private val currency = "(?:zł|PLN|EUR|USD|€|\\$)"
+    private val number = "\\d+(?:[.,]\\d+)?"
+    private val suffixMoneyPattern = Regex(
+        """(?<!\w)[+-]?$number\s?$currency(?!\w)""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val prefixMoneyPattern = Regex(
+        """(?<!\w)[+-]?$currency\s?$number(?!\w)""",
         RegexOption.IGNORE_CASE,
     )
 
     fun detect(text: String): List<SemanticLock> =
-        sequenceOf(timePattern, moneyPattern)
-            .flatMap { pattern -> pattern.findAll(text).map { it.value } }
-            .distinct()
-            .map(::SemanticLock)
+        sequenceOf(timePattern, suffixMoneyPattern, prefixMoneyPattern)
+            .flatMap { pattern -> pattern.findAll(text).map { SemanticLock(it.value) } }
             .toList()
 }
