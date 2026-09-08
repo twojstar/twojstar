@@ -62,15 +62,22 @@ The first Android slice is now real rather than a mock app:
 4. Type rough text into the keyboard's private intent buffer.
 5. Pick `Raw`, `Natural` or `Civilized`, press **Render**, inspect the preview, then **Commit** it into the host app.
 
-The current `MechanicalRenderer` only normalizes whitespace, sentence casing and punctuation. It deliberately warns instead of pretending to perform semantic rewriting or translation. A model-backed renderer comes next.
+`MechanicalRenderer` remains the deterministic local fallback. The shared core now also contains a real model-backed path:
 
-Obvious times and money values are automatically protected with verbatim locks. Sensitive/password fields bypass semantic buffering entirely.
+- `SemanticPromptCompiler` converts a `RenderRequest` into strict model instructions plus untrusted source input.
+- `ModelSemanticRenderer` turns provider output back into the normal semantic pipeline.
+- `OpenAiCompatibleCompletionClient` talks to configurable Chat Completions-compatible endpoints over Ktor.
+- OkHttp, Darwin and CIO engines keep the transport available across Android, iOS and desktop targets.
+
+Remote providers are **not enabled by default yet**. Provider settings and platform credential storage are deliberately deferred to the next slice so no API key is embedded in source code, Gradle properties or the APK.
+
+Regardless of provider, the model does not get the final word: exact time/money locks are validated again after rendering, and an unsafe preview cannot be committed. Sensitive/password fields bypass semantic buffering entirely.
 
 ## Project layout
 
 ```text
 intent-keyboard/
-├── core/                 # shared semantic contracts, locks and renderers
+├── core/                 # shared semantic contracts, locks, prompts and providers
 ├── platforms/
 │   └── android/          # installable Android IME prototype
 ├── docs/
