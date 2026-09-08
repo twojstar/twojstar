@@ -107,6 +107,7 @@ class LocalSemanticRuntime(
 
                 if (selection == null) {
                     installFallback()
+                    store.pruneObsoleteModels()
                     publish(LocalSemanticRuntimeState.Mechanical)
                 } else {
                     load(selection)
@@ -117,6 +118,7 @@ class LocalSemanticRuntime(
 
     private suspend fun load(selection: LocalModelSelection) {
         installFallback()
+        store.pruneObsoleteModels()
         currentCoroutineContext().ensureActive()
         publish(LocalSemanticRuntimeState.Loading(selection.displayName))
 
