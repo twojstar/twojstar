@@ -13,8 +13,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.io.IOException
 
 class SemanticModelTest {
@@ -86,13 +88,21 @@ class SemanticModelTest {
     }
 
     @Test
-    fun providerConfigRejectsCleartextAndInvalidTimeout() {
-        assertFailsWith<IllegalArgumentException> {
-            OpenAiCompatibleConfig(
-                baseUrl = "http://provider.example/v1",
-                model = TEST_MODEL,
-            )
+    fun providerConfigRejectsUnsafeEndpointsAndInvalidTimeout() {
+        listOf(
+            "http://provider.example/v1",
+            "$PROVIDER_URL?token=wrong-place",
+            "$PROVIDER_URL#fragment",
+            "https://user:pass@provider.example/v1",
+        ).forEach { unsafeUrl ->
+            assertFailsWith<IllegalArgumentException> {
+                OpenAiCompatibleConfig(
+                    baseUrl = unsafeUrl,
+                    model = TEST_MODEL,
+                )
+            }
         }
+
         assertFailsWith<IllegalArgumentException> {
             OpenAiCompatibleConfig(
                 baseUrl = PROVIDER_URL,
@@ -151,6 +161,30 @@ class SemanticModelTest {
 
         val failure = assertIs<CompletionOutcome.Failure>(outcome)
         assertEquals("Provider request timed out.", failure.message)
+        assertIs<ProviderRequestTimeoutException>(failure.cause)
+        httpClient.close()
+    }
+
+    @Test
+    fun callerDeadlineIsNotSwallowedByProviderDeadline() = runBlocking {
+        val engine = MockEngine {
+            delay(100)
+            respond(
+                content = ByteReadChannel(
+                    """{"choices":[{"message":{"content":"too late"}}]}""",
+                ),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
+            )
+        }
+        val httpClient = HttpClient(engine)
+        val client = providerClient(httpClient, requestTimeoutMillis = 1_000)
+
+        assertFailsWith<TimeoutCancellationException> {
+            withTimeout(10) {
+                client.complete(ModelPrompt(TEST_INSTRUCTIONS, TEST_INPUT))
+            }
+        }
         httpClient.close()
     }
 
