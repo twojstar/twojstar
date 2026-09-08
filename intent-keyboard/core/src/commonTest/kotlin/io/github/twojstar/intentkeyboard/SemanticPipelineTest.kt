@@ -1,5 +1,8 @@
 package io.github.twojstar.intentkeyboard
 
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.coroutines.startCoroutine
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -26,8 +29,8 @@ class SemanticPipelineTest {
     private fun runTest(block: suspend () -> Unit) {
         var failure: Throwable? = null
         block.startCoroutine(
-            object : kotlin.coroutines.Continuation<Unit> {
-                override val context = kotlin.coroutines.EmptyCoroutineContext
+            object : Continuation<Unit> {
+                override val context = EmptyCoroutineContext
                 override fun resumeWith(result: Result<Unit>) {
                     failure = result.exceptionOrNull()
                 }
