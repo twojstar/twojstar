@@ -44,11 +44,13 @@ class SemanticPipelineTest {
 
     @Test
     fun detectorLocksObviousTimeAndMoneyValues() {
-        val locks = ConservativeLockDetector.detect("jutro 18:30, budzet 120 zł")
+        val locks = ConservativeLockDetector.detect("jutro 18:30, budzet 120 zł, 7€ i 12\$")
             .map { it.value }
 
         assertTrue("18:30" in locks)
         assertTrue("120 zł" in locks)
+        assertTrue("7€" in locks)
+        assertTrue("12\$" in locks)
     }
 
     private fun runTest(block: suspend () -> Unit) {
