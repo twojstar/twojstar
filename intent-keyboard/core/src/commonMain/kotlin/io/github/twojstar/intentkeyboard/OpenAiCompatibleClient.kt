@@ -6,7 +6,6 @@ import io.ktor.client.request.header
 import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
-import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -17,8 +16,10 @@ import io.ktor.http.Url
 import io.ktor.http.appendPathSegments
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import io.ktor.utils.io.readBuffer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.io.IOException
+import kotlinx.io.readString
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -127,16 +128,28 @@ class OpenAiCompatibleCompletionClient(
                     ?.let { header(HttpHeaders.Authorization, "Bearer $it") }
                 setBody(requestBody(prompt).toString())
             }.execute { response ->
-                val body = if (response.status.isSuccess()) {
-                    response.bodyAsText()
-                } else {
-                    response.bodyAsChannel().cancel(null)
-                    ""
+                val bodyChannel = response.bodyAsChannel()
+                if (!response.status.isSuccess()) {
+                    bodyChannel.cancel(null)
+                    return@execute TransportOutcome.Success(
+                        status = response.status,
+                        body = "",
+                    )
+                }
+
+                val boundedBody = bodyChannel.readBuffer(MAX_SUCCESS_BODY_BYTES + 1)
+                if (boundedBody.size > MAX_SUCCESS_BODY_BYTES) {
+                    bodyChannel.cancel(null)
+                    return@execute TransportOutcome.Failure(
+                        CompletionOutcome.Failure(
+                            "Provider response exceeded $MAX_SUCCESS_BODY_BYTES bytes.",
+                        ),
+                    )
                 }
 
                 TransportOutcome.Success(
                     status = response.status,
-                    body = body,
+                    body = boundedBody.readString(),
                 )
             }
         } ?: TransportOutcome.Failure(
@@ -145,7 +158,9 @@ class OpenAiCompatibleCompletionClient(
                 cause = ProviderRequestTimeoutException(config.requestTimeoutMillis),
             ),
         )
-    } catch (error: IOException) {
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
         TransportOutcome.Failure(
             CompletionOutcome.Failure("Provider network request failed.", error),
         )
@@ -234,5 +249,6 @@ class OpenAiCompatibleCompletionClient(
 
     private companion object {
         const val NORMAL_FINISH_REASON = "stop"
+        const val MAX_SUCCESS_BODY_BYTES = 64 * 1024
     }
 }
