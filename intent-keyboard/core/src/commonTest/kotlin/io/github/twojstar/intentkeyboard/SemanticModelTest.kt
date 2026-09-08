@@ -133,7 +133,11 @@ class SemanticModelTest {
             )
         }
         val httpClient = HttpClient(engine)
-        val client = providerClient(httpClient, tokenProvider = BearerTokenProvider { TEST_TOKEN })
+        val client = providerClient(
+            httpClient,
+            baseUrl = "$PROVIDER_URL/",
+            tokenProvider = BearerTokenProvider { TEST_TOKEN },
+        )
 
         val outcome = client.complete(
             ModelPrompt(
@@ -253,11 +257,38 @@ class SemanticModelTest {
     }
 
     @Test
+    fun openAiCompatibleClientRequiresConfirmedStop() = runBlocking {
+        val payloads = listOf(
+            "{\"choices\":[{\"message\":{\"content\":\"partial\"}}]}",
+            "{\"choices\":[{\"finish_reason\":null,\"message\":{\"content\":\"partial\"}}]}",
+        )
+
+        payloads.forEach { payload ->
+            val httpClient = HttpClient(
+                MockEngine {
+                    respond(
+                        content = ByteReadChannel(payload),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
+                    )
+                },
+            )
+            val client = providerClient(httpClient)
+
+            val outcome = client.complete(ModelPrompt(TEST_INSTRUCTIONS, TEST_INPUT))
+
+            val failure = assertIs<CompletionOutcome.Failure>(outcome)
+            assertEquals("Provider returned invalid completion content.", failure.message)
+            httpClient.close()
+        }
+    }
+
+    @Test
     fun openAiCompatibleClientRejectsMalformedCompletionContent() = runBlocking {
         val payloads = listOf(
-            "{\"choices\":[{\"message\":{\"content\":123}}]}",
-            "{\"choices\":[{\"message\":{\"content\":[{\"text\":false}]}}]}",
-            "{\"choices\":[{\"message\":{\"content\":[{\"text\":\"Hello\"},{\"text\":false}]}}]}",
+            "{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":123}}]}",
+            "{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":[{\"text\":false}]}}]}",
+            "{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":[{\"text\":\"Hello\"},{\"text\":false}]}}]}",
         )
 
         payloads.forEach { payload ->
@@ -323,11 +354,12 @@ class SemanticModelTest {
 
     private fun providerClient(
         httpClient: HttpClient,
+        baseUrl: String = PROVIDER_URL,
         requestTimeoutMillis: Long = 15_000,
         tokenProvider: BearerTokenProvider = NoBearerTokenProvider,
     ) = OpenAiCompatibleCompletionClient(
         config = OpenAiCompatibleConfig(
-            baseUrl = PROVIDER_URL,
+            baseUrl = baseUrl,
             model = TEST_MODEL,
             requestTimeoutMillis = requestTimeoutMillis,
         ),
