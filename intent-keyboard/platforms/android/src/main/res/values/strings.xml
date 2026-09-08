@@ -3,7 +3,17 @@
     <string name="app_name">Intent Keyboard</string>
     <string name="ime_name">Intent Keyboard</string>
     <string name="setup_title">Intent Keyboard prototype</string>
-    <string name="setup_body">Enable the keyboard in Android settings, then choose it from the system input-method picker.</string>
+    <string name="setup_body">Optionally import a local LiteRT-LM model, then enable the keyboard in Android settings and choose it from the system input-method picker.</string>
+    <string name="local_model_title">Local model</string>
+    <string name="local_model_none">No local model selected. The mechanical fallback stays active.</string>
+    <string name="local_model_selected">Selected: %1$s (%2$s)\nStored privately on this device.</string>
+    <string name="local_model_size_unknown">unknown size</string>
+    <string name="import_local_model">Import .litertlm model</string>
+    <string name="clear_local_model">Remove local model</string>
+    <string name="importing_local_model">Importing model into private storage…</string>
+    <string name="local_model_import_failed">Local model import failed.</string>
+    <string name="local_model_clear_failed">Could not remove the local model.</string>
+    <string name="keyboard_setup_title">Keyboard setup</string>
     <string name="open_keyboard_settings">Open keyboard settings</string>
     <string name="choose_keyboard">Choose keyboard</string>
 </resources>
