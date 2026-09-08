@@ -47,15 +47,34 @@ class SemanticRenderException(
     cause: Throwable? = null,
 ) : Exception(message, cause)
 
+sealed interface RendererOutcome {
+    data class Success(val result: RenderResult) : RendererOutcome
+
+    data class Failure(
+        val message: String,
+        val cause: Throwable? = null,
+    ) : RendererOutcome
+}
+
+/**
+ * Renderer boundary for semantic providers.
+ *
+ * Expected operational failures are returned as [RendererOutcome.Failure].
+ * Unexpected programmer errors may still propagate normally.
+ */
 interface SemanticRenderer {
-    suspend fun render(request: RenderRequest): RenderResult
+    suspend fun render(request: RenderRequest): RendererOutcome
 }
 
 class SemanticPipeline(
     private val renderer: SemanticRenderer,
 ) {
     suspend fun render(request: RenderRequest): RenderResult {
-        val result = renderer.render(request)
+        val result = when (val outcome = renderer.render(request)) {
+            is RendererOutcome.Success -> outcome.result
+            is RendererOutcome.Failure -> throw SemanticRenderException(outcome.message, outcome.cause)
+        }
+
         val requiredOccurrences = mutableMapOf<SemanticLock, Int>()
         val violatedLocks = buildList {
             request.locks
