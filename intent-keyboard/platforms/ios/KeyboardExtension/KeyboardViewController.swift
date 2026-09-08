@@ -40,12 +40,12 @@ final class KeyboardViewController: UIInputViewController {
 
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
-        refreshHostContext(reason: "text")
+        refreshHostContext()
     }
 
     override func selectionDidChange(_ textInput: UITextInput?) {
         super.selectionDidChange(textInput)
-        refreshHostContext(reason: "selection")
+        refreshHostContext()
     }
 
     private func configureView() {
@@ -70,7 +70,7 @@ final class KeyboardViewController: UIInputViewController {
         statusLabel.minimumScaleFactor = 0.75
         statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
 
-        registerButton.configuration = compactButtonConfiguration(style: .bordered)
+        registerButton.configuration = compactButtonConfiguration(filled: false)
         registerButton.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         registerButton.addAction(UIAction { [weak self] _ in
             self?.cycleRegister()
@@ -128,6 +128,7 @@ final class KeyboardViewController: UIInputViewController {
     private func makeBottomRow() -> UIStackView {
         let globe = makeKeyButton("🌐") {}
         globe.accessibilityLabel = "Next keyboard"
+        globe.isHidden = !needsInputModeSwitchKey
         globe.addTarget(
             self,
             action: #selector(handleInputModeList(from:with:)),
@@ -139,7 +140,7 @@ final class KeyboardViewController: UIInputViewController {
         let period = makeKeyButton(".") { [weak self] in self?.append(".") }
         let backspace = makeKeyButton("⌫") { [weak self] in self?.backspace() }
 
-        enterButton.configuration = compactButtonConfiguration(style: .filled)
+        enterButton.configuration = compactButtonConfiguration(filled: true)
         enterButton.configuration?.baseBackgroundColor = .secondarySystemBackground
         enterButton.configuration?.baseForegroundColor = .label
         enterButton.titleLabel?.adjustsFontSizeToFitWidth = true
@@ -163,7 +164,7 @@ final class KeyboardViewController: UIInputViewController {
 
     private func makeControlButton(_ title: String, action: @escaping () -> Void) -> UIButton {
         let button = UIButton(type: .system)
-        button.configuration = compactButtonConfiguration(style: .bordered)
+        button.configuration = compactButtonConfiguration(filled: false)
         button.setTitle(title, for: .normal)
         button.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         button.addAction(UIAction { _ in action() }, for: .touchUpInside)
@@ -172,7 +173,7 @@ final class KeyboardViewController: UIInputViewController {
 
     private func makeKeyButton(_ title: String, action: @escaping () -> Void) -> UIButton {
         let button = UIButton(type: .system)
-        button.configuration = compactButtonConfiguration(style: .filled)
+        button.configuration = compactButtonConfiguration(filled: true)
         button.configuration?.baseBackgroundColor = .secondarySystemBackground
         button.configuration?.baseForegroundColor = .label
         button.setTitle(title, for: .normal)
@@ -183,16 +184,8 @@ final class KeyboardViewController: UIInputViewController {
         return button
     }
 
-    private func compactButtonConfiguration(style: UIButton.Configuration.Style) -> UIButton.Configuration {
-        var configuration: UIButton.Configuration
-        switch style {
-        case .bordered:
-            configuration = .bordered()
-        case .filled:
-            configuration = .filled()
-        default:
-            configuration = .plain()
-        }
+    private func compactButtonConfiguration(filled: Bool) -> UIButton.Configuration {
+        var configuration = filled ? UIButton.Configuration.filled() : UIButton.Configuration.bordered()
         configuration.contentInsets = NSDirectionalEdgeInsets(top: 2, leading: 4, bottom: 2, trailing: 4)
         return configuration
     }
@@ -288,14 +281,16 @@ final class KeyboardViewController: UIInputViewController {
         }
     }
 
-    private func refreshHostContext(reason: String) {
+    private func refreshHostContext() {
         let documentIdentifier = textDocumentProxy.documentIdentifier
         let documentChanged = activeDocumentIdentifier != nil && activeDocumentIdentifier != documentIdentifier
         let hasDraft = !rawIntent.isEmpty || !renderedText.isEmpty
 
-        if hasDraft && (documentChanged || reason == "text" || reason == "selection") {
+        if hasDraft {
             clearBuffer()
-            statusLabel.text = "Draft cleared after host text context changed."
+            statusLabel.text = documentChanged
+                ? "Draft cleared after switching text context."
+                : "Draft cleared after host text context changed."
         }
 
         activeDocumentIdentifier = documentIdentifier
