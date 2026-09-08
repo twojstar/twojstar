@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
+
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     alias(libs.plugins.android.kotlin.multiplatform.library)
@@ -12,13 +14,18 @@ kotlin {
 
     jvm("desktop")
 
+    val xcframeworkName = "IntentKeyboardCore"
+    val xcframework = XCFramework(xcframeworkName)
+
     listOf(
         iosArm64(),
         iosSimulatorArm64(),
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
-            baseName = "IntentKeyboardCore"
+            baseName = xcframeworkName
+            binaryOption("bundleId", "io.github.twojstar.intentkeyboard.core")
             isStatic = true
+            xcframework.add(this)
         }
     }
 
