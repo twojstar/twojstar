@@ -32,10 +32,17 @@ kotlin {
             }
         }
 
-        named("iosMain") {
+        val iosMain = maybeCreate("iosMain").apply {
+            dependsOn(commonMain.get())
             dependencies {
                 implementation(libs.ktor.client.darwin)
             }
+        }
+        named("iosArm64Main") {
+            dependsOn(iosMain)
+        }
+        named("iosSimulatorArm64Main") {
+            dependsOn(iosMain)
         }
 
         commonTest.dependencies {
