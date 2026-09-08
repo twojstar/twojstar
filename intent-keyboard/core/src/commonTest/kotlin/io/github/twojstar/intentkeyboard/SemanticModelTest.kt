@@ -7,6 +7,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import io.ktor.util.network.UnresolvedAddressException
 import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.ByteReadChannel
 import kotlin.test.Test
@@ -240,15 +241,15 @@ class SemanticModelTest {
     }
 
     @Test
-    fun openAiCompatibleClientMapsNonIoTransportFailure() = runBlocking {
-        val httpClient = HttpClient(MockEngine { throw IllegalStateException("dns-like failure") })
+    fun openAiCompatibleClientMapsUnresolvedAddressFailure() = runBlocking {
+        val httpClient = HttpClient(MockEngine { throw UnresolvedAddressException() })
         val client = providerClient(httpClient)
 
         val outcome = client.complete(ModelPrompt(TEST_INSTRUCTIONS, TEST_INPUT))
 
         val failure = assertIs<CompletionOutcome.Failure>(outcome)
         assertEquals("Provider network request failed.", failure.message)
-        assertIs<IllegalStateException>(failure.cause)
+        assertIs<UnresolvedAddressException>(failure.cause)
         httpClient.close()
     }
 
