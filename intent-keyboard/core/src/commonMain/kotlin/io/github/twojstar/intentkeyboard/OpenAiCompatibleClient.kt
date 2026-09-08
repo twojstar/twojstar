@@ -23,7 +23,6 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -152,7 +151,7 @@ class OpenAiCompatibleCompletionClient(
         )
     }
 
-    private fun endpoint(): String = URLBuilder(config.baseUrl)
+    private fun endpoint(): String = URLBuilder(config.baseUrl.trimEnd('/'))
         .appendPathSegments("chat", "completions")
         .buildString()
 
@@ -178,15 +177,12 @@ class OpenAiCompatibleCompletionClient(
         val firstChoice = choices.firstOrNull() as? JsonObject
             ?: return AssistantTextOutcome.Missing
 
-        val finishReason = when (val rawFinishReason = firstChoice["finish_reason"]) {
-            null, JsonNull -> null
-            is JsonPrimitive -> rawFinishReason.stringContentOrNull()
-                ?: return AssistantTextOutcome.InvalidContent
-            else -> return AssistantTextOutcome.InvalidContent
+        val finishReason = (firstChoice["finish_reason"] as? JsonPrimitive)
+            ?.stringContentOrNull()
+            ?: return AssistantTextOutcome.InvalidContent
+        if (finishReason != NORMAL_FINISH_REASON) {
+            return AssistantTextOutcome.Incomplete(finishReason)
         }
-        finishReason
-            ?.takeIf { it in NON_NORMAL_FINISH_REASONS }
-            ?.let { return AssistantTextOutcome.Incomplete(it) }
 
         val message = firstChoice["message"] as? JsonObject
             ?: return AssistantTextOutcome.Missing
@@ -237,11 +233,6 @@ class OpenAiCompatibleCompletionClient(
     }
 
     private companion object {
-        val NON_NORMAL_FINISH_REASONS = setOf(
-            "length",
-            "content_filter",
-            "tool_calls",
-            "function_call",
-        )
+        const val NORMAL_FINISH_REASON = "stop"
     }
 }
