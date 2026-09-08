@@ -118,7 +118,7 @@ class OpenAiCompatibleCompletionClient(
             val body = if (response.status.isSuccess()) {
                 response.bodyAsText()
             } else {
-                response.bodyAsChannel().cancel()
+                response.bodyAsChannel().cancel(null)
                 ""
             }
 
