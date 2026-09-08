@@ -16,9 +16,10 @@ import io.ktor.http.Url
 import io.ktor.http.appendPathSegments
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import io.ktor.util.network.UnresolvedAddressException
 import io.ktor.utils.io.readBuffer
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.io.IOException
 import kotlinx.io.readString
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -158,9 +159,11 @@ class OpenAiCompatibleCompletionClient(
                 cause = ProviderRequestTimeoutException(config.requestTimeoutMillis),
             ),
         )
-    } catch (error: CancellationException) {
-        throw error
-    } catch (error: Exception) {
+    } catch (error: IOException) {
+        TransportOutcome.Failure(
+            CompletionOutcome.Failure("Provider network request failed.", error),
+        )
+    } catch (error: UnresolvedAddressException) {
         TransportOutcome.Failure(
             CompletionOutcome.Failure("Provider network request failed.", error),
         )
