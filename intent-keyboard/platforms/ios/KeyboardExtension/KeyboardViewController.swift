@@ -250,7 +250,7 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func handleEnter() {
-        let requestedReturnKey = textDocumentProxy.returnKeyType
+        let requestedReturnKey = textDocumentProxy.returnKeyType ?? .default
         guard commitBuffer() else { return }
         textDocumentProxy.insertText("\n")
         if requestedReturnKey == .done {
@@ -355,7 +355,7 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func refreshReturnKey() {
-        enterButton.setTitle(returnKeyLabel(textDocumentProxy.returnKeyType), for: .normal)
+        enterButton.setTitle(returnKeyLabel(textDocumentProxy.returnKeyType ?? .default), for: .normal)
     }
 
     private func returnKeyLabel(_ type: UIReturnKeyType) -> String {
