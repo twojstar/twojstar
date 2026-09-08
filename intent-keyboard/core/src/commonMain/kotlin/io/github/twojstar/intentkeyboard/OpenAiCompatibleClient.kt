@@ -9,9 +9,12 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.URLBuilder
+import io.ktor.http.URLProtocol
+import io.ktor.http.Url
+import io.ktor.http.appendPathSegments
 import io.ktor.http.isSuccess
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.io.IOException
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -30,8 +33,20 @@ data class OpenAiCompatibleConfig(
     val requestTimeoutMillis: Long = 15_000,
 ) {
     init {
-        require(baseUrl.startsWith("https://", ignoreCase = true)) {
-            "baseUrl must use HTTPS"
+        val parsedBaseUrl = try {
+            Url(baseUrl)
+        } catch (error: IllegalArgumentException) {
+            throw IllegalArgumentException("baseUrl must be a valid absolute HTTPS URL", error)
+        }
+
+        require(parsedBaseUrl.protocol == URLProtocol.HTTPS && parsedBaseUrl.host.isNotBlank()) {
+            "baseUrl must be a valid absolute HTTPS URL"
+        }
+        require(parsedBaseUrl.parameters.entries().isEmpty() && parsedBaseUrl.fragment.isEmpty()) {
+            "baseUrl must not contain a query or fragment"
+        }
+        require(parsedBaseUrl.user == null && parsedBaseUrl.password == null) {
+            "baseUrl must not contain user credentials"
         }
         require(model.isNotBlank()) { "model must not be blank" }
         require(requestTimeoutMillis > 0) { "requestTimeoutMillis must be positive" }
@@ -45,6 +60,9 @@ fun interface BearerTokenProvider {
 object NoBearerTokenProvider : BearerTokenProvider {
     override suspend fun token(): String? = null
 }
+
+class ProviderRequestTimeoutException(timeoutMillis: Long) :
+    Exception("Provider request exceeded ${timeoutMillis}ms.")
 
 /**
  * Minimal Chat Completions transport for OpenAI-compatible providers.
@@ -85,7 +103,7 @@ class OpenAiCompatibleCompletionClient(
     }
 
     private suspend fun request(prompt: ModelPrompt): TransportOutcome = try {
-        withTimeout(config.requestTimeoutMillis) {
+        withTimeoutOrNull(config.requestTimeoutMillis) {
             val response = httpClient.post(endpoint()) {
                 header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                 accept(ContentType.Application.Json)
@@ -98,10 +116,11 @@ class OpenAiCompatibleCompletionClient(
                 status = response.status,
                 body = response.bodyAsText(),
             )
-        }
-    } catch (_: TimeoutCancellationException) {
-        TransportOutcome.Failure(
-            CompletionOutcome.Failure("Provider request timed out."),
+        } ?: TransportOutcome.Failure(
+            CompletionOutcome.Failure(
+                message = "Provider request timed out.",
+                cause = ProviderRequestTimeoutException(config.requestTimeoutMillis),
+            ),
         )
     } catch (error: IOException) {
         TransportOutcome.Failure(
@@ -109,8 +128,9 @@ class OpenAiCompatibleCompletionClient(
         )
     }
 
-    private fun endpoint(): String =
-        "${config.baseUrl.trimEnd('/')}/chat/completions"
+    private fun endpoint(): String = URLBuilder(config.baseUrl)
+        .appendPathSegments("chat", "completions")
+        .buildString()
 
     private fun requestBody(prompt: ModelPrompt): JsonObject = buildJsonObject {
         put("model", config.model)
