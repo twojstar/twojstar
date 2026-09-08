@@ -23,6 +23,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -92,16 +93,28 @@ class OpenAiCompatibleCompletionClient(
             )
         }
 
-        val text = try {
+        val extracted = try {
             extractAssistantText(transport.body)
         } catch (_: SerializationException) {
             return CompletionOutcome.Failure("Provider returned invalid JSON.")
         }
 
-        return if (text.isNullOrBlank()) {
-            CompletionOutcome.Failure("Provider returned no text completion.")
-        } else {
-            CompletionOutcome.Success(text)
+        return when (extracted) {
+            is AssistantTextOutcome.Text -> {
+                if (extracted.value.isBlank()) {
+                    CompletionOutcome.Failure("Provider returned no text completion.")
+                } else {
+                    CompletionOutcome.Success(extracted.value)
+                }
+            }
+            AssistantTextOutcome.Missing ->
+                CompletionOutcome.Failure("Provider returned no text completion.")
+            AssistantTextOutcome.InvalidContent ->
+                CompletionOutcome.Failure("Provider returned invalid completion content.")
+            is AssistantTextOutcome.Incomplete ->
+                CompletionOutcome.Failure(
+                    "Provider completion ended with finish_reason=${extracted.reason}.",
+                )
         }
     }
 
@@ -157,26 +170,58 @@ class OpenAiCompatibleCompletionClient(
         put("content", content)
     }
 
-    private fun extractAssistantText(payload: String): String? {
-        val root = json.parseToJsonElement(payload) as? JsonObject ?: return null
-        val choices = root["choices"] as? JsonArray ?: return null
-        val firstChoice = choices.firstOrNull() as? JsonObject ?: return null
-        val message = firstChoice["message"] as? JsonObject ?: return null
-        val content = message["content"] ?: return null
+    private fun extractAssistantText(payload: String): AssistantTextOutcome {
+        val root = json.parseToJsonElement(payload) as? JsonObject
+            ?: return AssistantTextOutcome.InvalidContent
+        val choices = root["choices"] as? JsonArray
+            ?: return AssistantTextOutcome.Missing
+        val firstChoice = choices.firstOrNull() as? JsonObject
+            ?: return AssistantTextOutcome.Missing
+
+        val finishReason = when (val rawFinishReason = firstChoice["finish_reason"]) {
+            null, JsonNull -> null
+            is JsonPrimitive -> rawFinishReason.stringContentOrNull()
+                ?: return AssistantTextOutcome.InvalidContent
+            else -> return AssistantTextOutcome.InvalidContent
+        }
+        if (finishReason in NON_NORMAL_FINISH_REASONS) {
+            return AssistantTextOutcome.Incomplete(finishReason)
+        }
+
+        val message = firstChoice["message"] as? JsonObject
+            ?: return AssistantTextOutcome.Missing
+        val content = message["content"] ?: return AssistantTextOutcome.Missing
 
         return content.asTextContent()
     }
 
-    private fun JsonElement.asTextContent(): String? = when (this) {
+    private fun JsonElement.asTextContent(): AssistantTextOutcome = when (this) {
         is JsonPrimitive -> stringContentOrNull()
-        is JsonArray -> mapNotNull { part ->
-            ((part as? JsonObject)?.get("text") as? JsonPrimitive)?.stringContentOrNull()
-        }.joinToString("").ifBlank { null }
-        else -> null
+            ?.let(AssistantTextOutcome::Text)
+            ?: AssistantTextOutcome.InvalidContent
+        is JsonArray -> {
+            val parts = ArrayList<String>(size)
+            for (part in this) {
+                val partObject = part as? JsonObject
+                    ?: return AssistantTextOutcome.InvalidContent
+                val text = (partObject["text"] as? JsonPrimitive)?.stringContentOrNull()
+                    ?: return AssistantTextOutcome.InvalidContent
+                parts += text
+            }
+            AssistantTextOutcome.Text(parts.joinToString(""))
+        }
+        else -> AssistantTextOutcome.InvalidContent
     }
 
     private fun JsonPrimitive.stringContentOrNull(): String? =
         if (isString) contentOrNull else null
+
+    private sealed interface AssistantTextOutcome {
+        data class Text(val value: String) : AssistantTextOutcome
+        data class Incomplete(val reason: String) : AssistantTextOutcome
+        data object Missing : AssistantTextOutcome
+        data object InvalidContent : AssistantTextOutcome
+    }
 
     private sealed interface TransportOutcome {
         data class Success(
@@ -187,5 +232,14 @@ class OpenAiCompatibleCompletionClient(
         data class Failure(
             val failure: CompletionOutcome.Failure,
         ) : TransportOutcome
+    }
+
+    private companion object {
+        val NON_NORMAL_FINISH_REASONS = setOf(
+            "length",
+            "content_filter",
+            "tool_calls",
+            "function_call",
+        )
     }
 }
