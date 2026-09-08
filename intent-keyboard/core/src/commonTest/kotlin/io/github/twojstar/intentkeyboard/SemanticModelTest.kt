@@ -3,6 +3,7 @@ package io.github.twojstar.intentkeyboard
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
@@ -117,11 +118,11 @@ class SemanticModelTest {
     fun openAiCompatibleClientSendsBearerAndReadsText() = runBlocking {
         var capturedPath: String? = null
         var capturedAuthorization: String? = null
-        var capturedContentType: String? = null
+        var capturedContentType: ContentType? = null
         val engine = MockEngine { request ->
             capturedPath = request.url.encodedPath
             capturedAuthorization = request.headers[HttpHeaders.Authorization]
-            capturedContentType = request.headers[HttpHeaders.ContentType]
+            capturedContentType = request.body.contentType
 
             respond(
                 content = ByteReadChannel(
@@ -145,7 +146,7 @@ class SemanticModelTest {
         assertEquals("Jutro będę o $LOCKED_TIME.", success.text)
         assertEquals("/v1/chat/completions", capturedPath)
         assertEquals("Bearer $TEST_TOKEN", capturedAuthorization)
-        assertTrue(capturedContentType?.startsWith(JSON_CONTENT_TYPE) == true)
+        assertEquals(ContentType.Application.Json, capturedContentType)
         httpClient.close()
     }
 
