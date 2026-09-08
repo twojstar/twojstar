@@ -1,8 +1,6 @@
 package io.github.twojstar.intentkeyboard
 
 import io.ktor.client.HttpClient
-import io.ktor.client.plugins.HttpRequestTimeoutException
-import io.ktor.client.plugins.timeout
 import io.ktor.client.request.accept
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -12,7 +10,8 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.errors.IOException
-import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -60,16 +59,15 @@ class OpenAiCompatibleCompletionClient(
 ) : SemanticCompletionClient {
     override suspend fun complete(prompt: ModelPrompt): CompletionOutcome {
         return try {
-            val response = httpClient.post(endpoint()) {
-                timeout {
-                    requestTimeoutMillis = config.requestTimeoutMillis
+            val response = withTimeout(config.requestTimeoutMillis) {
+                httpClient.post(endpoint()) {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    accept(ContentType.Application.Json)
+                    tokenProvider.token()
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+                    setBody(requestBody(prompt).toString())
                 }
-                header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-                accept(ContentType.Application.Json)
-                tokenProvider.token()
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { header(HttpHeaders.Authorization, "Bearer $it") }
-                setBody(requestBody(prompt).toString())
             }
 
             if (!response.status.isSuccess()) {
@@ -84,14 +82,12 @@ class OpenAiCompatibleCompletionClient(
             } else {
                 CompletionOutcome.Success(text)
             }
-        } catch (error: HttpRequestTimeoutException) {
-            CompletionOutcome.Failure("Provider request timed out.", error)
+        } catch (_: TimeoutCancellationException) {
+            CompletionOutcome.Failure("Provider request timed out.")
         } catch (error: IOException) {
             CompletionOutcome.Failure("Provider network request failed.", error)
         } catch (_: SerializationException) {
             CompletionOutcome.Failure("Provider returned invalid JSON.")
-        } catch (error: CancellationException) {
-            throw error
         }
     }
 
