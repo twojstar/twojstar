@@ -4,7 +4,6 @@ import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.accept
-import io.ktor.client.request.contentType
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -65,7 +64,7 @@ class OpenAiCompatibleCompletionClient(
                 timeout {
                     requestTimeoutMillis = config.requestTimeoutMillis
                 }
-                contentType(ContentType.Application.Json)
+                header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                 accept(ContentType.Application.Json)
                 tokenProvider.token()
                     ?.takeIf { it.isNotBlank() }
