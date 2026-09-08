@@ -21,7 +21,7 @@ permissions:
   contents: read
 
 jobs:
-  core:
+  core-and-android:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -41,4 +41,10 @@ jobs:
         with:
           gradle-version: "9.5.0"
 
-      - run: gradle :core:desktopTest --stacktrace
+      - run: gradle :core:desktopTest :platforms:android:assembleDebug --stacktrace
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: intent-keyboard-android-debug
+          path: intent-keyboard/platforms/android/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
