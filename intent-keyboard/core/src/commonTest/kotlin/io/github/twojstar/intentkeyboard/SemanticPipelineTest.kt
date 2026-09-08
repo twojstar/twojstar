@@ -5,11 +5,12 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.startCoroutine
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class SemanticPipelineTest {
     @Test
-    fun reportsChangedVerbatimLock() = runTest {
+    fun reportsChangedVerbatimLockAndBlocksCommit() = runTest {
         val pipeline = SemanticPipeline(
             renderer = object : SemanticRenderer {
                 override suspend fun render(request: RenderRequest) =
@@ -25,6 +26,8 @@ class SemanticPipelineTest {
         )
 
         assertTrue(result.warnings.any { "18:30" in it })
+        assertTrue(result.violatedLocks.any { it.value == "18:30" })
+        assertFalse(result.canCommit)
     }
 
     @Test
@@ -40,6 +43,7 @@ class SemanticPipelineTest {
 
         assertEquals("Jutro byc 18:30.", result.text)
         assertTrue(result.warnings.isEmpty())
+        assertTrue(result.canCommit)
     }
 
     @Test
@@ -51,6 +55,20 @@ class SemanticPipelineTest {
         assertTrue("120 zł" in locks)
         assertTrue("7€" in locks)
         assertTrue("12\$" in locks)
+    }
+
+    @Test
+    fun prototypeLayoutCanTypePolishTimesMoneyAndUppercase() {
+        val letters = PrototypeKeyboardLayout.layout(CharacterPage.LETTERS)
+            .rows.joinToString("")
+        val uppercase = PrototypeKeyboardLayout.layout(CharacterPage.LETTERS, uppercase = true)
+            .rows.joinToString("")
+        val symbols = PrototypeKeyboardLayout.layout(CharacterPage.NUMBERS)
+            .rows.joinToString("")
+
+        "ąćęłńóśźż".forEach { assertTrue(it in letters) }
+        "ĄĆĘŁŃÓŚŹŻ".forEach { assertTrue(it in uppercase) }
+        "0123456789:€$".forEach { assertTrue(it in symbols) }
     }
 
     private fun runTest(block: suspend () -> Unit) {
