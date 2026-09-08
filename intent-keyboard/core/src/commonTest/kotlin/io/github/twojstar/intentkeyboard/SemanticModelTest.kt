@@ -121,7 +121,8 @@ class SemanticModelTest {
 
             respond(
                 content = ByteReadChannel(
-                    """{"choices":[{"message":{"content":"Jutro będę o $LOCKED_TIME."}}]}""",
+                    """{"choices":[{"message":{"content":"Jutro będę o $LOCKED_TIME."}}]}"""
+                        .replace("\\\"", "\""),
                 ),
                 status = HttpStatusCode.OK,
                 headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
@@ -148,7 +149,8 @@ class SemanticModelTest {
             delay(100)
             respond(
                 content = ByteReadChannel(
-                    """{"choices":[{"message":{"content":"too late"}}]}""",
+                    """{"choices":[{"message":{"content":"too late"}}]}"""
+                        .replace("\\\"", "\""),
                 ),
                 status = HttpStatusCode.OK,
                 headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
@@ -171,7 +173,8 @@ class SemanticModelTest {
             delay(100)
             respond(
                 content = ByteReadChannel(
-                    """{"choices":[{"message":{"content":"too late"}}]}""",
+                    """{"choices":[{"message":{"content":"too late"}}]}"""
+                        .replace("\\\"", "\""),
                 ),
                 status = HttpStatusCode.OK,
                 headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
@@ -205,7 +208,7 @@ class SemanticModelTest {
         val httpClient = HttpClient(
             MockEngine {
                 respond(
-                    content = ByteReadChannel("not-json"),
+                    content = ByteReadChannel("{"),
                     status = HttpStatusCode.OK,
                     headers = headersOf(HttpHeaders.ContentType, JSON_CONTENT_TYPE),
                 )
