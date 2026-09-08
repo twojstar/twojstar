@@ -27,7 +27,7 @@ class IntentKeyboardService : InputMethodService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val buffer = StringBuilder()
 
-    private lateinit var semanticRuntime: LocalSemanticRuntime
+    private var semanticRuntime: LocalSemanticRuntime? = null
     private var semanticState: LocalSemanticRuntimeState = LocalSemanticRuntimeState.Mechanical
 
     private var register = Register.NATURAL
@@ -54,11 +54,12 @@ class IntentKeyboardService : InputMethodService() {
     override fun onCreate() {
         super.onCreate()
 
-        semanticRuntime = LocalSemanticRuntime(applicationContext, scope) { state ->
+        val runtime = LocalSemanticRuntime(applicationContext, scope) { state ->
             semanticState = state
             refreshEngineView()
         }
-        semanticRuntime.start()
+        semanticRuntime = runtime
+        runtime.start()
     }
 
     override fun onCreateInputView(): View = LinearLayout(this).apply {
@@ -133,7 +134,8 @@ class IntentKeyboardService : InputMethodService() {
 
     override fun onDestroy() {
         renderJob?.cancel()
-        if (::semanticRuntime.isInitialized) semanticRuntime.close()
+        semanticRuntime?.close()
+        semanticRuntime = null
         scope.cancel()
         super.onDestroy()
     }
@@ -295,6 +297,12 @@ class IntentKeyboardService : InputMethodService() {
         val raw = buffer.toString()
         if (raw.isBlank()) return
 
+        val runtime = semanticRuntime
+        if (runtime == null) {
+            statusView?.text = "Semantic runtime unavailable."
+            return
+        }
+
         renderJob?.cancel()
         val requestedRegister = register
         val generation = ++renderGeneration
@@ -302,7 +310,7 @@ class IntentKeyboardService : InputMethodService() {
 
         renderJob = scope.launch {
             try {
-                val result = semanticRuntime.render(
+                val result = runtime.render(
                     RenderRequest(
                         rawIntent = raw,
                         register = requestedRegister,
