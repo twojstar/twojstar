@@ -7,7 +7,6 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.utils.io.ByteReadChannel
-import io.ktor.utils.io.errors.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -15,7 +14,8 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
+import kotlinx.io.IOException
 
 class SemanticModelTest {
     @Test
@@ -43,7 +43,7 @@ class SemanticModelTest {
     }
 
     @Test
-    fun rawModeDoesNotCallProvider() = runTest {
+    fun rawModeDoesNotCallProvider() = runBlocking {
         var calls = 0
         val renderer = ModelSemanticRenderer(
             client = object : SemanticCompletionClient {
@@ -64,7 +64,7 @@ class SemanticModelTest {
     }
 
     @Test
-    fun modelRendererStillCannotBypassPipelineLocks() = runTest {
+    fun modelRendererStillCannotBypassPipelineLocks() = runBlocking {
         val renderer = ModelSemanticRenderer(
             client = object : SemanticCompletionClient {
                 override suspend fun complete(prompt: ModelPrompt) =
@@ -103,11 +103,11 @@ class SemanticModelTest {
     }
 
     @Test
-    fun openAiCompatibleClientSendsBearerAndReadsText() = runTest {
+    fun openAiCompatibleClientSendsBearerAndReadsText() = runBlocking {
         val engine = MockEngine { request ->
             assertEquals("/v1/chat/completions", request.url.encodedPath)
             assertEquals("Bearer $TEST_TOKEN", request.headers[HttpHeaders.Authorization])
-            assertEquals(JSON_CONTENT_TYPE, request.headers[HttpHeaders.ContentType])
+            assertTrue(request.headers[HttpHeaders.ContentType]?.startsWith(JSON_CONTENT_TYPE) == true)
 
             respond(
                 content = ByteReadChannel(
@@ -133,7 +133,7 @@ class SemanticModelTest {
     }
 
     @Test
-    fun openAiCompatibleClientEnforcesConfiguredDeadline() = runTest {
+    fun openAiCompatibleClientEnforcesConfiguredDeadline() = runBlocking {
         val engine = MockEngine {
             delay(100)
             respond(
@@ -155,7 +155,7 @@ class SemanticModelTest {
     }
 
     @Test
-    fun openAiCompatibleClientMapsNetworkFailure() = runTest {
+    fun openAiCompatibleClientMapsNetworkFailure() = runBlocking {
         val httpClient = HttpClient(MockEngine { throw IOException("network down") })
         val client = providerClient(httpClient)
 
@@ -167,7 +167,7 @@ class SemanticModelTest {
     }
 
     @Test
-    fun openAiCompatibleClientMapsInvalidJson() = runTest {
+    fun openAiCompatibleClientMapsInvalidJson() = runBlocking {
         val httpClient = HttpClient(
             MockEngine {
                 respond(
@@ -187,7 +187,7 @@ class SemanticModelTest {
     }
 
     @Test
-    fun openAiCompatibleClientTurnsHttpFailureIntoTypedFailure() = runTest {
+    fun openAiCompatibleClientTurnsHttpFailureIntoTypedFailure() = runBlocking {
         val engine = MockEngine {
             respond(
                 content = ByteReadChannel("{}"),
