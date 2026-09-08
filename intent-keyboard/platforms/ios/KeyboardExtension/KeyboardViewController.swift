@@ -269,8 +269,20 @@ final class KeyboardViewController: UIInputViewController {
         }
 
         let output = hasCurrentPreview ? renderedText : rawIntent
-        clearBuffer()
+        let documentIdentifier = textDocumentProxy.documentIdentifier
         textDocumentProxy.insertText(output)
+
+        let insertionConfirmed =
+            textDocumentProxy.documentIdentifier == documentIdentifier &&
+            textDocumentProxy.documentContextBeforeInput?.hasSuffix(output) == true
+
+        guard insertionConfirmed else {
+            statusLabel.text = "Commit not confirmed by host; draft kept."
+            refreshCompactLayout()
+            return false
+        }
+
+        clearBuffer()
         statusLabel.text = "Committed."
         refreshCompactLayout()
         return true
@@ -332,11 +344,9 @@ final class KeyboardViewController: UIInputViewController {
         let documentChanged = activeDocumentIdentifier != nil && activeDocumentIdentifier != documentIdentifier
         let hasDraft = !rawIntent.isEmpty || !renderedText.isEmpty
 
-        if hasDraft {
+        if documentChanged && hasDraft {
             clearBuffer()
-            statusLabel.text = documentChanged
-                ? "Draft cleared after switching text context."
-                : "Draft cleared after host text context changed."
+            statusLabel.text = "Draft cleared after switching text context."
         }
 
         activeDocumentIdentifier = documentIdentifier
