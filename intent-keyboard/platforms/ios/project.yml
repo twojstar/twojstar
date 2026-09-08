@@ -18,7 +18,7 @@ targets:
       - path: Host
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: io.github.twojstar.intentkeyboard.host
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.twojstar.intentkeyboard
     info:
       path: Host/Info.plist
       properties:
