@@ -16,6 +16,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import io.github.twojstar.intentkeyboard.Tone
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +29,9 @@ class SetupActivity : Activity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val modelStore by lazy(LazyThreadSafetyMode.NONE) {
         LocalModelStore(applicationContext)
+    }
+    private val renderPreferenceStore by lazy(LazyThreadSafetyMode.NONE) {
+        RenderPreferenceStore(applicationContext)
     }
     private val managedInstallCoordinator by lazy(LazyThreadSafetyMode.NONE) {
         ManagedModelInstallCoordinator.get(applicationContext)
@@ -42,6 +46,9 @@ class SetupActivity : Activity() {
     private var installRecommendedModelButton: Button? = null
     private var importModelButton: Button? = null
     private var clearModelButton: Button? = null
+    private var toneButton: Button? = null
+    private var sourceLanguageButton: Button? = null
+    private var targetLanguageButton: Button? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -108,6 +115,8 @@ class SetupActivity : Activity() {
                 addView(button, matchWidth())
             }
 
+            addSemanticOutputSettings()
+
             addView(TextView(context).apply {
                 text = getString(R.string.keyboard_setup_title)
                 textSize = 18f
@@ -151,6 +160,39 @@ class SetupActivity : Activity() {
 
         refreshModelStatus()
         updateModelControls()
+        refreshRenderSettings()
+    }
+
+    private fun LinearLayout.addSemanticOutputSettings() {
+        addView(TextView(context).apply {
+            text = getString(R.string.semantic_output_title)
+            textSize = 18f
+            setPadding(0, dp(24), 0, dp(8))
+        }, matchWidth())
+
+        addView(TextView(context).apply {
+            text = getString(R.string.semantic_output_summary)
+            textSize = 14f
+            setPadding(0, 0, 0, dp(8))
+        }, matchWidth())
+
+        toneButton = Button(context).also { button ->
+            button.isAllCaps = false
+            button.setOnClickListener { cycleTone() }
+            addView(button, matchWidth())
+        }
+
+        sourceLanguageButton = Button(context).also { button ->
+            button.isAllCaps = false
+            button.setOnClickListener { cycleSourceLanguage() }
+            addView(button, matchWidth())
+        }
+
+        targetLanguageButton = Button(context).also { button ->
+            button.isAllCaps = false
+            button.setOnClickListener { cycleTargetLanguage() }
+            addView(button, matchWidth())
+        }
     }
 
     override fun onStart() {
@@ -168,6 +210,7 @@ class SetupActivity : Activity() {
             refreshModelStatus()
             updateModelControls()
         }
+        refreshRenderSettings()
     }
 
     override fun onStop() {
@@ -351,6 +394,57 @@ class SetupActivity : Activity() {
             !manualModelOperationInProgress && !managedRunning && selection != null
     }
 
+    private fun cycleTone() {
+        val next = when (renderPreferenceStore.current().tone) {
+            Tone.DEFAULT -> Tone.FRIENDLY
+            Tone.FRIENDLY -> Tone.NEUTRAL
+            Tone.NEUTRAL -> Tone.WORK
+            Tone.WORK -> Tone.FORMAL
+            Tone.FORMAL -> Tone.DEFAULT
+        }
+        renderPreferenceStore.setTone(next)
+        refreshRenderSettings()
+    }
+
+    private fun cycleSourceLanguage() {
+        val current = renderPreferenceStore.current().sourceLanguage
+        renderPreferenceStore.setSourceLanguage(nextLanguage(current))
+        refreshRenderSettings()
+    }
+
+    private fun cycleTargetLanguage() {
+        val current = renderPreferenceStore.current().targetLanguage
+        renderPreferenceStore.setTargetLanguage(nextLanguage(current))
+        refreshRenderSettings()
+    }
+
+    private fun nextLanguage(current: String?): String? = when (current) {
+        null -> LANGUAGE_POLISH
+        LANGUAGE_POLISH -> LANGUAGE_ENGLISH
+        else -> null
+    }
+
+    private fun refreshRenderSettings() {
+        val preferences = renderPreferenceStore.current()
+        val tone = preferences.tone.name.lowercase().replaceFirstChar { it.titlecase() }
+        toneButton?.text = getString(R.string.semantic_tone, tone)
+        sourceLanguageButton?.text = getString(
+            R.string.semantic_source_language,
+            languageLabel(preferences.sourceLanguage, R.string.language_auto),
+        )
+        targetLanguageButton?.text = getString(
+            R.string.semantic_target_language,
+            languageLabel(preferences.targetLanguage, R.string.language_same),
+        )
+    }
+
+    private fun languageLabel(language: String?, emptyLabel: Int): String = when (language) {
+        null -> getString(emptyLabel)
+        LANGUAGE_POLISH -> getString(R.string.language_polish)
+        LANGUAGE_ENGLISH -> getString(R.string.language_english)
+        else -> language
+    }
+
     private fun isRecommendedModelInstalled(): Boolean =
         managedInstallCoordinator.currentManagedSelection() != null
 
@@ -365,5 +459,7 @@ class SetupActivity : Activity() {
     private companion object {
         const val REQUEST_LOCAL_MODEL = 1001
         const val TAG = "IntentKeyboardSetup"
+        const val LANGUAGE_POLISH = "Polish"
+        const val LANGUAGE_ENGLISH = "English"
     }
 }

@@ -26,6 +26,9 @@ class MechanicalRenderer : SemanticRenderer {
             if (request.register == Register.CIVILIZED) {
                 add("Mechanical preview only: semantic rewriting is not wired yet.")
             }
+            if (request.tone != Tone.DEFAULT) {
+                add("Mechanical preview does not apply semantic tone changes.")
+            }
             if (
                 request.targetLanguage != null &&
                 request.targetLanguage != request.sourceLanguage

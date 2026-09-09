@@ -57,6 +57,7 @@ class LocalSemanticRuntime(
 ) {
     private val appContext = context.applicationContext
     private val store = LocalModelStore(appContext)
+    private val renderPreferenceStore = RenderPreferenceStore(appContext)
     private val runtimeMutex = Mutex()
     private val reloadMutex = Mutex()
     private val fallbackPipeline = SemanticPipeline(MechanicalRenderer())
@@ -74,8 +75,17 @@ class LocalSemanticRuntime(
         reload()
     }
 
-    suspend fun render(request: RenderRequest): RenderResult = runtimeMutex.withLock {
-        activePipeline.render(request)
+    suspend fun render(request: RenderRequest): RenderResult {
+        val preferences = renderPreferenceStore.current()
+        val effectiveRequest = request.copy(
+            tone = preferences.tone,
+            sourceLanguage = preferences.sourceLanguage,
+            targetLanguage = preferences.targetLanguage,
+        )
+
+        return runtimeMutex.withLock {
+            activePipeline.render(effectiveRequest)
+        }
     }
 
     fun close() {
