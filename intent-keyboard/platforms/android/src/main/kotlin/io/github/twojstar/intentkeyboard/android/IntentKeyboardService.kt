@@ -256,7 +256,6 @@ class IntentKeyboardService : InputMethodService() {
             text = "Commit"
             isAllCaps = false
             setOnClickListener { commitBuffer() }
-            addView(button, weighted())
         }, weighted())
     }
 
