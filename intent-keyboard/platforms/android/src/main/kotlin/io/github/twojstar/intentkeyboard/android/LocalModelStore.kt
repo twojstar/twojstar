@@ -71,18 +71,19 @@ class LocalModelStore(context: Context) {
         displayName: String,
         sizeBytes: Long,
     ): LocalModelSelection = withContext(Dispatchers.IO) {
-        if (!displayName.endsWith(".litertlm", ignoreCase = true)) {
-            throw@withContext LocalModelStoreException("Managed models must use the .litertlm format.")
-        }
-        if (sizeBytes <= 0L || !source.isFile || source.length() != sizeBytes) {
-            throw@withContext LocalModelStoreException("The verified model file is incomplete.")
-        }
-
-        val directory = requireModelsDirectory()
-        val target = File(directory, "model-${UUID.randomUUID()}.litertlm")
+        var target: File? = null
         var committed = false
 
         try {
+            if (!displayName.endsWith(".litertlm", ignoreCase = true)) {
+                throw LocalModelStoreException("Managed models must use the .litertlm format.")
+            }
+            if (sizeBytes <= 0L || !source.isFile || source.length() != sizeBytes) {
+                throw LocalModelStoreException("The verified model file is incomplete.")
+            }
+
+            val directory = requireModelsDirectory()
+            target = File(directory, "model-${UUID.randomUUID()}.litertlm")
             currentCoroutineContext().ensureActive()
 
             if (!source.renameTo(target)) {
@@ -92,15 +93,20 @@ class LocalModelStore(context: Context) {
             currentCoroutineContext().ensureActive()
             val selection = commitSelectionOnIo(target, displayName, sizeBytes)
             committed = true
-            source.delete()
+            deleteBestEffort(source)
             selection
         } catch (error: IOException) {
-            throw@withContext LocalModelStoreException(
+            throw LocalModelStoreException(
                 "The verified model could not be moved into private storage.",
                 error,
             )
+        } catch (error: SecurityException) {
+            throw LocalModelStoreException(
+                "Android denied access while activating the verified model.",
+                error,
+            )
         } finally {
-            if (!committed) target.delete()
+            if (!committed) target?.let(::deleteBestEffort)
         }
     }
 
@@ -179,7 +185,7 @@ class LocalModelStore(context: Context) {
             ?.asSequence()
             ?.filter { it.isFile && it.extension.equals("litertlm", ignoreCase = true) }
             ?.filter { it.absolutePath !in retainedPaths }
-            ?.forEach { it.delete() }
+            ?.forEach(::deleteBestEffort)
     }
 
     private suspend fun importModelOnIo(uri: Uri): LocalModelSelection {
@@ -223,8 +229,8 @@ class LocalModelStore(context: Context) {
         } catch (error: IOException) {
             throw LocalModelStoreException("The model could not be copied into private storage.", error)
         } finally {
-            partial.delete()
-            if (!committed) target.delete()
+            deleteBestEffort(partial)
+            if (!committed) deleteBestEffort(target)
         }
     }
 
@@ -316,6 +322,14 @@ class LocalModelStore(context: Context) {
             throw LocalModelStoreException("Could not create private storage for local models.")
         }
         return directory
+    }
+
+    private fun deleteBestEffort(file: File) {
+        try {
+            file.delete()
+        } catch (_: SecurityException) {
+            // Cleanup failure must never replace the primary model-selection result.
+        }
     }
 
     private fun rollbackSelectionSnapshot(): LocalModelSelection? = readSelection(
