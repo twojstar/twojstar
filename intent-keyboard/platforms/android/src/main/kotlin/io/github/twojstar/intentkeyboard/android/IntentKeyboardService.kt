@@ -505,11 +505,10 @@ class IntentKeyboardService : InputMethodService() {
             return
         }
 
-        val connection = currentInputConnection
         if (
-            ownsCurrentHostComposition(connection) &&
+            hostCompositionOwned &&
             hostCompositionText != raw &&
-            !syncHostComposition(raw)
+            !restoreOwnedHostComposition(raw)
         ) {
             statusView?.text = "Could not restore the raw host composition; preview kept."
             return
@@ -578,6 +577,26 @@ class IntentKeyboardService : InputMethodService() {
         clearInternalBuffer()
         statusView?.text = "Committed."
         return true
+    }
+
+    private fun restoreOwnedHostComposition(text: String): Boolean {
+        if (!hostCompositionOwned) return true
+
+        val connection = hostCompositionConnection ?: return false
+        hostCompositionMutationInProgress = true
+        return try {
+            val updated = connection.setComposingText(text, 1)
+            if (updated) {
+                if (text.isEmpty()) {
+                    resetHostCompositionTracking()
+                } else {
+                    hostCompositionText = text
+                }
+            }
+            updated
+        } finally {
+            hostCompositionMutationInProgress = false
+        }
     }
 
     private fun syncHostComposition(text: String): Boolean {
