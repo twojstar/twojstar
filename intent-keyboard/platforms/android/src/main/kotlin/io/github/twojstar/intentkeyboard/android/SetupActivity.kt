@@ -19,6 +19,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import io.github.twojstar.intentkeyboard.RecipientProfile
 import io.github.twojstar.intentkeyboard.Tone
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -53,6 +54,7 @@ class SetupActivity : Activity() {
     private var importModelButton: Button? = null
     private var clearModelButton: Button? = null
     private var toneButton: Button? = null
+    private var recipientProfileButton: Button? = null
     private var sourceLanguageButton: Button? = null
     private var targetLanguageButton: Button? = null
     private var remoteEnabledCheckBox: CheckBox? = null
@@ -192,6 +194,12 @@ class SetupActivity : Activity() {
         toneButton = Button(context).also { button ->
             button.isAllCaps = false
             button.setOnClickListener { cycleTone() }
+            addView(button, matchWidth())
+        }
+
+        recipientProfileButton = Button(context).also { button ->
+            button.isAllCaps = false
+            button.setOnClickListener { cycleRecipientProfile() }
             addView(button, matchWidth())
         }
 
@@ -477,6 +485,18 @@ class SetupActivity : Activity() {
         refreshRenderSettings()
     }
 
+    private fun cycleRecipientProfile() {
+        val next = when (renderPreferenceStore.current().recipientProfile) {
+            RecipientProfile.NONE -> RecipientProfile.FRIEND
+            RecipientProfile.FRIEND -> RecipientProfile.WORK
+            RecipientProfile.WORK -> RecipientProfile.CLIENT
+            RecipientProfile.CLIENT -> RecipientProfile.FORMAL_OFFICE
+            RecipientProfile.FORMAL_OFFICE -> RecipientProfile.NONE
+        }
+        renderPreferenceStore.setRecipientProfile(next)
+        refreshRenderSettings()
+    }
+
     private fun cycleSourceLanguage() {
         val current = renderPreferenceStore.current().sourceLanguage
         renderPreferenceStore.setSourceLanguage(nextLanguage(current))
@@ -499,6 +519,10 @@ class SetupActivity : Activity() {
         val preferences = renderPreferenceStore.current()
         val tone = preferences.tone.name.lowercase().replaceFirstChar { it.titlecase() }
         toneButton?.text = getString(R.string.semantic_tone, tone)
+        recipientProfileButton?.text = getString(
+            R.string.semantic_recipient_profile,
+            recipientProfileLabel(preferences.recipientProfile),
+        )
         sourceLanguageButton?.text = getString(
             R.string.semantic_source_language,
             languageLabel(preferences.sourceLanguage, R.string.language_auto),
@@ -572,6 +596,14 @@ class SetupActivity : Activity() {
         } else {
             getString(R.string.remote_provider_disabled_status)
         }
+    }
+
+    private fun recipientProfileLabel(profile: RecipientProfile): String = when (profile) {
+        RecipientProfile.NONE -> getString(R.string.recipient_profile_none)
+        RecipientProfile.FRIEND -> getString(R.string.recipient_profile_friend)
+        RecipientProfile.WORK -> getString(R.string.recipient_profile_work)
+        RecipientProfile.CLIENT -> getString(R.string.recipient_profile_client)
+        RecipientProfile.FORMAL_OFFICE -> getString(R.string.recipient_profile_formal_office)
     }
 
     private fun languageLabel(language: String?, emptyLabel: Int): String = when (language) {
