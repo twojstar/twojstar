@@ -38,6 +38,7 @@ class IntentKeyboardService : InputMethodService() {
     private var renderedSource = ""
     private var renderedText = ""
     private var renderedCanCommit = true
+    private var autoRenderSuppressedSource: String? = null
     private var sensitiveField = false
     private var activeEditorInfo: EditorInfo? = null
     private var renderGeneration = 0L
@@ -53,6 +54,7 @@ class IntentKeyboardService : InputMethodService() {
     private var engineView: TextView? = null
     private var statusView: TextView? = null
     private var modeButton: Button? = null
+    private var revertButton: Button? = null
     private var pageButton: Button? = null
     private var shiftButton: Button? = null
     private var enterButton: Button? = null
@@ -213,6 +215,7 @@ class IntentKeyboardService : InputMethodService() {
     }
 
     private fun handleRenderPreferencesChanged() {
+        autoRenderSuppressedSource = null
         invalidateRenderedPreview()
         if (buffer.isNotEmpty()) {
             syncHostComposition(buffer.toString())
@@ -235,6 +238,13 @@ class IntentKeyboardService : InputMethodService() {
             isAllCaps = false
             setOnClickListener { renderBuffer() }
         }, weighted())
+
+        revertButton = Button(context).also { button ->
+            button.text = "Revert"
+            button.isAllCaps = false
+            button.setOnClickListener { revertPreview() }
+            addView(button, weighted())
+        }
 
         addView(Button(context).apply {
             text = "Commit"
@@ -317,6 +327,7 @@ class IntentKeyboardService : InputMethodService() {
             return
         }
 
+        autoRenderSuppressedSource = null
         buffer.append(text)
         invalidateRenderedPreview()
         syncHostComposition(buffer.toString())
@@ -330,6 +341,7 @@ class IntentKeyboardService : InputMethodService() {
             return
         }
 
+        autoRenderSuppressedSource = null
         buffer.deleteCharAt(buffer.lastIndex)
         invalidateRenderedPreview()
         syncHostComposition(buffer.toString())
@@ -384,7 +396,7 @@ class IntentKeyboardService : InputMethodService() {
         }
 
         val raw = buffer.toString()
-        if (raw.isBlank()) {
+        if (raw.isBlank() || raw == autoRenderSuppressedSource) {
             clearTransientRenderStatus()
             return
         }
@@ -397,6 +409,7 @@ class IntentKeyboardService : InputMethodService() {
                 generation != renderGeneration ||
                 sensitiveField ||
                 raw != buffer.toString() ||
+                raw == autoRenderSuppressedSource ||
                 register == Register.RAW
             ) {
                 return@launch
@@ -408,6 +421,7 @@ class IntentKeyboardService : InputMethodService() {
 
     private fun renderBuffer(fromAutoPreview: Boolean = false) {
         if (!fromAutoPreview) {
+            autoRenderSuppressedSource = null
             autoRenderJob?.cancel()
             autoRenderJob = null
         }
@@ -470,6 +484,7 @@ class IntentKeyboardService : InputMethodService() {
                     result.warnings.isNotEmpty() -> result.warnings.joinToString(" · ")
                     else -> "Ready to commit."
                 }
+                refreshViews()
             } catch (error: CancellationException) {
                 throw error
             } catch (error: SemanticRenderException) {
@@ -478,6 +493,32 @@ class IntentKeyboardService : InputMethodService() {
                 }
             }
         }
+    }
+
+    private fun revertPreview() {
+        if (sensitiveField) return
+
+        val raw = buffer.toString()
+        val hasCurrentPreview = renderedSource == raw && renderedText.isNotBlank()
+        if (!hasCurrentPreview) {
+            statusView?.text = "No current preview to revert."
+            return
+        }
+
+        val connection = currentInputConnection
+        if (
+            ownsCurrentHostComposition(connection) &&
+            hostCompositionText != raw &&
+            !syncHostComposition(raw)
+        ) {
+            statusView?.text = "Could not restore the raw host composition; preview kept."
+            return
+        }
+
+        autoRenderSuppressedSource = raw
+        invalidateRenderedPreview()
+        refreshViews()
+        statusView?.text = "Reverted to raw draft. Edit it or press Render to regenerate."
     }
 
     private fun commitBuffer(): Boolean {
@@ -492,6 +533,10 @@ class IntentKeyboardService : InputMethodService() {
 
         val hasCurrentPreview = renderedSource == raw && renderedText.isNotBlank()
         if (register != Register.RAW && !hasCurrentPreview) {
+            if (raw == autoRenderSuppressedSource) {
+                statusView?.text = "Preview reverted. Press Render, edit the draft, or switch to Raw."
+                return false
+            }
             if (autoRenderJob?.isActive != true && renderJob?.isActive != true) {
                 scheduleAutoRender()
             }
@@ -593,6 +638,7 @@ class IntentKeyboardService : InputMethodService() {
     }
 
     private fun cycleRegister() {
+        autoRenderSuppressedSource = null
         register = when (register) {
             Register.RAW -> Register.NATURAL
             Register.NATURAL -> Register.CIVILIZED
@@ -626,6 +672,7 @@ class IntentKeyboardService : InputMethodService() {
 
     private fun clearInternalBuffer() {
         buffer.clear()
+        autoRenderSuppressedSource = null
         invalidateRenderedPreview()
         refreshViews()
     }
@@ -634,6 +681,8 @@ class IntentKeyboardService : InputMethodService() {
         rawView?.text = if (buffer.isEmpty()) "intent: …" else "intent: $buffer"
         previewView?.text = if (renderedText.isEmpty()) "preview: …" else "preview: $renderedText"
         modeButton?.text = register.name.lowercase().replaceFirstChar { it.titlecase() }
+        revertButton?.isEnabled =
+            !sensitiveField && renderedSource == buffer.toString() && renderedText.isNotBlank()
         pageButton?.text = if (characterPage == CharacterPage.LETTERS) "123" else "ABC"
         shiftButton?.isEnabled = characterPage == CharacterPage.LETTERS
         shiftButton?.text = if (uppercase) "⇧ ON" else "⇧"
