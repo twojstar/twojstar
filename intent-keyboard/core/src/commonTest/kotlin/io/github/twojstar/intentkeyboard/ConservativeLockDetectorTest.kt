@@ -50,4 +50,14 @@ class ConservativeLockDetectorTest {
 
         assertTrue("HTTP://example.com/resource" in values)
     }
+
+    @Test
+    fun keepsInternalApostrophesAndDropsTrailingProsePunctuation() {
+        val text = "Use 'https://example.com/O'Reilly?author=O'Reilly'! Then visit https://example.org?"
+        val values = ConservativeLockDetector.detect(text).map { it.value }
+
+        assertTrue("https://example.com/O'Reilly?author=O'Reilly" in values)
+        assertTrue("https://example.org" in values)
+        assertFalse(values.any { it.endsWith("'!") || it.endsWith("?") })
+    }
 }
