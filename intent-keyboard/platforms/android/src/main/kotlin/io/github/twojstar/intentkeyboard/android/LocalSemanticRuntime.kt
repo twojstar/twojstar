@@ -92,6 +92,7 @@ class LocalSemanticRuntime(
             tone = preferences.tone,
             sourceLanguage = preferences.sourceLanguage,
             targetLanguage = preferences.targetLanguage,
+            recipientProfile = preferences.recipientProfile,
         )
 
         return runtimeMutex.withLock {
