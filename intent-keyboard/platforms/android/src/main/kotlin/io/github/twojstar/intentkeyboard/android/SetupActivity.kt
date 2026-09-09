@@ -351,10 +351,6 @@ class SetupActivity : Activity() {
             !manualModelOperationInProgress && !managedRunning && selection != null
     }
 
-    private fun ManagedModelInstallProgress.isCancellable(): Boolean =
-        this != ManagedModelInstallProgress.Testing &&
-            this != ManagedModelInstallProgress.Activating
-
     private fun isRecommendedModelInstalled(): Boolean =
         managedInstallCoordinator.currentManagedSelection() != null
 
