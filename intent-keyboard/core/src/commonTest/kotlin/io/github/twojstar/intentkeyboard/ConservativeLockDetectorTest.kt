@@ -60,4 +60,14 @@ class ConservativeLockDetectorTest {
         assertTrue("https://example.org" in values)
         assertFalse(values.any { it.endsWith("'!") || it.endsWith("?") })
     }
+
+    @Test
+    fun dropsUnmatchedClosingDelimitersButKeepsBalancedUrlPathDelimiters() {
+        val text = "See (https://example.com). Keep https://example.org/a(b)[c]{d}."
+        val values = ConservativeLockDetector.detect(text).map { it.value }
+
+        assertTrue("https://example.com" in values)
+        assertFalse("https://example.com)" in values)
+        assertTrue("https://example.org/a(b)[c]{d}" in values)
+    }
 }
