@@ -6,6 +6,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.FileOutputStream
 import java.io.IOException
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
@@ -56,6 +57,51 @@ class LocalModelStore(context: Context) {
 
     suspend fun importModel(uri: Uri): LocalModelSelection = withContext(Dispatchers.IO) {
         importModelOnIo(uri)
+    }
+
+    /**
+     * Activates an app-private model file only after its caller has independently verified it.
+     *
+     * Managed downloads use this path after checking the pinned byte count and SHA-256. The file is
+     * moved into the normal model directory when possible; a cancellable copy is used only as a
+     * fallback. Selection changes keep the same rollback semantics as manual document imports.
+     */
+    internal suspend fun installVerifiedModelFile(
+        source: File,
+        displayName: String,
+        sizeBytes: Long,
+    ): LocalModelSelection = withContext(Dispatchers.IO) {
+        if (!displayName.endsWith(".litertlm", ignoreCase = true)) {
+            throw@withContext LocalModelStoreException("Managed models must use the .litertlm format.")
+        }
+        if (sizeBytes <= 0L || !source.isFile || source.length() != sizeBytes) {
+            throw@withContext LocalModelStoreException("The verified model file is incomplete.")
+        }
+
+        val directory = requireModelsDirectory()
+        val target = File(directory, "model-${UUID.randomUUID()}.litertlm")
+        var committed = false
+
+        try {
+            currentCoroutineContext().ensureActive()
+
+            if (!source.renameTo(target)) {
+                copyFile(source, target)
+            }
+
+            currentCoroutineContext().ensureActive()
+            val selection = commitSelectionOnIo(target, displayName, sizeBytes)
+            committed = true
+            source.delete()
+            selection
+        } catch (error: IOException) {
+            throw@withContext LocalModelStoreException(
+                "The verified model could not be moved into private storage.",
+                error,
+            )
+        } finally {
+            if (!committed) target.delete()
+        }
     }
 
     suspend fun confirmSelection(path: String) = withContext(Dispatchers.IO) {
@@ -149,11 +195,7 @@ class LocalModelStore(context: Context) {
             throw LocalModelStoreException("Choose a .litertlm model file.")
         }
 
-        val directory = modelsDirectory()
-        if (!directory.isDirectory && !directory.mkdirs()) {
-            throw LocalModelStoreException("Could not create private storage for local models.")
-        }
-
+        val directory = requireModelsDirectory()
         val target = File(directory, "model-${UUID.randomUUID()}.litertlm")
         val partial = File(directory, "${target.name}.part")
         var committed = false
@@ -171,36 +213,9 @@ class LocalModelStore(context: Context) {
             }
 
             currentCoroutineContext().ensureActive()
-
-            val rollback = rollbackSelectionSnapshot() ?: current()
-            val editor = preferences.edit()
-                .putString(KEY_PATH, target.absolutePath)
-                .putString(KEY_DISPLAY_NAME, displayName)
-                .putLong(KEY_SIZE_BYTES, copiedBytes)
-                .putLong(KEY_REVISION, nextRevision())
-
-            if (rollback == null) {
-                editor
-                    .remove(KEY_ROLLBACK_PATH)
-                    .remove(KEY_ROLLBACK_DISPLAY_NAME)
-                    .remove(KEY_ROLLBACK_SIZE_BYTES)
-            } else {
-                editor
-                    .putString(KEY_ROLLBACK_PATH, rollback.path)
-                    .putString(KEY_ROLLBACK_DISPLAY_NAME, rollback.displayName)
-                    .putLong(KEY_ROLLBACK_SIZE_BYTES, rollback.sizeBytes)
-            }
-
-            committed = editor.commit()
-            if (!committed) {
-                throw LocalModelStoreException("Could not save the local model selection.")
-            }
-
-            return LocalModelSelection(
-                path = target.absolutePath,
-                displayName = displayName,
-                sizeBytes = copiedBytes,
-            )
+            val selection = commitSelectionOnIo(target, displayName, copiedBytes)
+            committed = true
+            return selection
         } catch (error: FileNotFoundException) {
             throw LocalModelStoreException("The selected model file could not be opened.", error)
         } catch (error: SecurityException) {
@@ -211,6 +226,41 @@ class LocalModelStore(context: Context) {
             partial.delete()
             if (!committed) target.delete()
         }
+    }
+
+    private fun commitSelectionOnIo(
+        target: File,
+        displayName: String,
+        sizeBytes: Long,
+    ): LocalModelSelection {
+        val rollback = rollbackSelectionSnapshot() ?: current()
+        val editor = preferences.edit()
+            .putString(KEY_PATH, target.absolutePath)
+            .putString(KEY_DISPLAY_NAME, displayName)
+            .putLong(KEY_SIZE_BYTES, sizeBytes)
+            .putLong(KEY_REVISION, nextRevision())
+
+        if (rollback == null) {
+            editor
+                .remove(KEY_ROLLBACK_PATH)
+                .remove(KEY_ROLLBACK_DISPLAY_NAME)
+                .remove(KEY_ROLLBACK_SIZE_BYTES)
+        } else {
+            editor
+                .putString(KEY_ROLLBACK_PATH, rollback.path)
+                .putString(KEY_ROLLBACK_DISPLAY_NAME, rollback.displayName)
+                .putLong(KEY_ROLLBACK_SIZE_BYTES, rollback.sizeBytes)
+        }
+
+        if (!editor.commit()) {
+            throw LocalModelStoreException("Could not save the local model selection.")
+        }
+
+        return LocalModelSelection(
+            path = target.absolutePath,
+            displayName = displayName,
+            sizeBytes = sizeBytes,
+        )
     }
 
     private suspend fun copyDocument(uri: Uri, destination: File): Long {
@@ -236,6 +286,36 @@ class LocalModelStore(context: Context) {
                 total
             }
         }
+    }
+
+    private suspend fun copyFile(source: File, destination: File) {
+        source.inputStream().buffered().use { input ->
+            FileOutputStream(destination).use { fileOutput ->
+                val output = fileOutput.buffered()
+                try {
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        currentCoroutineContext().ensureActive()
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        if (read == 0) continue
+                        output.write(buffer, 0, read)
+                    }
+                    output.flush()
+                    fileOutput.fd.sync()
+                } finally {
+                    output.close()
+                }
+            }
+        }
+    }
+
+    private fun requireModelsDirectory(): File {
+        val directory = modelsDirectory()
+        if (!directory.isDirectory && !directory.mkdirs()) {
+            throw LocalModelStoreException("Could not create private storage for local models.")
+        }
+        return directory
     }
 
     private fun rollbackSelectionSnapshot(): LocalModelSelection? = readSelection(
