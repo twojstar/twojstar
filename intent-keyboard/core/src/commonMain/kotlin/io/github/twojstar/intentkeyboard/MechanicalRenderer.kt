@@ -80,7 +80,7 @@ object ConservativeLockDetector {
     fun detect(text: String): List<SemanticLock> = buildList {
         sequenceOf(timePattern, suffixMoneyPattern, prefixMoneyPattern)
             .flatMap { pattern -> pattern.findAll(text).map { SemanticLock(it.value) } }
-            .forEach(::add)
+            .forEach { lock -> add(lock) }
 
         urlPattern.findAll(text)
             .mapNotNull { match ->
@@ -88,10 +88,10 @@ object ConservativeLockDetector {
                 val schemeEnd = value.indexOf("://") + 3
                 value.takeIf { schemeEnd >= 3 && it.length > schemeEnd }?.let(::SemanticLock)
             }
-            .forEach(::add)
+            .forEach { lock -> add(lock) }
 
         quotedLiteralPatterns.asSequence()
             .flatMap { pattern -> pattern.findAll(text).map { SemanticLock(it.value) } }
-            .forEach(::add)
+            .forEach { lock -> add(lock) }
     }
 }
