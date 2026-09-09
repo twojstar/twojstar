@@ -58,11 +58,12 @@ The first Android slice is now real rather than a mock app:
 
 1. Install the debug APK produced by `Intent keyboard CI`.
 2. Open **Intent Keyboard** and install the recommended offline model, or import another `.litertlm` model manually.
-3. Enable the keyboard in Android settings and choose it from the system input-method picker.
-4. Type rough text into the keyboard's private intent buffer.
-5. Pick `Raw`, `Natural` or `Civilized`; `Natural` and `Civilized` refresh the semantic preview automatically after a short typing pause. **Render** forces an immediate refresh, and **Commit** inserts the current safe preview into the host app.
+3. Optionally choose a semantic tone plus source/target language hints in the setup screen. Tone stays independent from the register, and the settings persist locally on the device.
+4. Enable the keyboard in Android settings and choose it from the system input-method picker.
+5. Type rough text into the keyboard's private intent buffer.
+6. Pick `Raw`, `Natural` or `Civilized`; `Natural` and `Civilized` refresh the semantic preview automatically after a short typing pause. **Render** forces an immediate refresh, and **Commit** inserts the current safe preview into the host app.
 
-The Android preview uses trailing-edge debounce rather than starting inference on every keypress. Stale renders are cancelled or ignored, and `LocalSemanticRuntime` serializes access to the native engine so only one LiteRT-LM inference owns it at a time. RAW mode does not schedule semantic auto-rendering.
+The Android preview uses trailing-edge debounce rather than starting inference on every keypress. Stale renders are cancelled or ignored, and `LocalSemanticRuntime` serializes access to the native engine so only one LiteRT-LM inference owns it at a time. RAW mode does not schedule semantic auto-rendering. Semantic tone/language preferences are read for each render, so changing presentation settings never replaces the raw intent source. The mechanical fallback remains intentionally limited and may not realize tone or translation requests without a model-backed renderer.
 
 `MechanicalRenderer` remains the deterministic local fallback. The shared core also contains a real model-backed path:
 
