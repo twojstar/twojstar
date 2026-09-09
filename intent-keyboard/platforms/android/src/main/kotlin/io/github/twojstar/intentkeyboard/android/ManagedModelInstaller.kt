@@ -130,7 +130,7 @@ class ManagedModelInstaller(
         activeConnection.get()?.disconnect()
     }
 
-    private fun currentManagedSelection(spec: ManagedModelSpec): LocalModelSelection? {
+    internal fun currentManagedSelection(spec: ManagedModelSpec): LocalModelSelection? {
         val selection = modelStore.current() ?: return null
         if (selection.managedModelId != spec.id) return null
         if (!selection.managedSha256.equals(spec.sha256, ignoreCase = true)) return null
