@@ -1,17 +1,18 @@
 package io.github.twojstar.intentkeyboard.android
 
 import android.content.Context
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import android.util.Base64
 import io.github.twojstar.intentkeyboard.BearerTokenProvider
 import io.github.twojstar.intentkeyboard.OpenAiCompatibleConfig
+import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 
 data class RemoteProviderSettings(
     val enabled: Boolean = false,
@@ -75,6 +76,8 @@ class RemoteProviderStore(context: Context) : BearerTokenProvider {
             decrypt(EncryptedToken(ciphertext = ciphertext, iv = iv))
         } catch (_: GeneralSecurityException) {
             null
+        } catch (_: IOException) {
+            null
         } catch (_: IllegalArgumentException) {
             null
         }
@@ -92,6 +95,8 @@ class RemoteProviderStore(context: Context) : BearerTokenProvider {
         )
     } catch (error: GeneralSecurityException) {
         throw RemoteProviderStoreException("Could not encrypt the provider token.", error)
+    } catch (error: IOException) {
+        throw RemoteProviderStoreException("Could not access Android Keystore.", error)
     }
 
     private fun decrypt(token: EncryptedToken): String {
