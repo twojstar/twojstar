@@ -41,6 +41,18 @@ object SemanticPromptCompiler {
             Tone.FORMAL -> "Use formal, polished language without becoming verbose."
         }
 
+        val recipientRule = when (request.recipientProfile) {
+            RecipientProfile.NONE -> "Do not assume a specific recipient relationship beyond the input."
+            RecipientProfile.FRIEND ->
+                "Assume the recipient is a personally familiar friend. Respect the requested tone and register; do not invent intimacy or facts."
+            RecipientProfile.WORK ->
+                "Assume the recipient is a workplace peer or contact. Respect the requested tone and register; do not invent hierarchy or obligations."
+            RecipientProfile.CLIENT ->
+                "Assume the recipient is a client or customer. Respect the requested tone and register; keep meaning clear without adding sales claims or promises."
+            RecipientProfile.FORMAL_OFFICE ->
+                "Assume the recipient is a formal office or institution. Respect the requested tone and register; avoid invented legal claims, titles, or obligations."
+        }
+
         val verbatimLocks = request.locks
             .filter { it.mode == LockMode.VERBATIM }
             .map { it.value }
@@ -53,6 +65,7 @@ object SemanticPromptCompiler {
             Never invent, infer, remove, or change factual details that are not required by grammar or the requested language.
             $registerRule
             $toneRule
+            $recipientRule
             Return only the final text. Do not add quotes, labels, explanations, markdown, or alternatives.
         """.trimIndent()
 

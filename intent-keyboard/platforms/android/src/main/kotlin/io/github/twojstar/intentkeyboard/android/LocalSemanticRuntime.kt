@@ -62,6 +62,7 @@ private data class LocalModelLoadFailure(
 class LocalSemanticRuntime(
     context: Context,
     private val scope: CoroutineScope,
+    private val onRenderPreferencesChanged: () -> Unit = {},
     private val onStateChanged: (LocalSemanticRuntimeState) -> Unit,
 ) {
     private val appContext = context.applicationContext
@@ -76,13 +77,19 @@ class LocalSemanticRuntime(
     private var activePipeline = fallbackPipeline
     private var activeEngine: Engine? = null
     private var reloadJob: Job? = null
-    private var preferenceListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private var modelPreferenceListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private var renderPreferenceListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
     private var closed = false
 
     fun start() {
-        check(preferenceListener == null) { "LocalSemanticRuntime is already started" }
+        check(modelPreferenceListener == null && renderPreferenceListener == null) {
+            "LocalSemanticRuntime is already started"
+        }
 
-        preferenceListener = store.registerChangeListener(::reload)
+        modelPreferenceListener = store.registerChangeListener(::reload)
+        renderPreferenceListener = renderPreferenceStore.registerChangeListener {
+            if (!closed) onRenderPreferencesChanged()
+        }
         reload()
     }
 
@@ -92,6 +99,7 @@ class LocalSemanticRuntime(
             tone = preferences.tone,
             sourceLanguage = preferences.sourceLanguage,
             targetLanguage = preferences.targetLanguage,
+            recipientProfile = preferences.recipientProfile,
         )
 
         return runtimeMutex.withLock {
@@ -115,8 +123,10 @@ class LocalSemanticRuntime(
         if (closed) return
         closed = true
 
-        preferenceListener?.let(store::unregisterChangeListener)
-        preferenceListener = null
+        modelPreferenceListener?.let(store::unregisterChangeListener)
+        modelPreferenceListener = null
+        renderPreferenceListener?.let(renderPreferenceStore::unregisterChangeListener)
+        renderPreferenceListener = null
 
         val pendingReload = reloadJob
         pendingReload?.cancel()

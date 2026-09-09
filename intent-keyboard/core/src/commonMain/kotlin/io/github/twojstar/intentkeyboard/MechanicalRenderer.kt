@@ -29,6 +29,9 @@ class MechanicalRenderer : SemanticRenderer {
             if (request.tone != Tone.DEFAULT) {
                 add("Mechanical preview does not apply semantic tone changes.")
             }
+            if (request.recipientProfile != RecipientProfile.NONE) {
+                add("Mechanical preview does not apply recipient context.")
+            }
             if (
                 request.targetLanguage != null &&
                 request.targetLanguage != request.sourceLanguage

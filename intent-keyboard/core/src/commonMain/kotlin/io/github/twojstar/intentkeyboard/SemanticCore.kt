@@ -14,6 +14,14 @@ enum class Tone {
     FORMAL,
 }
 
+enum class RecipientProfile {
+    NONE,
+    FRIEND,
+    WORK,
+    CLIENT,
+    FORMAL_OFFICE,
+}
+
 enum class LockMode {
     VERBATIM,
     SEMANTIC,
@@ -31,6 +39,7 @@ data class RenderRequest(
     val sourceLanguage: String? = null,
     val targetLanguage: String? = null,
     val locks: List<SemanticLock> = emptyList(),
+    val recipientProfile: RecipientProfile = RecipientProfile.NONE,
 )
 
 data class RenderResult(
