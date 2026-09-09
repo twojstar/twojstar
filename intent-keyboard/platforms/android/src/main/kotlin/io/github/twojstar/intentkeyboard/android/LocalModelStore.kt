@@ -18,6 +18,8 @@ data class LocalModelSelection(
     val path: String,
     val displayName: String,
     val sizeBytes: Long,
+    val managedModelId: String? = null,
+    val managedSha256: String? = null,
 )
 
 class LocalModelStoreException(
@@ -38,9 +40,11 @@ class LocalModelStore(context: Context) {
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     fun current(): LocalModelSelection? = readSelection(
-        KEY_PATH,
-        KEY_DISPLAY_NAME,
-        KEY_SIZE_BYTES,
+        pathKey = KEY_PATH,
+        displayNameKey = KEY_DISPLAY_NAME,
+        sizeKey = KEY_SIZE_BYTES,
+        managedModelIdKey = KEY_MANAGED_MODEL_ID,
+        managedSha256Key = KEY_MANAGED_SHA256,
     )
 
     fun registerChangeListener(onChanged: () -> Unit): SharedPreferences.OnSharedPreferenceChangeListener {
@@ -70,6 +74,8 @@ class LocalModelStore(context: Context) {
         source: File,
         displayName: String,
         sizeBytes: Long,
+        managedModelId: String,
+        managedSha256: String,
     ): LocalModelSelection = withContext(Dispatchers.IO) {
         var target: File? = null
         var committed = false
@@ -77,6 +83,9 @@ class LocalModelStore(context: Context) {
         try {
             if (!displayName.endsWith(".litertlm", ignoreCase = true)) {
                 throw LocalModelStoreException("Managed models must use the .litertlm format.")
+            }
+            if (managedModelId.isBlank() || managedSha256.isBlank()) {
+                throw LocalModelStoreException("Managed model identity is incomplete.")
             }
             if (sizeBytes <= 0L || !source.isFile || source.length() != sizeBytes) {
                 throw LocalModelStoreException("The verified model file is incomplete.")
@@ -91,7 +100,13 @@ class LocalModelStore(context: Context) {
             }
 
             currentCoroutineContext().ensureActive()
-            val selection = commitSelectionOnIo(target, displayName, sizeBytes)
+            val selection = commitSelectionOnIo(
+                target = target,
+                displayName = displayName,
+                sizeBytes = sizeBytes,
+                managedModelId = managedModelId,
+                managedSha256 = managedSha256,
+            )
             committed = true
             deleteBestEffort(source)
             selection
@@ -117,6 +132,8 @@ class LocalModelStore(context: Context) {
             .remove(KEY_ROLLBACK_PATH)
             .remove(KEY_ROLLBACK_DISPLAY_NAME)
             .remove(KEY_ROLLBACK_SIZE_BYTES)
+            .remove(KEY_ROLLBACK_MANAGED_MODEL_ID)
+            .remove(KEY_ROLLBACK_MANAGED_SHA256)
             .commit()
 
         if (!committed) {
@@ -132,17 +149,23 @@ class LocalModelStore(context: Context) {
             .remove(KEY_ROLLBACK_PATH)
             .remove(KEY_ROLLBACK_DISPLAY_NAME)
             .remove(KEY_ROLLBACK_SIZE_BYTES)
+            .remove(KEY_ROLLBACK_MANAGED_MODEL_ID)
+            .remove(KEY_ROLLBACK_MANAGED_SHA256)
 
         if (rollback == null) {
             editor
                 .remove(KEY_PATH)
                 .remove(KEY_DISPLAY_NAME)
                 .remove(KEY_SIZE_BYTES)
+                .remove(KEY_MANAGED_MODEL_ID)
+                .remove(KEY_MANAGED_SHA256)
         } else {
             editor
                 .putString(KEY_PATH, rollback.path)
                 .putString(KEY_DISPLAY_NAME, rollback.displayName)
                 .putLong(KEY_SIZE_BYTES, rollback.sizeBytes)
+                .putOptionalString(KEY_MANAGED_MODEL_ID, rollback.managedModelId)
+                .putOptionalString(KEY_MANAGED_SHA256, rollback.managedSha256)
         }
 
         if (!editor.commit()) {
@@ -157,9 +180,13 @@ class LocalModelStore(context: Context) {
             .remove(KEY_PATH)
             .remove(KEY_DISPLAY_NAME)
             .remove(KEY_SIZE_BYTES)
+            .remove(KEY_MANAGED_MODEL_ID)
+            .remove(KEY_MANAGED_SHA256)
             .remove(KEY_ROLLBACK_PATH)
             .remove(KEY_ROLLBACK_DISPLAY_NAME)
             .remove(KEY_ROLLBACK_SIZE_BYTES)
+            .remove(KEY_ROLLBACK_MANAGED_MODEL_ID)
+            .remove(KEY_ROLLBACK_MANAGED_SHA256)
             .putLong(KEY_REVISION, nextRevision())
             .commit()
 
@@ -219,7 +246,13 @@ class LocalModelStore(context: Context) {
             }
 
             currentCoroutineContext().ensureActive()
-            val selection = commitSelectionOnIo(target, displayName, copiedBytes)
+            val selection = commitSelectionOnIo(
+                target = target,
+                displayName = displayName,
+                sizeBytes = copiedBytes,
+                managedModelId = null,
+                managedSha256 = null,
+            )
             committed = true
             return selection
         } catch (error: FileNotFoundException) {
@@ -238,12 +271,16 @@ class LocalModelStore(context: Context) {
         target: File,
         displayName: String,
         sizeBytes: Long,
+        managedModelId: String?,
+        managedSha256: String?,
     ): LocalModelSelection {
         val rollback = rollbackSelectionSnapshot() ?: current()
         val editor = preferences.edit()
             .putString(KEY_PATH, target.absolutePath)
             .putString(KEY_DISPLAY_NAME, displayName)
             .putLong(KEY_SIZE_BYTES, sizeBytes)
+            .putOptionalString(KEY_MANAGED_MODEL_ID, managedModelId)
+            .putOptionalString(KEY_MANAGED_SHA256, managedSha256)
             .putLong(KEY_REVISION, nextRevision())
 
         if (rollback == null) {
@@ -251,11 +288,15 @@ class LocalModelStore(context: Context) {
                 .remove(KEY_ROLLBACK_PATH)
                 .remove(KEY_ROLLBACK_DISPLAY_NAME)
                 .remove(KEY_ROLLBACK_SIZE_BYTES)
+                .remove(KEY_ROLLBACK_MANAGED_MODEL_ID)
+                .remove(KEY_ROLLBACK_MANAGED_SHA256)
         } else {
             editor
                 .putString(KEY_ROLLBACK_PATH, rollback.path)
                 .putString(KEY_ROLLBACK_DISPLAY_NAME, rollback.displayName)
                 .putLong(KEY_ROLLBACK_SIZE_BYTES, rollback.sizeBytes)
+                .putOptionalString(KEY_ROLLBACK_MANAGED_MODEL_ID, rollback.managedModelId)
+                .putOptionalString(KEY_ROLLBACK_MANAGED_SHA256, rollback.managedSha256)
         }
 
         if (!editor.commit()) {
@@ -266,6 +307,8 @@ class LocalModelStore(context: Context) {
             path = target.absolutePath,
             displayName = displayName,
             sizeBytes = sizeBytes,
+            managedModelId = managedModelId,
+            managedSha256 = managedSha256,
         )
     }
 
@@ -333,15 +376,19 @@ class LocalModelStore(context: Context) {
     }
 
     private fun rollbackSelectionSnapshot(): LocalModelSelection? = readSelection(
-        KEY_ROLLBACK_PATH,
-        KEY_ROLLBACK_DISPLAY_NAME,
-        KEY_ROLLBACK_SIZE_BYTES,
+        pathKey = KEY_ROLLBACK_PATH,
+        displayNameKey = KEY_ROLLBACK_DISPLAY_NAME,
+        sizeKey = KEY_ROLLBACK_SIZE_BYTES,
+        managedModelIdKey = KEY_ROLLBACK_MANAGED_MODEL_ID,
+        managedSha256Key = KEY_ROLLBACK_MANAGED_SHA256,
     )
 
     private fun readSelection(
         pathKey: String,
         displayNameKey: String,
         sizeKey: String,
+        managedModelIdKey: String,
+        managedSha256Key: String,
     ): LocalModelSelection? {
         val path = preferences.getString(pathKey, null) ?: return null
         val displayName = preferences.getString(displayNameKey, null) ?: File(path).name
@@ -351,8 +398,15 @@ class LocalModelStore(context: Context) {
             path = path,
             displayName = displayName,
             sizeBytes = sizeBytes,
+            managedModelId = preferences.getString(managedModelIdKey, null),
+            managedSha256 = preferences.getString(managedSha256Key, null),
         )
     }
+
+    private fun SharedPreferences.Editor.putOptionalString(
+        key: String,
+        value: String?,
+    ): SharedPreferences.Editor = if (value == null) remove(key) else putString(key, value)
 
     private fun queryDisplayName(uri: Uri): String? =
         appContext.contentResolver.query(
@@ -376,9 +430,13 @@ class LocalModelStore(context: Context) {
         const val KEY_PATH = "path"
         const val KEY_DISPLAY_NAME = "display_name"
         const val KEY_SIZE_BYTES = "size_bytes"
+        const val KEY_MANAGED_MODEL_ID = "managed_model_id"
+        const val KEY_MANAGED_SHA256 = "managed_sha256"
         const val KEY_ROLLBACK_PATH = "rollback_path"
         const val KEY_ROLLBACK_DISPLAY_NAME = "rollback_display_name"
         const val KEY_ROLLBACK_SIZE_BYTES = "rollback_size_bytes"
+        const val KEY_ROLLBACK_MANAGED_MODEL_ID = "rollback_managed_model_id"
+        const val KEY_ROLLBACK_MANAGED_SHA256 = "rollback_managed_sha256"
         const val KEY_REVISION = "revision"
     }
 }
