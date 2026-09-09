@@ -53,6 +53,10 @@ class ManagedModelInstallCoordinator private constructor(context: Context) {
         listeners -= listener
     }
 
+    fun currentManagedSelection(
+        spec: ManagedModelSpec = ManagedModelCatalog.recommended,
+    ): LocalModelSelection? = installer.currentManagedSelection(spec)
+
     fun start(spec: ManagedModelSpec = ManagedModelCatalog.recommended) {
         if (installJob?.isActive == true) return
 
@@ -65,14 +69,26 @@ class ManagedModelInstallCoordinator private constructor(context: Context) {
                     }
                 }
                 publish(ManagedModelInstallState.Completed(selection))
-            } catch (error: CancellationException) {
+            } catch (_: CancellationException) {
                 withContext(NonCancellable + Dispatchers.Main.immediate) {
-                    publish(ManagedModelInstallState.Cancelled)
+                    val committedSelection = installer.currentManagedSelection(spec)
+                    if (committedSelection != null) {
+                        publish(ManagedModelInstallState.Completed(committedSelection))
+                    } else {
+                        publish(ManagedModelInstallState.Cancelled)
+                    }
                 }
             } catch (error: ManagedModelInstallException) {
                 publish(
                     ManagedModelInstallState.Failed(
                         message = error.message ?: "Offline model installation failed.",
+                        cause = error,
+                    ),
+                )
+            } catch (error: Exception) {
+                publish(
+                    ManagedModelInstallState.Failed(
+                        message = "Offline model installation failed unexpectedly.",
                         cause = error,
                     ),
                 )
@@ -83,6 +99,9 @@ class ManagedModelInstallCoordinator private constructor(context: Context) {
     }
 
     fun cancel() {
+        val running = currentState as? ManagedModelInstallState.Running ?: return
+        if (running.progress == ManagedModelInstallProgress.Activating) return
+
         val job = installJob ?: return
         job.cancel()
         installer.cancelActiveDownload()
