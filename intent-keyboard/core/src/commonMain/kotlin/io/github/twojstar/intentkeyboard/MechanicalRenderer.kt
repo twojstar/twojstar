@@ -65,9 +65,33 @@ object ConservativeLockDetector {
         """(?<!\w)[+-]?$CURRENCY_PATTERN\s?$NUMBER_PATTERN(?!\w)""",
         RegexOption.IGNORE_CASE,
     )
+    private val urlPattern = Regex(
+        """https?://[^\s<>"'`]+""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val quotedLiteralPatterns = listOf(
+        Regex("\"[^\"\\r\\n]+\""),
+        Regex("“[^”\\r\\n]+”"),
+        Regex("„[^”\\r\\n]+”"),
+        Regex("`[^`\\r\\n]+`"),
+    )
+    private val urlTrailingPunctuation = setOf('.', ',', ';', ':')
 
-    fun detect(text: String): List<SemanticLock> =
+    fun detect(text: String): List<SemanticLock> = buildList {
         sequenceOf(timePattern, suffixMoneyPattern, prefixMoneyPattern)
             .flatMap { pattern -> pattern.findAll(text).map { SemanticLock(it.value) } }
-            .toList()
+            .forEach(::add)
+
+        urlPattern.findAll(text)
+            .mapNotNull { match ->
+                val value = match.value.trimEnd { it in urlTrailingPunctuation }
+                val schemeEnd = value.indexOf("://") + 3
+                value.takeIf { schemeEnd >= 3 && it.length > schemeEnd }?.let(::SemanticLock)
+            }
+            .forEach(::add)
+
+        quotedLiteralPatterns.asSequence()
+            .flatMap { pattern -> pattern.findAll(text).map { SemanticLock(it.value) } }
+            .forEach(::add)
+    }
 }
