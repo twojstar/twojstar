@@ -301,13 +301,20 @@ class IntentKeyboardService : InputMethodService() {
         autoRenderJob?.cancel()
         autoRenderJob = null
 
-        if (sensitiveField || register == Register.RAW) return
+        if (sensitiveField) return
+        if (register == Register.RAW) {
+            clearTransientRenderStatus()
+            return
+        }
 
         val raw = buffer.toString()
-        if (raw.isBlank()) return
+        if (raw.isBlank()) {
+            clearTransientRenderStatus()
+            return
+        }
 
         val generation = renderGeneration
-        statusView?.text = "Preview updates after a short pause…"
+        statusView?.text = STATUS_PREVIEW_PENDING
         autoRenderJob = scope.launch {
             delay(AUTO_RENDER_DEBOUNCE_MS)
             if (
@@ -346,7 +353,7 @@ class IntentKeyboardService : InputMethodService() {
         renderJob?.cancel()
         val requestedRegister = register
         val generation = ++renderGeneration
-        statusView?.text = "Rendering…"
+        statusView?.text = STATUS_RENDERING
 
         renderJob = scope.launch {
             try {
@@ -441,6 +448,13 @@ class IntentKeyboardService : InputMethodService() {
         renderedSource = ""
         renderedText = ""
         renderedCanCommit = true
+    }
+
+    private fun clearTransientRenderStatus() {
+        val status = statusView?.text?.toString() ?: return
+        if (status == STATUS_PREVIEW_PENDING || status == STATUS_RENDERING) {
+            statusView?.text = ""
+        }
     }
 
     private fun clearInternalBuffer() {
@@ -542,5 +556,7 @@ class IntentKeyboardService : InputMethodService() {
 
     private companion object {
         const val AUTO_RENDER_DEBOUNCE_MS = 450L
+        const val STATUS_PREVIEW_PENDING = "Preview updates after a short pause…"
+        const val STATUS_RENDERING = "Rendering…"
     }
 }
