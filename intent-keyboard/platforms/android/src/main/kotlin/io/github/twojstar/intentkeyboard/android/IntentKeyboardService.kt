@@ -402,6 +402,10 @@ class IntentKeyboardService : InputMethodService() {
         val raw = buffer.toString()
         if (raw.isEmpty()) return true
 
+        if (raw.isBlank()) {
+            return commitOutput(raw)
+        }
+
         val hasCurrentPreview = renderedSource == raw && renderedText.isNotBlank()
         if (register != Register.RAW && !hasCurrentPreview) {
             if (autoRenderJob?.isActive != true && renderJob?.isActive != true) {
@@ -417,6 +421,10 @@ class IntentKeyboardService : InputMethodService() {
         }
 
         val output = if (register == Register.RAW) raw else renderedText
+        return commitOutput(output)
+    }
+
+    private fun commitOutput(output: String): Boolean {
         val connection = currentInputConnection
         if (connection == null || !connection.commitText(output, 1)) {
             statusView?.text = "Commit failed. Draft preserved."
