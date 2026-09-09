@@ -135,26 +135,27 @@ private class DesktopIntentWindow(
         val generation = uiGeneration
         statusLabel.text = "Rendering…"
         renderJob = scope.launch {
-            try {
-                session.render()
-                SwingUtilities.invokeLater {
-                    if (generation != uiGeneration) return@invokeLater
-                    val state = session.currentState()
-                    applyState(state)
-                    statusLabel.text = when {
+            val attempt = runCatching { session.render() }
+            val failure = attempt.exceptionOrNull()
+            when (failure) {
+                is CancellationException -> throw failure
+                null, is SemanticRenderException -> Unit
+                else -> throw failure
+            }
+
+            SwingUtilities.invokeLater {
+                if (generation != uiGeneration) return@invokeLater
+                val state = session.currentState()
+                applyState(state)
+                statusLabel.text = if (failure is SemanticRenderException) {
+                    "Render failed: ${failure.message ?: "renderer error"}"
+                } else {
+                    when {
                         state.previewText == null -> "Draft changed before rendering completed."
                         state.warnings.isNotEmpty() -> state.warnings.joinToString(" · ")
                         state.canCopy -> "Preview ready to copy."
                         else -> "Preview is not safe to copy."
                     }
-                }
-            } catch (_: CancellationException) {
-                // A newer edit or render owns the UI now.
-            } catch (error: SemanticRenderException) {
-                SwingUtilities.invokeLater {
-                    if (generation != uiGeneration) return@invokeLater
-                    applyState(session.currentState())
-                    statusLabel.text = "Render failed: ${error.message ?: "renderer error"}"
                 }
             }
         }
