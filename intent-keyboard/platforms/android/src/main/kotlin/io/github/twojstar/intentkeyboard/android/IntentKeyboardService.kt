@@ -396,12 +396,20 @@ class IntentKeyboardService : InputMethodService() {
         if (raw.isEmpty()) return true
 
         val hasCurrentPreview = renderedSource == raw && renderedText.isNotBlank()
+        if (register != Register.RAW && !hasCurrentPreview) {
+            if (autoRenderJob?.isActive != true && renderJob?.isActive != true) {
+                scheduleAutoRender()
+            }
+            statusView?.text = "Preview is not ready yet. Wait, press Render, or switch to Raw."
+            return false
+        }
+
         if (hasCurrentPreview && !renderedCanCommit) {
             statusView?.text = "Commit blocked until protected values are preserved."
             return false
         }
 
-        val output = if (hasCurrentPreview) renderedText else raw
+        val output = if (register == Register.RAW) raw else renderedText
         val connection = currentInputConnection
         if (connection == null || !connection.commitText(output, 1)) {
             statusView?.text = "Commit failed. Draft preserved."
