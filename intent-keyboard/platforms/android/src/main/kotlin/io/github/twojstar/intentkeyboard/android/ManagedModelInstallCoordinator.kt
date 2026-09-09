@@ -22,6 +22,10 @@ sealed interface ManagedModelInstallState {
     ) : ManagedModelInstallState
 }
 
+internal fun ManagedModelInstallProgress.isCancellable(): Boolean =
+    this != ManagedModelInstallProgress.Testing &&
+        this != ManagedModelInstallProgress.Activating
+
 /**
  * Process-scoped owner for the long-running managed model install.
  *
@@ -106,10 +110,6 @@ class ManagedModelInstallCoordinator private constructor(context: Context) {
         job.cancel()
         installer.cancelActiveDownload()
     }
-
-    private fun ManagedModelInstallProgress.isCancellable(): Boolean =
-        this != ManagedModelInstallProgress.Testing &&
-            this != ManagedModelInstallProgress.Activating
 
     private fun publish(state: ManagedModelInstallState) {
         currentState = state
