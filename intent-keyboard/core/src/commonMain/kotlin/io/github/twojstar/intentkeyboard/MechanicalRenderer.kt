@@ -76,6 +76,7 @@ object ConservativeLockDetector {
         Regex("`[^`\\r\\n]+`"),
     )
     private val urlTrailingPunctuation = setOf('.', ',', ';', ':', '!', '?', '\'')
+    private val urlDelimiterPairs = listOf('(' to ')', '[' to ']', '{' to '}')
 
     fun detect(text: String): List<SemanticLock> = buildList {
         sequenceOf(timePattern, suffixMoneyPattern, prefixMoneyPattern)
@@ -84,7 +85,7 @@ object ConservativeLockDetector {
 
         urlPattern.findAll(text)
             .mapNotNull { match ->
-                val value = match.value.trimEnd { it in urlTrailingPunctuation }
+                val value = normalizeUrlBoundary(match.value)
                 val schemeEnd = value.indexOf("://") + 3
                 value.takeIf { schemeEnd >= 3 && it.length > schemeEnd }?.let(::SemanticLock)
             }
@@ -93,5 +94,19 @@ object ConservativeLockDetector {
         quotedLiteralPatterns.asSequence()
             .flatMap { pattern -> pattern.findAll(text).map { SemanticLock(it.value) } }
             .forEach { lock -> add(lock) }
+    }
+
+    private fun normalizeUrlBoundary(rawValue: String): String {
+        var value = rawValue.trimEnd { it in urlTrailingPunctuation }
+
+        urlDelimiterPairs.forEach { (open, close) ->
+            var excessClosers = value.count { it == close } - value.count { it == open }
+            while (excessClosers > 0 && value.lastOrNull() == close) {
+                value = value.dropLast(1)
+                excessClosers -= 1
+            }
+        }
+
+        return value.trimEnd { it in urlTrailingPunctuation }
     }
 }
