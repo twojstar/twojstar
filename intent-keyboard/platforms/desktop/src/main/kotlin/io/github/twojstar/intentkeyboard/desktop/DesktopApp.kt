@@ -1,11 +1,14 @@
 package io.github.twojstar.intentkeyboard.desktop
 
+import io.github.twojstar.intentkeyboard.RecipientProfile
 import io.github.twojstar.intentkeyboard.Register
 import io.github.twojstar.intentkeyboard.SemanticRenderException
+import io.github.twojstar.intentkeyboard.Tone
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.Font
+import java.awt.GridLayout
 import java.awt.event.WindowAdapter
 import java.awt.event.WindowEvent
 import javax.swing.BorderFactory
@@ -16,6 +19,7 @@ import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.JTextArea
+import javax.swing.JTextField
 import javax.swing.SwingUtilities
 import javax.swing.WindowConstants
 import javax.swing.event.DocumentEvent
@@ -40,6 +44,10 @@ private class DesktopIntentWindow(
     private val rawArea = JTextArea(8, 64)
     private val previewArea = JTextArea(8, 64)
     private val registerBox = JComboBox(Register.entries.toTypedArray())
+    private val toneBox = JComboBox(Tone.entries.toTypedArray())
+    private val recipientBox = JComboBox(RecipientProfile.entries.toTypedArray())
+    private val sourceLanguageField = JTextField(10)
+    private val targetLanguageField = JTextField(10)
     private val revertButton = JButton("Revert")
     private val copyButton = JButton("Copy")
     private val statusLabel = JLabel("Type an intent, render it, then copy the safe output.")
@@ -61,6 +69,27 @@ private class DesktopIntentWindow(
             applyState(session.setRegister(selected))
             statusLabel.text = "Register changed. Render a fresh preview before copying."
         }
+
+        toneBox.selectedItem = Tone.DEFAULT
+        toneBox.addActionListener {
+            val selected = toneBox.selectedItem as? Tone ?: return@addActionListener
+            renderSettingChanged(session.setTone(selected))
+        }
+
+        recipientBox.selectedItem = RecipientProfile.NONE
+        recipientBox.addActionListener {
+            val selected = recipientBox.selectedItem as? RecipientProfile ?: return@addActionListener
+            renderSettingChanged(session.setRecipientProfile(selected))
+        }
+
+        sourceLanguageField.toolTipText = "Optional source language hint, e.g. Polish"
+        targetLanguageField.toolTipText = "Optional target language, e.g. English"
+        sourceLanguageField.document.addDocumentListener(languageListener {
+            session.setSourceLanguage(sourceLanguageField.text)
+        })
+        targetLanguageField.document.addDocumentListener(languageListener {
+            session.setTargetLanguage(targetLanguageField.text)
+        })
 
         rawArea.document.addDocumentListener(object : DocumentListener {
             override fun insertUpdate(event: DocumentEvent) = draftChanged()
@@ -84,12 +113,26 @@ private class DesktopIntentWindow(
         }
         copyButton.addActionListener { copyCurrentOutput() }
 
-        val controls = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
+        val primaryControls = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
             add(JLabel("Register:"))
             add(registerBox)
             add(renderButton)
             add(revertButton)
             add(copyButton)
+        }
+        val renderSettings = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
+            add(JLabel("Tone:"))
+            add(toneBox)
+            add(JLabel("Recipient:"))
+            add(recipientBox)
+            add(JLabel("Source:"))
+            add(sourceLanguageField)
+            add(JLabel("Target:"))
+            add(targetLanguageField)
+        }
+        val controls = JPanel(GridLayout(2, 1, 0, 4)).apply {
+            add(primaryControls)
+            add(renderSettings)
         }
 
         val content = JPanel(BorderLayout(8, 8)).apply {
@@ -117,7 +160,7 @@ private class DesktopIntentWindow(
             }
         })
         frame.contentPane = content
-        frame.minimumSize = Dimension(640, 460)
+        frame.minimumSize = Dimension(760, 500)
         frame.pack()
         frame.setLocationRelativeTo(null)
         applyState(session.currentState())
@@ -129,6 +172,23 @@ private class DesktopIntentWindow(
         applyState(session.updateRawIntent(rawArea.text))
         statusLabel.text = "Draft changed. Render a fresh preview before copying."
     }
+
+    private fun renderSettingChanged(state: DesktopIntentState) {
+        invalidatePendingUi()
+        applyState(state)
+        statusLabel.text = "Render settings changed. Render a fresh preview before copying."
+    }
+
+    private fun languageListener(update: () -> DesktopIntentState): DocumentListener =
+        object : DocumentListener {
+            override fun insertUpdate(event: DocumentEvent) = changed()
+            override fun removeUpdate(event: DocumentEvent) = changed()
+            override fun changedUpdate(event: DocumentEvent) = changed()
+
+            private fun changed() {
+                renderSettingChanged(update())
+            }
+        }
 
     private fun renderCurrentDraft() {
         invalidatePendingUi()
@@ -151,7 +211,7 @@ private class DesktopIntentWindow(
                     "Render failed: ${failure.message ?: "renderer error"}"
                 } else {
                     when {
-                        state.previewText == null -> "Draft changed before rendering completed."
+                        state.previewText == null -> "Draft or settings changed before rendering completed."
                         state.warnings.isNotEmpty() -> state.warnings.joinToString(" · ")
                         state.canCopy -> "Preview ready to copy."
                         else -> "Preview is not safe to copy."
