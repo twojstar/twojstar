@@ -190,7 +190,7 @@ class SetupActivity : Activity() {
     private fun toggleManagedModelInstall() {
         when (val state = managedInstallCoordinator.state) {
             is ManagedModelInstallState.Running -> {
-                if (state.progress != ManagedModelInstallProgress.Activating) {
+                if (state.progress.isCancellable()) {
                     managedInstallCoordinator.cancel()
                 }
             }
@@ -324,20 +324,23 @@ class SetupActivity : Activity() {
 
     private fun updateModelControls() {
         val runningState = managedInstallCoordinator.state as? ManagedModelInstallState.Running
-        val activationInProgress = runningState?.progress == ManagedModelInstallProgress.Activating
         val managedRunning = runningState != null
+        val nonCancellablePhase = runningState?.progress?.let { !it.isCancellable() } == true
         val selection = modelStore.current()
         val recommendedInstalled = isRecommendedModelInstalled()
 
         installRecommendedModelButton?.apply {
             text = when {
-                activationInProgress -> getString(R.string.model_download_activating)
+                runningState?.progress == ManagedModelInstallProgress.Testing ->
+                    getString(R.string.model_download_testing)
+                runningState?.progress == ManagedModelInstallProgress.Activating ->
+                    getString(R.string.model_download_activating)
                 managedRunning -> getString(R.string.cancel_model_download)
                 recommendedInstalled -> getString(R.string.recommended_model_installed)
                 else -> getString(R.string.install_recommended_model)
             }
             isEnabled = when {
-                activationInProgress -> false
+                nonCancellablePhase -> false
                 managedRunning -> true
                 else -> !manualModelOperationInProgress && !recommendedInstalled
             }
@@ -347,6 +350,10 @@ class SetupActivity : Activity() {
         clearModelButton?.isEnabled =
             !manualModelOperationInProgress && !managedRunning && selection != null
     }
+
+    private fun ManagedModelInstallProgress.isCancellable(): Boolean =
+        this != ManagedModelInstallProgress.Testing &&
+            this != ManagedModelInstallProgress.Activating
 
     private fun isRecommendedModelInstalled(): Boolean =
         managedInstallCoordinator.currentManagedSelection() != null
