@@ -7,11 +7,19 @@ final class KeyboardViewController: UIInputViewController {
         case numbers
     }
 
+    private struct RenderPreferenceSnapshot: Equatable {
+        let toneName: String
+        let sourceLanguage: String?
+        let targetLanguage: String?
+        let recipientProfileName: String
+    }
+
     private static let autoRenderDebounceNanoseconds: UInt64 = 450_000_000
     private static let statusPreviewPending = "Preview updates after a short pause…"
     private static let statusRendering = "Rendering…"
 
     private let semanticBridge = IosSemanticBridge()
+    private let renderPreferences = KeyboardRenderPreferences()
     private let registerNames = ["RAW", "NATURAL", "CIVILIZED"]
 
     private var rawIntent = ""
@@ -30,6 +38,7 @@ final class KeyboardViewController: UIInputViewController {
     private let previewLabel = UILabel()
     private let statusLabel = UILabel()
     private let registerButton = UIButton(type: .system)
+    private let preferencesButton = UIButton(type: .system)
     private let revertButton = UIButton(type: .system)
     private let pageButton = UIButton(type: .system)
     private let enterButton = UIButton(type: .system)
@@ -92,6 +101,12 @@ final class KeyboardViewController: UIInputViewController {
             self?.cycleRegister()
         }, for: .touchUpInside)
 
+        preferencesButton.configuration = compactButtonConfiguration(filled: false)
+        preferencesButton.setTitle("Prefs", for: .normal)
+        preferencesButton.showsMenuAsPrimaryAction = true
+        preferencesButton.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        refreshPreferencesMenu()
+
         let renderButton = makeControlButton("Render") { [weak self] in
             self?.renderBuffer()
         }
@@ -107,7 +122,13 @@ final class KeyboardViewController: UIInputViewController {
             self?.commitBuffer()
         }
 
-        let toolbar = makeRow([registerButton, renderButton, revertButton, commitButton])
+        let toolbar = makeRow([
+            registerButton,
+            preferencesButton,
+            renderButton,
+            revertButton,
+            commitButton,
+        ])
 
         keysStack.axis = .vertical
         keysStack.spacing = 3
@@ -131,6 +152,76 @@ final class KeyboardViewController: UIInputViewController {
             rootStack.topAnchor.constraint(equalTo: view.topAnchor, constant: 4),
             rootStack.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -4),
         ])
+    }
+
+    private func refreshPreferencesMenu() {
+        let toneMenu = UIMenu(
+            title: "Tone",
+            children: KeyboardRenderPreferences.ToneOption.allCases.map { option in
+                UIAction(
+                    title: option.label,
+                    state: option == renderPreferences.tone ? .on : .off
+                ) { [weak self] _ in
+                    self?.renderPreferences.setTone(option)
+                    self?.renderPreferencesChanged()
+                }
+            }
+        )
+        let recipientMenu = UIMenu(
+            title: "Recipient",
+            children: KeyboardRenderPreferences.RecipientOption.allCases.map { option in
+                UIAction(
+                    title: option.label,
+                    state: option == renderPreferences.recipient ? .on : .off
+                ) { [weak self] _ in
+                    self?.renderPreferences.setRecipient(option)
+                    self?.renderPreferencesChanged()
+                }
+            }
+        )
+        let sourceMenu = UIMenu(
+            title: "Source language",
+            children: KeyboardRenderPreferences.LanguageOption.allCases.map { option in
+                UIAction(
+                    title: option.label,
+                    state: option == renderPreferences.sourceLanguage ? .on : .off
+                ) { [weak self] _ in
+                    self?.renderPreferences.setSourceLanguage(option)
+                    self?.renderPreferencesChanged()
+                }
+            }
+        )
+        let targetMenu = UIMenu(
+            title: "Target language",
+            children: KeyboardRenderPreferences.LanguageOption.allCases.map { option in
+                UIAction(
+                    title: option.label,
+                    state: option == renderPreferences.targetLanguage ? .on : .off
+                ) { [weak self] _ in
+                    self?.renderPreferences.setTargetLanguage(option)
+                    self?.renderPreferencesChanged()
+                }
+            }
+        )
+
+        preferencesButton.menu = UIMenu(children: [toneMenu, recipientMenu, sourceMenu, targetMenu])
+    }
+
+    private func renderPreferencesChanged() {
+        autoRenderSuppressedSource = nil
+        invalidateRenderedPreview()
+        refreshPreferencesMenu()
+        refreshViews()
+        scheduleAutoRender()
+    }
+
+    private func renderPreferenceSnapshot() -> RenderPreferenceSnapshot {
+        RenderPreferenceSnapshot(
+            toneName: renderPreferences.tone.rawValue,
+            sourceLanguage: renderPreferences.sourceLanguage.language,
+            targetLanguage: renderPreferences.targetLanguage.language,
+            recipientProfileName: renderPreferences.recipient.rawValue
+        )
     }
 
     private func rebuildCharacterRows() {
@@ -368,6 +459,7 @@ final class KeyboardViewController: UIInputViewController {
         }
 
         let generation = renderGeneration
+        let preferences = renderPreferenceSnapshot()
         statusLabel.text = Self.statusPreviewPending
         refreshCompactLayout()
 
@@ -384,6 +476,7 @@ final class KeyboardViewController: UIInputViewController {
             guard source == rawIntent else { return }
             guard source != autoRenderSuppressedSource else { return }
             guard registerName == registerNames[registerIndex] else { return }
+            guard preferences == renderPreferenceSnapshot() else { return }
 
             autoRenderTask = nil
             renderBuffer(fromAutoPreview: true)
@@ -406,6 +499,7 @@ final class KeyboardViewController: UIInputViewController {
         renderTask?.cancel()
         let source = rawIntent
         let registerName = registerNames[registerIndex]
+        let preferences = renderPreferenceSnapshot()
         renderGeneration &+= 1
         let generation = renderGeneration
         statusLabel.text = Self.statusRendering
@@ -422,13 +516,18 @@ final class KeyboardViewController: UIInputViewController {
             do {
                 let result = try await semanticBridge.render(
                     rawIntent: source,
-                    registerName: registerName
+                    registerName: registerName,
+                    toneName: preferences.toneName,
+                    sourceLanguage: preferences.sourceLanguage,
+                    targetLanguage: preferences.targetLanguage,
+                    recipientProfileName: preferences.recipientProfileName
                 )
 
                 guard !Task.isCancelled else { return }
                 guard generation == renderGeneration else { return }
                 guard source == rawIntent else { return }
                 guard registerName == registerNames[registerIndex] else { return }
+                guard preferences == renderPreferenceSnapshot() else { return }
 
                 renderedSource = source
                 renderedText = result.text
@@ -448,6 +547,7 @@ final class KeyboardViewController: UIInputViewController {
             } catch {
                 guard !Task.isCancelled else { return }
                 guard generation == renderGeneration else { return }
+                guard preferences == renderPreferenceSnapshot() else { return }
                 statusLabel.text = "Render failed: \(error.localizedDescription)"
                 refreshCompactLayout()
             }
