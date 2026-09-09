@@ -44,13 +44,13 @@ object SemanticPromptCompiler {
         val recipientRule = when (request.recipientProfile) {
             RecipientProfile.NONE -> "Do not assume a specific recipient relationship beyond the input."
             RecipientProfile.FRIEND ->
-                "Write for a friend: natural, familiar, and relaxed, without inventing intimacy or extra facts."
+                "Assume the recipient is a personally familiar friend. Respect the requested tone and register; do not invent intimacy or facts."
             RecipientProfile.WORK ->
-                "Write for a work contact: concise, cooperative, and professionally casual."
+                "Assume the recipient is a workplace peer or contact. Respect the requested tone and register; do not invent hierarchy or obligations."
             RecipientProfile.CLIENT ->
-                "Write for a client: clear, courteous, professional, and direct without sales language."
+                "Assume the recipient is a client or customer. Respect the requested tone and register; keep meaning clear without adding sales claims or promises."
             RecipientProfile.FORMAL_OFFICE ->
-                "Write for a formal office or institution: respectful, precise, and appropriately formal without legalistic padding."
+                "Assume the recipient is a formal office or institution. Respect the requested tone and register; avoid invented legal claims, titles, or obligations."
         }
 
         val verbatimLocks = request.locks
