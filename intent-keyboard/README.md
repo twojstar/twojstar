@@ -46,7 +46,7 @@ The shared engine lives in Kotlin Multiplatform `commonMain` code. Platform inte
 
 - **Android**: system IME using `InputMethodService`.
 - **iOS/iPadOS**: Keyboard Extension using `UIInputViewController`.
-- **Desktop**: native/system text-input adapter or companion insertion layer, explored after the mobile paths are proven.
+- **Desktop**: JVM/Swing companion proof with an explicit clipboard output boundary; OS-specific insertion remains adapter-specific.
 
 The keyboard UI and operating-system hooks stay platform-specific. Intent parsing, rendering contracts, tone/recipient profiles, translation routing and lock validation belong in the shared core.
 
@@ -100,6 +100,8 @@ Regardless of provider, the model does not get the final word: exact time/money 
 
 Translation already travels through this same register/tone/recipient/language/lock pipeline. Real-device quality validation for the managed local Qwen model remains a separate gate before claiming local translation quality broadly.
 
+The desktop proof now exercises the same core from a JVM/Swing companion app. `DesktopIntentSession` keeps raw/register/preview state short-lived, rejects stale late renders, and allows output only when the current shared-pipeline result is safe. The first `DesktopTextSink` copies output to the system clipboard after an explicit **Copy** action; it does not inject text into another app, install a native input method, register global keyboard hooks or monitor clipboard contents. CI tests the session and publishes a portable desktop ZIP. See [`platforms/desktop/README.md`](platforms/desktop/README.md).
+
 ## Project layout
 
 ```text
@@ -107,7 +109,8 @@ intent-keyboard/
 ├── core/                 # shared semantic contracts, locks, prompts and providers
 ├── platforms/
 │   ├── android/          # installable Android IME prototype
-│   └── ios/              # iOS/iPadOS keyboard extension + setup host
+│   ├── ios/              # iOS/iPadOS keyboard extension + setup host
+│   └── desktop/          # JVM/Swing companion + explicit clipboard sink
 ├── docs/
 └── gradle/
 ```
