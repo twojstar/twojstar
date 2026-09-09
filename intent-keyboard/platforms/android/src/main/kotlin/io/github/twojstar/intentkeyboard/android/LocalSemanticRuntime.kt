@@ -7,9 +7,14 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.LiteRtLmJniException
 import io.github.twojstar.intentkeyboard.MechanicalRenderer
 import io.github.twojstar.intentkeyboard.ModelSemanticRenderer
+import io.github.twojstar.intentkeyboard.OpenAiCompatibleCompletionClient
+import io.github.twojstar.intentkeyboard.Register
 import io.github.twojstar.intentkeyboard.RenderRequest
 import io.github.twojstar.intentkeyboard.RenderResult
 import io.github.twojstar.intentkeyboard.SemanticPipeline
+import io.github.twojstar.intentkeyboard.SemanticRenderException
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +54,10 @@ private data class LocalModelLoadFailure(
  * in-flight render. Model initialization stays outside that mutex and is cancellation-safe through
  * [createCpuLiteRtLmEngine]. A newly selected model is not committed as the stable choice until its
  * engine reaches Ready; failed replacements roll back to the previously working private copy.
+ *
+ * Remote rendering is opt-in and remains a fallback: a ready local model is always tried first.
+ * Without a ready local model an explicitly enabled remote provider is tried before the mechanical
+ * fallback. Provider failures retain the draft and degrade to the mechanical renderer with a warning.
  */
 class LocalSemanticRuntime(
     context: Context,
@@ -58,6 +67,8 @@ class LocalSemanticRuntime(
     private val appContext = context.applicationContext
     private val store = LocalModelStore(appContext)
     private val renderPreferenceStore = RenderPreferenceStore(appContext)
+    private val remoteProviderStore = RemoteProviderStore(appContext)
+    private val remoteHttpClient = HttpClient(OkHttp)
     private val runtimeMutex = Mutex()
     private val reloadMutex = Mutex()
     private val fallbackPipeline = SemanticPipeline(MechanicalRenderer())
@@ -84,7 +95,19 @@ class LocalSemanticRuntime(
         )
 
         return runtimeMutex.withLock {
-            activePipeline.render(effectiveRequest)
+            if (effectiveRequest.register == Register.RAW) {
+                return@withLock fallbackPipeline.render(effectiveRequest)
+            }
+
+            if (activeEngine == null) {
+                renderRemoteOrMechanical(effectiveRequest)
+            } else {
+                try {
+                    activePipeline.render(effectiveRequest)
+                } catch (_: SemanticRenderException) {
+                    renderRemoteAfterLocalFailure(effectiveRequest)
+                }
+            }
         }
     }
 
@@ -107,10 +130,56 @@ class LocalSemanticRuntime(
                 activeEngine = null
                 activePipeline = fallbackPipeline
                 releaseEngine(previous)
+                remoteHttpClient.close()
             }
             cleanupScope.cancel()
         }
     }
+
+    private suspend fun renderRemoteAfterLocalFailure(request: RenderRequest): RenderResult {
+        val remote = remotePipeline() ?: return fallbackPipeline.render(request).withWarning(
+            "Local rendering failed; mechanical fallback used.",
+        )
+
+        return try {
+            remote.render(request).withWarning(
+                "Local render failed; remote fallback used. Draft text left this device.",
+            )
+        } catch (_: SemanticRenderException) {
+            fallbackPipeline.render(request).withWarning(
+                "Local and remote rendering failed; mechanical fallback used. " +
+                    "Remote request was attempted; draft may have left this device.",
+            )
+        }
+    }
+
+    private suspend fun renderRemoteOrMechanical(request: RenderRequest): RenderResult {
+        val remote = remotePipeline() ?: return fallbackPipeline.render(request)
+        return try {
+            remote.render(request).withWarning("Remote fallback used; draft text left this device.")
+        } catch (_: SemanticRenderException) {
+            fallbackPipeline.render(request).withWarning(
+                "Remote provider failed; mechanical fallback used. " +
+                    "Remote request was attempted; draft may have left this device.",
+            )
+        }
+    }
+
+    private fun remotePipeline(): SemanticPipeline? {
+        val config = remoteProviderStore.current().configOrNull() ?: return null
+        return SemanticPipeline(
+            ModelSemanticRenderer(
+                OpenAiCompatibleCompletionClient(
+                    config = config,
+                    httpClient = remoteHttpClient,
+                    tokenProvider = remoteProviderStore,
+                ),
+            ),
+        )
+    }
+
+    private fun RenderResult.withWarning(warning: String): RenderResult =
+        copy(warnings = listOf(warning) + warnings)
 
     private fun reload() {
         if (closed) return
