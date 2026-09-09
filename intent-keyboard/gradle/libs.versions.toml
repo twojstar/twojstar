@@ -3,6 +3,7 @@ androidGradlePlugin = "9.4.0"
 androidCompileSdk = "37"
 androidMinSdk = "26"
 coroutines = "1.11.0"
+junit4 = "4.13.2"
 ktor = "3.5.2"
 litertLm = "0.16.1"
 serialization = "1.11.0"
@@ -10,13 +11,14 @@ serialization = "1.11.0"
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
-kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx-serialization-json", version.ref = "serialization" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 litert-lm-android = { module = "com.google.ai.edge.litertlm:litertlm-android", version.ref = "litertLm" }
+junit4 = { module = "junit:junit", version.ref = "junit4" }
 
 [plugins]
 android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "androidGradlePlugin" }
