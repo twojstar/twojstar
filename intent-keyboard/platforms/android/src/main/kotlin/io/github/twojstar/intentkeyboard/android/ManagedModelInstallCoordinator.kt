@@ -100,12 +100,16 @@ class ManagedModelInstallCoordinator private constructor(context: Context) {
 
     fun cancel() {
         val running = currentState as? ManagedModelInstallState.Running ?: return
-        if (running.progress == ManagedModelInstallProgress.Activating) return
+        if (!running.progress.isCancellable()) return
 
         val job = installJob ?: return
         job.cancel()
         installer.cancelActiveDownload()
     }
+
+    private fun ManagedModelInstallProgress.isCancellable(): Boolean =
+        this != ManagedModelInstallProgress.Testing &&
+            this != ManagedModelInstallProgress.Activating
 
     private fun publish(state: ManagedModelInstallState) {
         currentState = state
