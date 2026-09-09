@@ -74,11 +74,7 @@ class RemoteProviderStore(context: Context) : BearerTokenProvider {
         val iv = preferences.getString(KEY_TOKEN_IV, null) ?: return null
         return try {
             decrypt(EncryptedToken(ciphertext = ciphertext, iv = iv))
-        } catch (_: GeneralSecurityException) {
-            null
-        } catch (_: IOException) {
-            null
-        } catch (_: IllegalArgumentException) {
+        } catch (_: RemoteProviderStoreException) {
             null
         }
     }
@@ -95,23 +91,26 @@ class RemoteProviderStore(context: Context) : BearerTokenProvider {
         )
     } catch (error: GeneralSecurityException) {
         throw RemoteProviderStoreException("Could not encrypt the provider token.", error)
-    } catch (error: IOException) {
-        throw RemoteProviderStoreException("Could not access Android Keystore.", error)
     }
 
-    private fun decrypt(token: EncryptedToken): String {
+    private fun decrypt(token: EncryptedToken): String = try {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         val iv = Base64.decode(token.iv, Base64.NO_WRAP)
         cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
         val plaintext = cipher.doFinal(Base64.decode(token.ciphertext, Base64.NO_WRAP))
-        return plaintext.toString(Charsets.UTF_8)
+        plaintext.toString(Charsets.UTF_8)
+    } catch (error: GeneralSecurityException) {
+        throw RemoteProviderStoreException("Could not decrypt the provider token.", error)
+    } catch (error: IllegalArgumentException) {
+        throw RemoteProviderStoreException("Stored provider token data is invalid.", error)
     }
 
-    private fun getOrCreateKey(): SecretKey {
+    private fun getOrCreateKey(): SecretKey = try {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-        (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
-
-        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE).run {
+        (keyStore.getKey(KEY_ALIAS, null) as? SecretKey) ?: KeyGenerator.getInstance(
+            KeyProperties.KEY_ALGORITHM_AES,
+            ANDROID_KEYSTORE,
+        ).run {
             init(
                 KeyGenParameterSpec.Builder(
                     KEY_ALIAS,
@@ -123,6 +122,10 @@ class RemoteProviderStore(context: Context) : BearerTokenProvider {
             )
             generateKey()
         }
+    } catch (error: GeneralSecurityException) {
+        throw RemoteProviderStoreException("Could not access Android Keystore.", error)
+    } catch (error: IOException) {
+        throw RemoteProviderStoreException("Could not load Android Keystore.", error)
     }
 
     private data class EncryptedToken(
