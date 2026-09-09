@@ -14,6 +14,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -72,13 +73,16 @@ class ManagedModelInstaller(
     private val modelStore: LocalModelStore,
 ) {
     private val appContext = context.applicationContext
+    private val activeConnection = AtomicReference<HttpURLConnection?>(null)
 
     suspend fun install(
         spec: ManagedModelSpec = ManagedModelCatalog.recommended,
         onProgress: suspend (ManagedModelInstallProgress) -> Unit = {},
     ): LocalModelSelection = withContext(Dispatchers.IO) {
-        ensureEnoughSpace(spec)
+        currentManagedSelection(spec)?.let { return@withContext it }
+
         cleanupStaleDownloads()
+        ensureEnoughSpace(spec)
 
         val downloadDirectory = requireDownloadDirectory()
         val stagingFile = File(
@@ -100,6 +104,8 @@ class ManagedModelInstaller(
                 source = stagingFile,
                 displayName = spec.displayName,
                 sizeBytes = spec.sizeBytes,
+                managedModelId = spec.id,
+                managedSha256 = spec.sha256,
             )
         } catch (error: CancellationException) {
             throw error
@@ -115,12 +121,32 @@ class ManagedModelInstaller(
         }
     }
 
+    /** Interrupts a blocking HttpURLConnection read when the owning job is cancelled. */
+    fun cancelActiveDownload() {
+        activeConnection.get()?.disconnect()
+    }
+
+    private fun currentManagedSelection(spec: ManagedModelSpec): LocalModelSelection? {
+        val selection = modelStore.current() ?: return null
+        if (selection.managedModelId != spec.id) return null
+        if (!selection.managedSha256.equals(spec.sha256, ignoreCase = true)) return null
+        if (selection.sizeBytes != spec.sizeBytes) return null
+
+        return try {
+            File(selection.path)
+                .takeIf { it.isFile && it.length() == spec.sizeBytes }
+                ?.let { selection }
+        } catch (_: SecurityException) {
+            null
+        }
+    }
+
     private suspend fun smokeTestModel(modelFile: File) {
         val engine = try {
             createCpuLiteRtLmEngine(
                 LiteRtLmCpuConfig(
                     modelPath = modelFile.absolutePath,
-                    cacheDir = appContext.cacheDir.absolutePath,
+                    cacheDir = null,
                 ),
             )
         } catch (error: CancellationException) {
@@ -209,6 +235,7 @@ class ManagedModelInstaller(
         } catch (error: ManagedModelInstallException) {
             throw error
         } catch (error: IOException) {
+            currentCoroutineContext().ensureActive()
             throw ManagedModelInstallException(
                 "Could not download the offline model.",
                 error,
@@ -219,7 +246,10 @@ class ManagedModelInstaller(
                 error,
             )
         } finally {
-            connection?.disconnect()
+            connection?.let { opened ->
+                activeConnection.compareAndSet(opened, null)
+                opened.disconnect()
+            }
         }
     }
 
@@ -322,6 +352,10 @@ class ManagedModelInstaller(
                 setRequestProperty("Accept-Encoding", "identity")
                 setRequestProperty("User-Agent", USER_AGENT)
             }
+            if (!activeConnection.compareAndSet(null, connection)) {
+                connection.disconnect()
+                throw ManagedModelInstallException("Another managed model download is already active.")
+            }
             var handedOff = false
 
             try {
@@ -349,7 +383,10 @@ class ManagedModelInstaller(
                     return connection
                 }
             } finally {
-                if (!handedOff) connection.disconnect()
+                if (!handedOff) {
+                    activeConnection.compareAndSet(connection, null)
+                    connection.disconnect()
+                }
             }
         }
 
@@ -365,9 +402,10 @@ class ManagedModelInstaller(
             throw ManagedModelInstallException("Android blocked the storage availability check.", error)
         }
 
-        if (availableBytes < spec.sizeBytes + MIN_FREE_SPACE_BYTES) {
+        val requiredBytes = (spec.sizeBytes * 2L) + MIN_FREE_SPACE_BYTES
+        if (availableBytes < requiredBytes) {
             throw ManagedModelInstallException(
-                "Not enough free storage for the offline model.",
+                "Not enough free storage for download and safe model activation.",
             )
         }
     }
