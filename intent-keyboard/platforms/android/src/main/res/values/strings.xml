@@ -26,6 +26,15 @@
     <string name="importing_local_model">Importing model into private storage…</string>
     <string name="local_model_import_failed">Local model import failed.</string>
     <string name="local_model_clear_failed">Could not remove the local model.</string>
+    <string name="semantic_output_title">Semantic output</string>
+    <string name="semantic_output_summary">Tone is independent from Raw/Natural/Civilized. Source and target language are optional hints for model-backed rendering; the raw draft always remains the source of truth.</string>
+    <string name="semantic_tone">Tone: %1$s</string>
+    <string name="semantic_source_language">Source: %1$s</string>
+    <string name="semantic_target_language">Target: %1$s</string>
+    <string name="language_auto">Auto</string>
+    <string name="language_same">Same as source</string>
+    <string name="language_polish">Polish</string>
+    <string name="language_english">English</string>
     <string name="keyboard_setup_title">Keyboard setup</string>
     <string name="open_keyboard_settings">Open keyboard settings</string>
     <string name="choose_keyboard">Choose keyboard</string>
