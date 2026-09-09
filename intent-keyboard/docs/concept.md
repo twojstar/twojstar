@@ -55,10 +55,12 @@ Examples:
 - product or person name
 - quoted literal
 
-Two lock modes are planned:
+The current conservative automatic detector creates `VERBATIM` locks for valid 24-hour times, common currency amounts, explicit `http://` / `https://` URLs and non-empty literals wrapped in ASCII/curly/Polish double quotes or backticks. It intentionally does not guess product or person names yet; reliable name protection needs explicit input or a less heuristic detector.
 
-- `VERBATIM`: preserve the exact bytes/text.
-- `SEMANTIC`: preserve the meaning but allow localization, for example `tomorrow at 6 PM` → `jutro o 18:00`.
+Two lock modes exist in the shared contract:
+
+- `VERBATIM`: preserve the exact bytes/text; this is validated today.
+- `SEMANTIC`: preserve the meaning but allow localization, for example `tomorrow at 6 PM` → `jutro o 18:00`; semantic validation remains future work.
 
 The shared core validates verbatim locks after every render and reports violations before text is committed.
 
