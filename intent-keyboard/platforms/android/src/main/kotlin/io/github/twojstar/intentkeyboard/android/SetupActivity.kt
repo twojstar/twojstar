@@ -115,35 +115,7 @@ class SetupActivity : Activity() {
                 addView(button, matchWidth())
             }
 
-            addView(TextView(context).apply {
-                text = getString(R.string.semantic_output_title)
-                textSize = 18f
-                setPadding(0, dp(24), 0, dp(8))
-            }, matchWidth())
-
-            addView(TextView(context).apply {
-                text = getString(R.string.semantic_output_summary)
-                textSize = 14f
-                setPadding(0, 0, 0, dp(8))
-            }, matchWidth())
-
-            toneButton = Button(context).also { button ->
-                button.isAllCaps = false
-                button.setOnClickListener { cycleTone() }
-                addView(button, matchWidth())
-            }
-
-            sourceLanguageButton = Button(context).also { button ->
-                button.isAllCaps = false
-                button.setOnClickListener { cycleSourceLanguage() }
-                addView(button, matchWidth())
-            }
-
-            targetLanguageButton = Button(context).also { button ->
-                button.isAllCaps = false
-                button.setOnClickListener { cycleTargetLanguage() }
-                addView(button, matchWidth())
-            }
+            addSemanticOutputSettings()
 
             addView(TextView(context).apply {
                 text = getString(R.string.keyboard_setup_title)
@@ -189,6 +161,38 @@ class SetupActivity : Activity() {
         refreshModelStatus()
         updateModelControls()
         refreshRenderSettings()
+    }
+
+    private fun LinearLayout.addSemanticOutputSettings() {
+        addView(TextView(context).apply {
+            text = getString(R.string.semantic_output_title)
+            textSize = 18f
+            setPadding(0, dp(24), 0, dp(8))
+        }, matchWidth())
+
+        addView(TextView(context).apply {
+            text = getString(R.string.semantic_output_summary)
+            textSize = 14f
+            setPadding(0, 0, 0, dp(8))
+        }, matchWidth())
+
+        toneButton = Button(context).also { button ->
+            button.isAllCaps = false
+            button.setOnClickListener { cycleTone() }
+            addView(button, matchWidth())
+        }
+
+        sourceLanguageButton = Button(context).also { button ->
+            button.isAllCaps = false
+            button.setOnClickListener { cycleSourceLanguage() }
+            addView(button, matchWidth())
+        }
+
+        targetLanguageButton = Button(context).also { button ->
+            button.isAllCaps = false
+            button.setOnClickListener { cycleTargetLanguage() }
+            addView(button, matchWidth())
+        }
     }
 
     override fun onStart() {
