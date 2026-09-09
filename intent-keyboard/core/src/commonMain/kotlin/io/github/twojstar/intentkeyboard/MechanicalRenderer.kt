@@ -66,7 +66,7 @@ object ConservativeLockDetector {
         RegexOption.IGNORE_CASE,
     )
     private val urlPattern = Regex(
-        """https?://[^\s<>"'`]+""",
+        """https?://[^\s<>"`]+""",
         RegexOption.IGNORE_CASE,
     )
     private val quotedLiteralPatterns = listOf(
@@ -75,7 +75,7 @@ object ConservativeLockDetector {
         Regex("„[^”\\r\\n]+”"),
         Regex("`[^`\\r\\n]+`"),
     )
-    private val urlTrailingPunctuation = setOf('.', ',', ';', ':')
+    private val urlTrailingPunctuation = setOf('.', ',', ';', ':', '!', '?', '\'')
 
     fun detect(text: String): List<SemanticLock> = buildList {
         sequenceOf(timePattern, suffixMoneyPattern, prefixMoneyPattern)
