@@ -1,12 +1,14 @@
 package io.github.twojstar.intentkeyboard.android
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.text.format.Formatter
+import android.util.Log
 import android.view.Gravity
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
@@ -17,9 +19,11 @@ import android.widget.TextView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Suppress("DEPRECATION")
 class SetupActivity : Activity() {
@@ -27,14 +31,22 @@ class SetupActivity : Activity() {
     private val modelStore by lazy(LazyThreadSafetyMode.NONE) {
         LocalModelStore(applicationContext)
     }
+    private val managedModelInstaller by lazy(LazyThreadSafetyMode.NONE) {
+        ManagedModelInstaller(applicationContext, modelStore)
+    }
 
     private var modelOperationInProgress = false
+    private var managedInstallJob: Job? = null
     private var modelStatusView: TextView? = null
+    private var installRecommendedModelButton: Button? = null
     private var importModelButton: Button? = null
     private var clearModelButton: Button? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val recommended = ManagedModelCatalog.recommended
+        val recommendedSize = Formatter.formatFileSize(this, recommended.sizeBytes)
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -62,6 +74,25 @@ class SetupActivity : Activity() {
                 view.setPadding(0, dp(8), 0, dp(12))
                 addView(view, matchWidth())
             }
+
+            addView(TextView(context).apply {
+                text = getString(R.string.recommended_model_summary, recommendedSize)
+                textSize = 14f
+                setPadding(0, 0, 0, dp(8))
+            }, matchWidth())
+
+            installRecommendedModelButton = Button(context).also { button ->
+                button.text = getString(R.string.install_recommended_model)
+                button.isAllCaps = false
+                button.setOnClickListener { toggleManagedModelInstall() }
+                addView(button, matchWidth())
+            }
+
+            addView(Button(context).apply {
+                text = getString(R.string.model_source_license)
+                isAllCaps = false
+                setOnClickListener { openManagedModelSource() }
+            }, matchWidth())
 
             importModelButton = Button(context).also { button ->
                 button.text = getString(R.string.import_local_model)
@@ -138,6 +169,91 @@ class SetupActivity : Activity() {
         data?.data?.let(::importLocalModel)
     }
 
+    private fun toggleManagedModelInstall() {
+        val running = managedInstallJob
+        if (running?.isActive == true) {
+            running.cancel()
+            return
+        }
+
+        installRecommendedModel()
+    }
+
+    private fun installRecommendedModel() {
+        val spec = ManagedModelCatalog.recommended
+        modelOperationInProgress = true
+        setModelControlsEnabled(false)
+        installRecommendedModelButton?.apply {
+            isEnabled = true
+            text = getString(R.string.cancel_model_download)
+        }
+        modelStatusView?.text = getString(R.string.model_download_connecting)
+
+        val job = scope.launch {
+            try {
+                managedModelInstaller.install(spec) { progress ->
+                    withContext(Dispatchers.Main.immediate) {
+                        showManagedInstallProgress(progress)
+                    }
+                }
+                refreshModelStatus()
+            } catch (error: CancellationException) {
+                if (!isFinishing && !isDestroyed) {
+                    modelStatusView?.text = getString(R.string.model_download_cancelled)
+                }
+                throw error
+            } catch (error: ManagedModelInstallException) {
+                Log.e(TAG, "Managed offline model installation failed", error)
+                modelStatusView?.text = error.message ?: getString(R.string.model_download_failed)
+            } finally {
+                managedInstallJob = null
+                modelOperationInProgress = false
+                installRecommendedModelButton?.text = getString(R.string.install_recommended_model)
+                setModelControlsEnabled(true)
+            }
+        }
+
+        managedInstallJob = job
+    }
+
+    private fun showManagedInstallProgress(progress: ManagedModelInstallProgress) {
+        modelStatusView?.text = when (progress) {
+            ManagedModelInstallProgress.Connecting -> getString(R.string.model_download_connecting)
+            is ManagedModelInstallProgress.Downloading -> {
+                val percent = if (progress.totalBytes > 0L) {
+                    ((progress.downloadedBytes * 100L) / progress.totalBytes)
+                        .coerceIn(0L, 100L)
+                        .toInt()
+                } else {
+                    0
+                }
+                getString(
+                    R.string.model_download_progress,
+                    percent,
+                    Formatter.formatFileSize(this, progress.downloadedBytes),
+                    Formatter.formatFileSize(this, progress.totalBytes),
+                )
+            }
+            ManagedModelInstallProgress.Verifying -> getString(R.string.model_download_verifying)
+            ManagedModelInstallProgress.Testing -> getString(R.string.model_download_testing)
+            ManagedModelInstallProgress.Activating -> getString(R.string.model_download_activating)
+        }
+    }
+
+    private fun openManagedModelSource() {
+        try {
+            startActivity(
+                Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse(ManagedModelCatalog.recommended.sourceUrl),
+                ),
+            )
+        } catch (error: ActivityNotFoundException) {
+            Log.w(TAG, "No activity can open the managed model source", error)
+            modelStatusView?.text = getString(R.string.model_source_open_failed)
+        }
+    }
+
     private fun openModelPicker() {
         startActivityForResult(
             Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
@@ -161,6 +277,7 @@ class SetupActivity : Activity() {
             } catch (error: CancellationException) {
                 throw error
             } catch (error: LocalModelStoreException) {
+                Log.e(TAG, "Local model import failed", error)
                 modelStatusView?.text = error.message ?: getString(R.string.local_model_import_failed)
             } finally {
                 modelOperationInProgress = false
@@ -180,6 +297,7 @@ class SetupActivity : Activity() {
             } catch (error: CancellationException) {
                 throw error
             } catch (error: LocalModelStoreException) {
+                Log.e(TAG, "Local model clear failed", error)
                 modelStatusView?.text = error.message ?: getString(R.string.local_model_clear_failed)
             } finally {
                 modelOperationInProgress = false
@@ -205,6 +323,7 @@ class SetupActivity : Activity() {
     }
 
     private fun setModelControlsEnabled(enabled: Boolean) {
+        installRecommendedModelButton?.isEnabled = enabled
         importModelButton?.isEnabled = enabled
         clearModelButton?.isEnabled = enabled && modelStore.current() != null
     }
@@ -219,5 +338,6 @@ class SetupActivity : Activity() {
 
     private companion object {
         const val REQUEST_LOCAL_MODEL = 1001
+        const val TAG = "IntentKeyboardSetup"
     }
 }
