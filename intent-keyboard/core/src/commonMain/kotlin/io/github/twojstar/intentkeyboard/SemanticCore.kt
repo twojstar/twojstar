@@ -85,7 +85,7 @@ class SemanticPipeline(
         }
 
         val requiredOccurrences = mutableMapOf<SemanticLock, Int>()
-        val violatedLocks = buildList {
+        val verbatimViolations = buildList {
             request.locks
                 .asSequence()
                 .filter { it.mode == LockMode.VERBATIM }
@@ -98,14 +98,24 @@ class SemanticPipeline(
                     }
                 }
         }
+        val semanticViolations = if (result.text == request.rawIntent) {
+            emptyList()
+        } else {
+            request.locks.filter { it.mode == LockMode.SEMANTIC }
+        }
+        val violatedLocks = verbatimViolations + semanticViolations
 
         return if (violatedLocks.isEmpty()) {
             result
         } else {
             result.copy(
-                warnings = result.warnings + violatedLocks.map {
-                    "Renderer changed or removed locked value: ${it.value}"
-                },
+                warnings = result.warnings +
+                    verbatimViolations.map {
+                        "Renderer changed or removed locked value: ${it.value}"
+                    } +
+                    semanticViolations.map {
+                        "Semantic lock could not be validated after rewriting: ${it.value}"
+                    },
                 violatedLocks = result.violatedLocks + violatedLocks,
             )
         }
