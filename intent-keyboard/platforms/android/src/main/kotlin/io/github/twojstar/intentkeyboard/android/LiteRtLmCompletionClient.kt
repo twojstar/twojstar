@@ -43,65 +43,6 @@ data class LiteRtLmGenerationConfig(
     }
 }
 
-data class LocalInferenceMetricsSnapshot(
-    val successfulSamples: Int,
-    val failedSamples: Int,
-    val lastLatencyMillis: Long?,
-    val medianLatencyMillis: Long?,
-    val lastInputCharacters: Int?,
-    val lastOutputCharacters: Int?,
-)
-
-/**
- * Process-local performance samples for real-device tuning.
- *
- * Only timings and character counts are retained. Draft or completion text is never stored, and all
- * samples disappear when the app process exits.
- */
-object LocalInferenceMetrics {
-    private const val MAX_SAMPLES = 20
-    private val lock = Any()
-    private val successfulLatenciesMillis = ArrayDeque<Long>(MAX_SAMPLES)
-    private var failedSamples = 0
-    private var lastInputCharacters: Int? = null
-    private var lastOutputCharacters: Int? = null
-
-    fun recordSuccess(latencyMillis: Long, inputCharacters: Int, outputCharacters: Int) {
-        synchronized(lock) {
-            if (successfulLatenciesMillis.size == MAX_SAMPLES) {
-                successfulLatenciesMillis.removeFirst()
-            }
-            successfulLatenciesMillis.addLast(latencyMillis)
-            lastInputCharacters = inputCharacters
-            lastOutputCharacters = outputCharacters
-        }
-    }
-
-    fun recordFailure() {
-        synchronized(lock) {
-            failedSamples += 1
-        }
-    }
-
-    fun snapshot(): LocalInferenceMetricsSnapshot = synchronized(lock) {
-        val sorted = successfulLatenciesMillis.sorted()
-        val median = when {
-            sorted.isEmpty() -> null
-            sorted.size % 2 == 1 -> sorted[sorted.size / 2]
-            else -> (sorted[sorted.size / 2 - 1] + sorted[sorted.size / 2]) / 2
-        }
-
-        LocalInferenceMetricsSnapshot(
-            successfulSamples = successfulLatenciesMillis.size,
-            failedSamples = failedSamples,
-            lastLatencyMillis = successfulLatenciesMillis.lastOrNull(),
-            medianLatencyMillis = median,
-            lastInputCharacters = lastInputCharacters,
-            lastOutputCharacters = lastOutputCharacters,
-        )
-    }
-}
-
 /**
  * Creates and initializes a CPU-only LiteRT-LM engine on a background dispatcher.
  *
@@ -115,14 +56,21 @@ suspend fun createCpuLiteRtLmEngine(config: LiteRtLmCpuConfig): Engine {
         }
     }
 
-    val engine = Engine(
+    val backend = Backend.CPU(threadCount = config.threadCount)
+    val engineConfig = config.maxNumTokens?.let { maxNumTokens ->
         EngineConfig(
             modelPath = modelFile.absolutePath,
-            backend = Backend.CPU(threadCount = config.threadCount),
-            maxNumTokens = config.maxNumTokens,
+            backend = backend,
+            maxNumTokens = maxNumTokens,
             cacheDir = config.cacheDir,
-        ),
+        )
+    } ?: EngineConfig(
+        modelPath = modelFile.absolutePath,
+        backend = backend,
+        cacheDir = config.cacheDir,
     )
+
+    val engine = Engine(engineConfig)
 
     return try {
         withContext(Dispatchers.IO) {
