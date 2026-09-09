@@ -3,6 +3,7 @@ androidGradlePlugin = "9.4.0"
 androidCompileSdk = "37"
 androidMinSdk = "26"
 coroutines = "1.11.0"
+junit4 = "4.13.2"
 ktor = "3.5.2"
 litertLm = "0.16.1"
 serialization = "1.11.0"
@@ -17,6 +18,7 @@ ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "kto
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 litert-lm-android = { module = "com.google.ai.edge.litertlm:litertlm-android", version.ref = "litertLm" }
+junit4 = { module = "junit:junit", version.ref = "junit4" }
 
 [plugins]
 android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "androidGradlePlugin" }

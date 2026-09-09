@@ -126,7 +126,11 @@ class IntentKeyboardService : InputMethodService() {
 
         activeEditorInfo = attribute
         val nextSensitive = isSensitive(attribute)
-        val mustFinalizePrevious = hostCompositionOwned && (nextSensitive || !restarting)
+        val mustFinalizePrevious = HostCompositionPolicy.shouldFinalizeBeforeStart(
+            hostCompositionOwned = hostCompositionOwned,
+            nextFieldSensitive = nextSensitive,
+            restarting = restarting,
+        )
         val previousFinalized = !mustFinalizePrevious || finishOwnedHostComposition()
 
         sensitiveField = nextSensitive
@@ -176,29 +180,31 @@ class IntentKeyboardService : InputMethodService() {
             candidatesEnd,
         )
 
-        if (
-            hostCompositionMutationInProgress ||
-            !ownsCurrentHostComposition() ||
-            sensitiveField ||
-            buffer.isEmpty()
+        when (
+            HostCompositionPolicy.selectionAction(
+                mutationInProgress = hostCompositionMutationInProgress,
+                ownsCurrentComposition = ownsCurrentHostComposition(),
+                sensitiveField = sensitiveField,
+                hasDraft = buffer.isNotEmpty(),
+                candidatesStart = candidatesStart,
+                candidatesEnd = candidatesEnd,
+                newSelectionStart = newSelStart,
+                newSelectionEnd = newSelEnd,
+            )
         ) {
-            return
-        }
-
-        if (candidatesStart < 0 || candidatesEnd < 0) {
-            resetHostCompositionTracking()
-            clearInternalBuffer()
-            statusView?.text = "Draft finalized by the app."
-            return
-        }
-
-        val compositionEnd = maxOf(candidatesStart, candidatesEnd)
-        if (newSelStart != compositionEnd || newSelEnd != compositionEnd) {
-            if (finishOwnedHostComposition()) {
+            HostCompositionPolicy.SelectionAction.IGNORE -> Unit
+            HostCompositionPolicy.SelectionAction.HOST_FINALIZED -> {
+                resetHostCompositionTracking()
                 clearInternalBuffer()
-                statusView?.text = "Draft finalized after cursor move."
-            } else {
-                statusView?.text = "Could not finalize draft after cursor move."
+                statusView?.text = "Draft finalized by the app."
+            }
+            HostCompositionPolicy.SelectionAction.FINALIZE_AFTER_CURSOR_MOVE -> {
+                if (finishOwnedHostComposition()) {
+                    clearInternalBuffer()
+                    statusView?.text = "Draft finalized after cursor move."
+                } else {
+                    statusView?.text = "Could not finalize draft after cursor move."
+                }
             }
         }
     }
