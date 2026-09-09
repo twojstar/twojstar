@@ -7,12 +7,15 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.text.InputType
 import android.text.format.Formatter
 import android.util.Log
 import android.view.Gravity
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
+import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -33,6 +36,9 @@ class SetupActivity : Activity() {
     private val renderPreferenceStore by lazy(LazyThreadSafetyMode.NONE) {
         RenderPreferenceStore(applicationContext)
     }
+    private val remoteProviderStore by lazy(LazyThreadSafetyMode.NONE) {
+        RemoteProviderStore(applicationContext)
+    }
     private val managedInstallCoordinator by lazy(LazyThreadSafetyMode.NONE) {
         ManagedModelInstallCoordinator.get(applicationContext)
     }
@@ -49,6 +55,11 @@ class SetupActivity : Activity() {
     private var toneButton: Button? = null
     private var sourceLanguageButton: Button? = null
     private var targetLanguageButton: Button? = null
+    private var remoteEnabledCheckBox: CheckBox? = null
+    private var remoteBaseUrlInput: EditText? = null
+    private var remoteModelInput: EditText? = null
+    private var remoteTokenInput: EditText? = null
+    private var remoteStatusView: TextView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -116,6 +127,7 @@ class SetupActivity : Activity() {
             }
 
             addSemanticOutputSettings()
+            addRemoteProviderSettings()
 
             addView(TextView(context).apply {
                 text = getString(R.string.keyboard_setup_title)
@@ -161,6 +173,7 @@ class SetupActivity : Activity() {
         refreshModelStatus()
         updateModelControls()
         refreshRenderSettings()
+        refreshRemoteProviderSettings()
     }
 
     private fun LinearLayout.addSemanticOutputSettings() {
@@ -195,6 +208,63 @@ class SetupActivity : Activity() {
         }
     }
 
+    private fun LinearLayout.addRemoteProviderSettings() {
+        addView(TextView(context).apply {
+            text = getString(R.string.remote_provider_title)
+            textSize = 18f
+            setPadding(0, dp(24), 0, dp(8))
+        }, matchWidth())
+
+        addView(TextView(context).apply {
+            text = getString(R.string.remote_provider_summary)
+            textSize = 14f
+            setPadding(0, 0, 0, dp(8))
+        }, matchWidth())
+
+        remoteEnabledCheckBox = CheckBox(context).also { checkBox ->
+            checkBox.text = getString(R.string.remote_provider_enable)
+            addView(checkBox, matchWidth())
+        }
+
+        remoteBaseUrlInput = EditText(context).also { input ->
+            input.hint = getString(R.string.remote_provider_base_url_hint)
+            input.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            input.setSingleLine(true)
+            addView(input, matchWidth())
+        }
+
+        remoteModelInput = EditText(context).also { input ->
+            input.hint = getString(R.string.remote_provider_model_hint)
+            input.setSingleLine(true)
+            addView(input, matchWidth())
+        }
+
+        remoteTokenInput = EditText(context).also { input ->
+            input.hint = getString(R.string.remote_provider_token_hint)
+            input.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            input.setSingleLine(true)
+            addView(input, matchWidth())
+        }
+
+        addView(Button(context).apply {
+            text = getString(R.string.remote_provider_save)
+            isAllCaps = false
+            setOnClickListener { saveRemoteProviderSettings() }
+        }, matchWidth())
+
+        addView(Button(context).apply {
+            text = getString(R.string.remote_provider_clear_token)
+            isAllCaps = false
+            setOnClickListener { clearRemoteProviderToken() }
+        }, matchWidth())
+
+        remoteStatusView = TextView(context).also { view ->
+            view.textSize = 13f
+            view.setPadding(0, dp(8), 0, 0)
+            addView(view, matchWidth())
+        }
+    }
+
     override fun onStart() {
         super.onStart()
         managedInstallCoordinator.addListener(managedStateListener)
@@ -211,6 +281,7 @@ class SetupActivity : Activity() {
             updateModelControls()
         }
         refreshRenderSettings()
+        refreshRemoteProviderSettings()
     }
 
     override fun onStop() {
@@ -436,6 +507,71 @@ class SetupActivity : Activity() {
             R.string.semantic_target_language,
             languageLabel(preferences.targetLanguage, R.string.language_same),
         )
+    }
+
+    private fun saveRemoteProviderSettings() {
+        val enabled = remoteEnabledCheckBox?.isChecked == true
+        val baseUrl = remoteBaseUrlInput?.text?.toString().orEmpty()
+        val model = remoteModelInput?.text?.toString().orEmpty()
+        val newToken = remoteTokenInput?.text?.toString()?.takeIf { it.isNotBlank() }
+
+        try {
+            remoteProviderStore.save(
+                enabled = enabled,
+                baseUrl = baseUrl,
+                model = model,
+                token = newToken,
+            )
+            remoteTokenInput?.text?.clear()
+            refreshRemoteProviderSettings()
+        } catch (error: IllegalArgumentException) {
+            remoteStatusView?.text = getString(
+                R.string.remote_provider_invalid,
+                error.message ?: getString(R.string.remote_provider_invalid_generic),
+            )
+        } catch (error: RemoteProviderStoreException) {
+            Log.e(TAG, "Remote provider credential storage failed", error)
+            remoteStatusView?.text = getString(R.string.remote_provider_store_failed)
+        }
+    }
+
+    private fun clearRemoteProviderToken() {
+        remoteProviderStore.clearToken()
+        remoteTokenInput?.text?.clear()
+        refreshRemoteProviderSettings()
+    }
+
+    private fun refreshRemoteProviderSettings() {
+        val settings = remoteProviderStore.current()
+        remoteEnabledCheckBox?.isChecked = settings.enabled
+        remoteBaseUrlInput?.setText(settings.baseUrl)
+        remoteModelInput?.setText(settings.model)
+        remoteTokenInput?.apply {
+            text?.clear()
+            hint = getString(
+                if (settings.hasToken) {
+                    R.string.remote_provider_token_stored_hint
+                } else {
+                    R.string.remote_provider_token_hint
+                },
+            )
+        }
+
+        remoteStatusView?.text = if (settings.enabled) {
+            getString(
+                R.string.remote_provider_enabled_status,
+                settings.model.ifBlank { getString(R.string.remote_provider_unknown_model) },
+                getString(
+                    if (settings.hasToken) {
+                        R.string.remote_provider_token_stored
+                    } else {
+                        R.string.remote_provider_token_not_stored
+                    },
+                ),
+            )
+        } else {
+            getString(R.string.remote_provider_disabled_status)
+        }
     }
 
     private fun languageLabel(language: String?, emptyLabel: Int): String = when (language) {
