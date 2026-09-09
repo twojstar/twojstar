@@ -278,7 +278,6 @@ final class KeyboardViewController: UIInputViewController {
         let hasCurrentPreview = renderedSource == rawIntent && !renderedText.isEmpty
 
         if registerName != "RAW" && !hasCurrentPreview {
-            scheduleAutoRender()
             statusLabel.text = "Preview is not ready yet. Wait, press Render, or switch to Raw."
             refreshCompactLayout()
             return false
