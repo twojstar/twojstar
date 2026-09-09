@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class IntentKeyboardService : InputMethodService() {
@@ -39,6 +40,7 @@ class IntentKeyboardService : InputMethodService() {
     private var sensitiveField = false
     private var activeEditorInfo: EditorInfo? = null
     private var renderGeneration = 0L
+    private var autoRenderJob: Job? = null
     private var renderJob: Job? = null
 
     private var rawView: TextView? = null
@@ -57,6 +59,9 @@ class IntentKeyboardService : InputMethodService() {
         val runtime = LocalSemanticRuntime(applicationContext, scope) { state ->
             semanticState = state
             refreshEngineView()
+            if (state is LocalSemanticRuntimeState.Ready) {
+                scheduleAutoRender()
+            }
         }
         semanticRuntime = runtime
         runtime.start()
@@ -116,6 +121,7 @@ class IntentKeyboardService : InputMethodService() {
             clearInternalBuffer()
         } else {
             refreshViews()
+            scheduleAutoRender()
         }
 
         if (nextSensitive) {
@@ -133,6 +139,7 @@ class IntentKeyboardService : InputMethodService() {
     override fun onEvaluateFullscreenMode(): Boolean = false
 
     override fun onDestroy() {
+        autoRenderJob?.cancel()
         renderJob?.cancel()
         semanticRuntime?.close()
         semanticRuntime = null
@@ -239,6 +246,7 @@ class IntentKeyboardService : InputMethodService() {
         buffer.append(text)
         invalidateRenderedPreview()
         refreshViews()
+        scheduleAutoRender()
     }
 
     private fun backspace() {
@@ -250,6 +258,7 @@ class IntentKeyboardService : InputMethodService() {
         buffer.deleteCharAt(buffer.lastIndex)
         invalidateRenderedPreview()
         refreshViews()
+        scheduleAutoRender()
     }
 
     private fun deleteHostSelectionOrPreviousCodePoint() {
@@ -288,7 +297,38 @@ class IntentKeyboardService : InputMethodService() {
         connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
     }
 
-    private fun renderBuffer() {
+    private fun scheduleAutoRender() {
+        autoRenderJob?.cancel()
+        autoRenderJob = null
+
+        if (sensitiveField || register == Register.RAW) return
+
+        val raw = buffer.toString()
+        if (raw.isBlank()) return
+
+        val generation = renderGeneration
+        statusView?.text = "Preview updates after a short pause…"
+        autoRenderJob = scope.launch {
+            delay(AUTO_RENDER_DEBOUNCE_MS)
+            if (
+                generation != renderGeneration ||
+                sensitiveField ||
+                raw != buffer.toString() ||
+                register == Register.RAW
+            ) {
+                return@launch
+            }
+
+            renderBuffer(fromAutoPreview = true)
+        }
+    }
+
+    private fun renderBuffer(fromAutoPreview: Boolean = false) {
+        if (!fromAutoPreview) {
+            autoRenderJob?.cancel()
+            autoRenderJob = null
+        }
+
         if (sensitiveField) {
             statusView?.text = "Semantic rendering is disabled for sensitive fields."
             return
@@ -381,9 +421,12 @@ class IntentKeyboardService : InputMethodService() {
         }
         invalidateRenderedPreview()
         refreshViews()
+        scheduleAutoRender()
     }
 
     private fun invalidateRenderedPreview() {
+        autoRenderJob?.cancel()
+        autoRenderJob = null
         renderJob?.cancel()
         renderJob = null
         renderGeneration += 1
@@ -488,4 +531,8 @@ class IntentKeyboardService : InputMethodService() {
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()
+
+    private companion object {
+        const val AUTO_RENDER_DEBOUNCE_MS = 450L
+    }
 }
