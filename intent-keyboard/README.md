@@ -50,7 +50,7 @@ The shared engine lives in Kotlin Multiplatform `commonMain` code. Platform inte
 
 The keyboard UI and operating-system hooks stay platform-specific. Intent parsing, rendering contracts, tone/recipient profiles, translation routing and lock validation belong in the shared core.
 
-See [`docs/concept.md`](docs/concept.md) for the architecture and MVP boundary.
+See [`docs/concept.md`](docs/concept.md) for the architecture and MVP boundary. The repeatable Android real-device performance/quality gate lives in [`docs/android-local-benchmark.md`](docs/android-local-benchmark.md).
 
 ## Current prototype
 
@@ -82,9 +82,11 @@ Android can now use a local LiteRT-LM 0.16.1 model end to end:
 - The setup screen imports user-selected `.litertlm` documents into app-private storage; source URIs are not retained.
 - `LocalModelStore` is the single source of truth for the selected local model and preserves the last known good selection until a replacement initializes successfully.
 - `LocalSemanticRuntime` watches that selection, loads the model on the CPU off the main thread and swaps renderers without closing an engine underneath an in-flight render.
-- `LiteRtLmCompletionClient` implements the same provider-neutral semantic completion contract as remote adapters.
+- `LiteRtLmCompletionClient` implements the same provider-neutral semantic completion contract as remote adapters and currently caps each local conversation at 512 output tokens, while leaving the engine context/KV-cache at LiteRT-LM defaults until real-device measurements justify tuning it.
 - Each render uses a fresh conversation, so previous keyboard drafts are not inherited as chat history.
 - The keyboard shows whether it is using the mechanical fallback, loading a model, or rendering with the selected local model.
+
+The setup screen also exposes process-local runtime diagnostics for actual keyboard renders: successful/failed local samples, median and p95 latency, last latency and last input/output character counts. The collector keeps at most 20 successful timings in memory, stores no draft/completion text, writes nothing to disk and can be reset manually. Installer smoke tests, mechanical renders and remote renders do not count as successful local samples.
 
 Remote rendering keeps the same semantic pipeline rather than creating a translation-only path. A ready local model is always attempted first. If no local model is ready, or local rendering fails, an explicitly enabled remote provider may be used. Successful remote renders carry an on-keyboard warning that draft text left the device; failed remote attempts warn that the draft may have left the device before the runtime degrades mechanically.
 

@@ -21,11 +21,25 @@ data class LiteRtLmCpuConfig(
     val modelPath: String,
     val cacheDir: String? = null,
     val threadCount: Int? = null,
+    val maxNumTokens: Int? = null,
 ) {
     init {
         require(modelPath.isNotBlank()) { "modelPath must not be blank" }
         require(cacheDir == null || cacheDir.isNotBlank()) { "cacheDir must be null or non-blank" }
         require(threadCount == null || threadCount > 0) { "threadCount must be positive or null" }
+        require(maxNumTokens == null || maxNumTokens > 0) { "maxNumTokens must be positive or null" }
+    }
+}
+
+data class LiteRtLmGenerationConfig(
+    val maxOutputToken: Int = DEFAULT_KEYBOARD_MAX_OUTPUT_TOKENS,
+) {
+    init {
+        require(maxOutputToken > 0) { "maxOutputToken must be positive" }
+    }
+
+    companion object {
+        const val DEFAULT_KEYBOARD_MAX_OUTPUT_TOKENS = 512
     }
 }
 
@@ -42,13 +56,21 @@ suspend fun createCpuLiteRtLmEngine(config: LiteRtLmCpuConfig): Engine {
         }
     }
 
-    val engine = Engine(
+    val backend = Backend.CPU(threadCount = config.threadCount)
+    val engineConfig = config.maxNumTokens?.let { maxNumTokens ->
         EngineConfig(
             modelPath = modelFile.absolutePath,
-            backend = Backend.CPU(threadCount = config.threadCount),
+            backend = backend,
+            maxNumTokens = maxNumTokens,
             cacheDir = config.cacheDir,
-        ),
+        )
+    } ?: EngineConfig(
+        modelPath = modelFile.absolutePath,
+        backend = backend,
+        cacheDir = config.cacheDir,
     )
+
+    val engine = Engine(engineConfig)
 
     return try {
         withContext(Dispatchers.IO) {
@@ -89,6 +111,7 @@ private suspend fun closeCancelledInitialization(
  */
 class LiteRtLmCompletionClient(
     private val engine: Engine,
+    private val generationConfig: LiteRtLmGenerationConfig = LiteRtLmGenerationConfig(),
 ) : SemanticCompletionClient {
     private val inferenceMutex = Mutex()
 
@@ -103,6 +126,7 @@ class LiteRtLmCompletionClient(
                     ConversationConfig(
                         systemInstruction = Contents.of(prompt.instructions),
                         automaticToolCalling = false,
+                        maxOutputToken = generationConfig.maxOutputToken,
                     ),
                 ).use { conversation ->
                     conversation.sendMessage(prompt.input).toString()

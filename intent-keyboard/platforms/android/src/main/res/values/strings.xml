@@ -26,6 +26,14 @@
     <string name="importing_local_model">Importing model into private storage…</string>
     <string name="local_model_import_failed">Local model import failed.</string>
     <string name="local_model_clear_failed">Could not remove the local model.</string>
+    <string name="local_performance_title">Local runtime diagnostics</string>
+    <string name="local_performance_summary">In-memory timing for real keyboard renders only. Draft and completion text are never stored or logged; samples disappear when the app process exits.</string>
+    <string name="local_performance_empty">No local-render samples in this process yet.</string>
+    <string name="local_performance_stats">%1$d successful · %2$d failed\nMedian %3$s · p95 %4$s · last %5$s\nLast size: %6$s → %7$s chars</string>
+    <string name="local_performance_refresh">Refresh local performance</string>
+    <string name="local_performance_reset">Reset performance samples</string>
+    <string name="local_performance_millis">%1$d ms</string>
+    <string name="local_performance_not_available">—</string>
     <string name="semantic_output_title">Semantic output</string>
     <string name="semantic_output_summary">Tone and recipient context are independent from Raw/Natural/Civilized. Source and target language are optional hints for model-backed rendering; the raw draft always remains the source of truth.</string>
     <string name="semantic_tone">Tone: %1$s</string>

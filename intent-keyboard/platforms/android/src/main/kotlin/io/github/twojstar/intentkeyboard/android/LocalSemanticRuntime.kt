@@ -110,9 +110,17 @@ class LocalSemanticRuntime(
             if (activeEngine == null) {
                 renderRemoteOrMechanical(effectiveRequest)
             } else {
+                val startedAtNanos = System.nanoTime()
                 try {
-                    activePipeline.render(effectiveRequest)
+                    val result = activePipeline.render(effectiveRequest)
+                    LocalInferenceMetrics.recordSuccess(
+                        latencyMillis = (System.nanoTime() - startedAtNanos) / 1_000_000L,
+                        inputCharacters = effectiveRequest.rawIntent.length,
+                        outputCharacters = result.text.length,
+                    )
+                    result
                 } catch (_: SemanticRenderException) {
+                    LocalInferenceMetrics.recordFailure()
                     renderRemoteAfterLocalFailure(effectiveRequest)
                 }
             }
@@ -302,6 +310,7 @@ class LocalSemanticRuntime(
             val previous = activeEngine
             activeEngine = null
             activePipeline = fallbackPipeline
+            LocalInferenceMetrics.reset()
             releaseEngine(previous)
         }
     }

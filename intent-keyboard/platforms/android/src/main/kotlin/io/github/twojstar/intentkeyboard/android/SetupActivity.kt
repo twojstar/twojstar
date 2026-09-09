@@ -53,6 +53,7 @@ class SetupActivity : Activity() {
     private var installRecommendedModelButton: Button? = null
     private var importModelButton: Button? = null
     private var clearModelButton: Button? = null
+    private var localPerformanceView: TextView? = null
     private var toneButton: Button? = null
     private var recipientProfileButton: Button? = null
     private var sourceLanguageButton: Button? = null
@@ -128,6 +129,7 @@ class SetupActivity : Activity() {
                 addView(button, matchWidth())
             }
 
+            addLocalRuntimeDiagnostics()
             addSemanticOutputSettings()
             addRemoteProviderSettings()
 
@@ -174,8 +176,44 @@ class SetupActivity : Activity() {
 
         refreshModelStatus()
         updateModelControls()
+        refreshLocalPerformanceMetrics()
         refreshRenderSettings()
         refreshRemoteProviderSettings()
+    }
+
+    private fun LinearLayout.addLocalRuntimeDiagnostics() {
+        addView(TextView(context).apply {
+            text = getString(R.string.local_performance_title)
+            textSize = 18f
+            setPadding(0, dp(24), 0, dp(8))
+        }, matchWidth())
+
+        addView(TextView(context).apply {
+            text = getString(R.string.local_performance_summary)
+            textSize = 14f
+            setPadding(0, 0, 0, dp(8))
+        }, matchWidth())
+
+        localPerformanceView = TextView(context).also { view ->
+            view.textSize = 13f
+            view.setPadding(0, 0, 0, dp(8))
+            addView(view, matchWidth())
+        }
+
+        addView(Button(context).apply {
+            text = getString(R.string.local_performance_refresh)
+            isAllCaps = false
+            setOnClickListener { refreshLocalPerformanceMetrics() }
+        }, matchWidth())
+
+        addView(Button(context).apply {
+            text = getString(R.string.local_performance_reset)
+            isAllCaps = false
+            setOnClickListener {
+                LocalInferenceMetrics.reset()
+                refreshLocalPerformanceMetrics()
+            }
+        }, matchWidth())
     }
 
     private fun LinearLayout.addSemanticOutputSettings() {
@@ -288,6 +326,7 @@ class SetupActivity : Activity() {
             refreshModelStatus()
             updateModelControls()
         }
+        refreshLocalPerformanceMetrics()
         refreshRenderSettings()
         refreshRemoteProviderSettings()
     }
@@ -443,6 +482,33 @@ class SetupActivity : Activity() {
             getString(R.string.local_model_selected, selection.displayName, size)
         }
     }
+
+    private fun refreshLocalPerformanceMetrics() {
+        val snapshot = LocalInferenceMetrics.snapshot()
+        localPerformanceView?.text = if (
+            snapshot.successfulSamples == 0 && snapshot.failedSamples == 0
+        ) {
+            getString(R.string.local_performance_empty)
+        } else {
+            getString(
+                R.string.local_performance_stats,
+                snapshot.successfulSamples,
+                snapshot.failedSamples,
+                latencyLabel(snapshot.medianLatencyMillis),
+                latencyLabel(snapshot.p95LatencyMillis),
+                latencyLabel(snapshot.lastLatencyMillis),
+                metricValue(snapshot.lastInputCharacters),
+                metricValue(snapshot.lastOutputCharacters),
+            )
+        }
+    }
+
+    private fun latencyLabel(value: Long?): String = value?.let {
+        getString(R.string.local_performance_millis, it)
+    } ?: getString(R.string.local_performance_not_available)
+
+    private fun metricValue(value: Int?): String =
+        value?.toString() ?: getString(R.string.local_performance_not_available)
 
     private fun updateModelControls() {
         val runningState = managedInstallCoordinator.state as? ManagedModelInstallState.Running
