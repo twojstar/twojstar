@@ -172,7 +172,6 @@ class LiteRtLmCompletionClient(
     }
 
     override suspend fun complete(prompt: ModelPrompt): CompletionOutcome = inferenceMutex.withLock {
-        val startedAtNanos = System.nanoTime()
         try {
             val text = withContext(Dispatchers.IO) {
                 engine.createConversation(
@@ -186,28 +185,18 @@ class LiteRtLmCompletionClient(
                 }
             }
 
-            val latencyMillis = (System.nanoTime() - startedAtNanos) / 1_000_000L
             if (text.isBlank()) {
-                LocalInferenceMetrics.recordFailure()
                 CompletionOutcome.Failure("LiteRT-LM returned no text completion.")
             } else {
-                LocalInferenceMetrics.recordSuccess(
-                    latencyMillis = latencyMillis,
-                    inputCharacters = prompt.input.length,
-                    outputCharacters = text.length,
-                )
                 CompletionOutcome.Success(text)
             }
         } catch (error: CancellationException) {
             throw error
         } catch (error: LiteRtLmJniException) {
-            LocalInferenceMetrics.recordFailure()
             CompletionOutcome.Failure("LiteRT-LM inference failed.", error)
         } catch (error: IllegalStateException) {
-            LocalInferenceMetrics.recordFailure()
             CompletionOutcome.Failure("LiteRT-LM engine is unavailable.", error)
         } catch (error: UnsatisfiedLinkError) {
-            LocalInferenceMetrics.recordFailure()
             CompletionOutcome.Failure("LiteRT-LM native runtime is unavailable.", error)
         }
     }
