@@ -75,8 +75,16 @@ object ConservativeLockDetector {
         Regex("„[^”\\r\\n]+”"),
         Regex("`[^`\\r\\n]+`"),
     )
-    private val urlTrailingPunctuation = setOf('.', ',', ';', ':', '!', '?', '\'')
-    private val urlDelimiterPairs = listOf('(' to ')', '[' to ']', '{' to '}')
+    private val urlWrapperPairs = mapOf(
+        '(' to ')',
+        '[' to ']',
+        '{' to '}',
+        '\'' to '\'',
+        '‘' to '’',
+        '“' to '”',
+        '„' to '”',
+    )
+    private val urlWrapperTrailingPunctuation = setOf('.', ',', ';', ':', '!', '?')
 
     fun detect(text: String): List<SemanticLock> = buildList {
         sequenceOf(timePattern, suffixMoneyPattern, prefixMoneyPattern)
@@ -85,7 +93,7 @@ object ConservativeLockDetector {
 
         urlPattern.findAll(text)
             .mapNotNull { match ->
-                val value = normalizeUrlBoundary(match.value)
+                val value = normalizeUrlBoundary(text, match)
                 val schemeEnd = value.indexOf("://") + 3
                 value.takeIf { schemeEnd >= 3 && it.length > schemeEnd }?.let(::SemanticLock)
             }
@@ -96,17 +104,33 @@ object ConservativeLockDetector {
             .forEach { lock -> add(lock) }
     }
 
-    private fun normalizeUrlBoundary(rawValue: String): String {
-        var value = rawValue.trimEnd { it in urlTrailingPunctuation }
-
-        urlDelimiterPairs.forEach { (open, close) ->
-            var excessClosers = value.count { it == close } - value.count { it == open }
-            while (excessClosers > 0 && value.lastOrNull() == close) {
-                value = value.dropLast(1)
-                excessClosers -= 1
+    /**
+     * Removes only source wrappers whose opening delimiter is immediately before the URL.
+     *
+     * URI punctuation such as !, ?, ', comma or closing delimiters is otherwise ambiguous and
+     * remains protected. This deliberately prefers a conservative false rejection over silently
+     * allowing a renderer to mutate a character that may really belong to the URL.
+     */
+    private fun normalizeUrlBoundary(text: String, match: MatchResult): String {
+        val openers = buildList {
+            var index = match.range.first - 1
+            while (index >= 0) {
+                val opener = text[index]
+                if (opener !in urlWrapperPairs) break
+                add(opener)
+                index -= 1
             }
         }
+        if (openers.isEmpty()) return match.value
 
-        return value.trimEnd { it in urlTrailingPunctuation }
+        val expectedClosers = buildString {
+            openers.forEach { opener -> append(urlWrapperPairs.getValue(opener)) }
+        }
+        val withoutOutsidePunctuation = match.value.trimEnd {
+            it in urlWrapperTrailingPunctuation
+        }
+        if (!withoutOutsidePunctuation.endsWith(expectedClosers)) return match.value
+
+        return withoutOutsidePunctuation.dropLast(expectedClosers.length)
     }
 }
