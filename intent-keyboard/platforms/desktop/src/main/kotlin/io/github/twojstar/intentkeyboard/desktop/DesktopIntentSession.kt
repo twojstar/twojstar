@@ -2,15 +2,25 @@ package io.github.twojstar.intentkeyboard.desktop
 
 import io.github.twojstar.intentkeyboard.ConservativeLockDetector
 import io.github.twojstar.intentkeyboard.MechanicalRenderer
+import io.github.twojstar.intentkeyboard.RecipientProfile
 import io.github.twojstar.intentkeyboard.Register
 import io.github.twojstar.intentkeyboard.RenderRequest
 import io.github.twojstar.intentkeyboard.RenderResult
 import io.github.twojstar.intentkeyboard.SemanticPipeline
 import io.github.twojstar.intentkeyboard.SemanticRenderer
+import io.github.twojstar.intentkeyboard.Tone
+
+data class DesktopRenderPreferences(
+    val tone: Tone = Tone.DEFAULT,
+    val recipientProfile: RecipientProfile = RecipientProfile.NONE,
+    val sourceLanguage: String? = null,
+    val targetLanguage: String? = null,
+)
 
 data class DesktopIntentState(
     val rawIntent: String,
     val register: Register,
+    val preferences: DesktopRenderPreferences,
     val previewText: String?,
     val warnings: List<String>,
     val canCopy: Boolean,
@@ -30,8 +40,10 @@ class DesktopIntentSession(
 
     private var rawIntent = ""
     private var register = Register.NATURAL
+    private var preferences = DesktopRenderPreferences()
     private var renderedSource = ""
     private var renderedRegister = register
+    private var renderedPreferences = preferences
     private var renderedResult: RenderResult? = null
     private var revision = 0L
     private var renderSequence = 0L
@@ -52,12 +64,24 @@ class DesktopIntentSession(
         snapshotLocked()
     }
 
+    fun setTone(value: Tone): DesktopIntentState = updatePreferences { copy(tone = value) }
+
+    fun setRecipientProfile(value: RecipientProfile): DesktopIntentState =
+        updatePreferences { copy(recipientProfile = value) }
+
+    fun setSourceLanguage(value: String?): DesktopIntentState =
+        updatePreferences { copy(sourceLanguage = value.normalizedLanguage()) }
+
+    fun setTargetLanguage(value: String?): DesktopIntentState =
+        updatePreferences { copy(targetLanguage = value.normalizedLanguage()) }
+
     suspend fun render(): DesktopIntentState {
         val token = synchronized(stateLock) {
             renderSequence += 1
             RenderToken(
                 rawIntent = rawIntent,
                 register = register,
+                preferences = preferences,
                 revision = revision,
                 sequence = renderSequence,
             )
@@ -67,7 +91,11 @@ class DesktopIntentSession(
             RenderRequest(
                 rawIntent = token.rawIntent,
                 register = token.register,
+                tone = token.preferences.tone,
+                sourceLanguage = token.preferences.sourceLanguage,
+                targetLanguage = token.preferences.targetLanguage,
                 locks = ConservativeLockDetector.detect(token.rawIntent),
+                recipientProfile = token.preferences.recipientProfile,
             ),
         )
 
@@ -76,10 +104,12 @@ class DesktopIntentSession(
                 token.revision == revision &&
                 token.sequence == renderSequence &&
                 token.rawIntent == rawIntent &&
-                token.register == register
+                token.register == register &&
+                token.preferences == preferences
             ) {
                 renderedSource = token.rawIntent
                 renderedRegister = token.register
+                renderedPreferences = token.preferences
                 renderedResult = result
             }
             snapshotLocked()
@@ -111,14 +141,29 @@ class DesktopIntentSession(
             ?.text
     }
 
+    private fun updatePreferences(
+        transform: DesktopRenderPreferences.() -> DesktopRenderPreferences,
+    ): DesktopIntentState = synchronized(stateLock) {
+        val next = preferences.transform()
+        if (next != preferences) {
+            preferences = next
+            invalidatePreviewLocked()
+        }
+        snapshotLocked()
+    }
+
     private fun hasCurrentPreviewLocked(): Boolean =
-        renderedResult != null && renderedSource == rawIntent && renderedRegister == register
+        renderedResult != null &&
+            renderedSource == rawIntent &&
+            renderedRegister == register &&
+            renderedPreferences == preferences
 
     private fun snapshotLocked(): DesktopIntentState {
         val currentResult = renderedResult?.takeIf { hasCurrentPreviewLocked() }
         return DesktopIntentState(
             rawIntent = rawIntent,
             register = register,
+            preferences = preferences,
             previewText = currentResult?.text,
             warnings = currentResult?.warnings.orEmpty(),
             canCopy = when {
@@ -137,9 +182,13 @@ class DesktopIntentSession(
         renderedResult = null
     }
 
+    private fun String?.normalizedLanguage(): String? =
+        this?.trim()?.takeIf { it.isNotEmpty() }
+
     private data class RenderToken(
         val rawIntent: String,
         val register: Register,
+        val preferences: DesktopRenderPreferences,
         val revision: Long,
         val sequence: Long,
     )
