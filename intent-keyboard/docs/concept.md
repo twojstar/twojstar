@@ -51,18 +51,16 @@ Examples:
 
 - exact time: `18:30`
 - amount: `120 zł`
-- URL
+- explicit `http://` / `https://` URL
 - product or person name
 - quoted literal
 
-The current conservative automatic detector creates `VERBATIM` locks for valid 24-hour times, common currency amounts, explicit `http://` / `https://` URLs and non-empty literals wrapped in ASCII/curly/Polish double quotes or backticks. It intentionally does not guess product or person names yet; reliable name protection needs explicit input or a less heuristic detector.
+Two lock modes are planned:
 
-Two lock modes exist in the shared contract:
+- `VERBATIM`: preserve the exact bytes/text.
+- `SEMANTIC`: preserve the meaning but allow localization, for example `tomorrow at 6 PM` → `jutro o 18:00`.
 
-- `VERBATIM`: preserve the exact bytes/text; this is validated today.
-- `SEMANTIC`: preserve the meaning but allow localization, for example `tomorrow at 6 PM` → `jutro o 18:00`; semantic validation remains future work.
-
-The shared core validates verbatim locks after every render and reports violations before text is committed.
+The shared core validates verbatim locks after every render and reports violations before text is committed. The conservative automatic detector currently covers exact times, supported currency forms, explicit HTTP(S) URLs and non-empty double-quoted/backtick literals. URL boundary normalization removes only source wrappers that are unambiguous from surrounding text; otherwise legal URI punctuation stays protected. Names and bare domains are not guessed automatically. `SEMANTIC` lock validation remains future work.
 
 ## Register
 
