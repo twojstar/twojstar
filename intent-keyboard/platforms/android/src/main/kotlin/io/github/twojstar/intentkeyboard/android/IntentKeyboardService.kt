@@ -42,6 +42,9 @@ class IntentKeyboardService : InputMethodService() {
     private var renderGeneration = 0L
     private var autoRenderJob: Job? = null
     private var renderJob: Job? = null
+    private var hostCompositionOwned = false
+    private var hostCompositionText = ""
+    private var hostCompositionMutationInProgress = false
 
     private var rawView: TextView? = null
     private var previewView: TextView? = null
@@ -115,9 +118,15 @@ class IntentKeyboardService : InputMethodService() {
 
         activeEditorInfo = attribute
         val nextSensitive = isSensitive(attribute)
+
+        if (nextSensitive && hostCompositionOwned) {
+            finishOwnedHostComposition()
+        }
+
         sensitiveField = nextSensitive
 
         if (nextSensitive || !restarting) {
+            resetHostCompositionTracking()
             clearInternalBuffer()
         } else {
             refreshViews()
@@ -130,10 +139,53 @@ class IntentKeyboardService : InputMethodService() {
     }
 
     override fun onFinishInput() {
+        resetHostCompositionTracking()
         clearInternalBuffer()
         sensitiveField = false
         activeEditorInfo = null
         super.onFinishInput()
+    }
+
+    override fun onUpdateSelection(
+        oldSelStart: Int,
+        oldSelEnd: Int,
+        newSelStart: Int,
+        newSelEnd: Int,
+        candidatesStart: Int,
+        candidatesEnd: Int,
+    ) {
+        super.onUpdateSelection(
+            oldSelStart,
+            oldSelEnd,
+            newSelStart,
+            newSelEnd,
+            candidatesStart,
+            candidatesEnd,
+        )
+
+        if (
+            hostCompositionMutationInProgress ||
+            !hostCompositionOwned ||
+            sensitiveField ||
+            buffer.isEmpty()
+        ) {
+            return
+        }
+
+        if (candidatesStart < 0 || candidatesEnd < 0) {
+            resetHostCompositionTracking()
+            clearInternalBuffer()
+            statusView?.text = "Draft finalized by the app."
+            return
+        }
+
+        val compositionEnd = maxOf(candidatesStart, candidatesEnd)
+        if (newSelStart != compositionEnd || newSelEnd != compositionEnd) {
+            finishOwnedHostComposition()
+            resetHostCompositionTracking()
+            clearInternalBuffer()
+            statusView?.text = "Draft finalized after cursor move."
+        }
     }
 
     override fun onEvaluateFullscreenMode(): Boolean = false
@@ -245,6 +297,7 @@ class IntentKeyboardService : InputMethodService() {
 
         buffer.append(text)
         invalidateRenderedPreview()
+        syncHostComposition(buffer.toString())
         refreshViews()
         scheduleAutoRender()
     }
@@ -257,6 +310,7 @@ class IntentKeyboardService : InputMethodService() {
 
         buffer.deleteCharAt(buffer.lastIndex)
         invalidateRenderedPreview()
+        syncHostComposition(buffer.toString())
         refreshViews()
         scheduleAutoRender()
     }
@@ -378,11 +432,19 @@ class IntentKeyboardService : InputMethodService() {
                 renderedCanCommit = result.canCommit
                 previewView?.text = "preview: ${result.text}"
 
+                val hostText = if (result.canCommit && requestedRegister != Register.RAW) {
+                    result.text
+                } else {
+                    raw
+                }
+                val hostMirrored = syncHostComposition(hostText)
+
                 statusView?.text = when {
                     !result.canCommit -> {
                         val locked = result.violatedLocks.joinToString { it.value }
                         "Commit blocked: protected value changed ($locked)."
                     }
+                    !hostMirrored -> "Preview ready; host composing text is unavailable."
                     result.warnings.isNotEmpty() -> result.warnings.joinToString(" · ")
                     else -> "Ready to commit."
                 }
@@ -426,7 +488,22 @@ class IntentKeyboardService : InputMethodService() {
 
     private fun commitOutput(output: String): Boolean {
         val connection = currentInputConnection
-        if (connection == null || !connection.commitText(output, 1)) {
+        if (connection == null) {
+            statusView?.text = "Commit failed. Draft preserved."
+            return false
+        }
+
+        if (hostCompositionOwned) {
+            if (hostCompositionText != output && !syncHostComposition(output)) {
+                statusView?.text = "Commit failed. Draft preserved."
+                return false
+            }
+
+            if (!finishOwnedHostComposition()) {
+                statusView?.text = "Commit failed. Draft preserved."
+                return false
+            }
+        } else if (!connection.commitText(output, 1)) {
             statusView?.text = "Commit failed. Draft preserved."
             return false
         }
@@ -436,6 +513,48 @@ class IntentKeyboardService : InputMethodService() {
         return true
     }
 
+    private fun syncHostComposition(text: String): Boolean {
+        if (sensitiveField) return false
+
+        val connection = currentInputConnection ?: return false
+        hostCompositionMutationInProgress = true
+        return try {
+            val updated = connection.setComposingText(text, 1)
+            if (updated) {
+                if (text.isEmpty()) {
+                    resetHostCompositionTracking()
+                } else {
+                    hostCompositionOwned = true
+                    hostCompositionText = text
+                }
+            }
+            updated
+        } finally {
+            hostCompositionMutationInProgress = false
+        }
+    }
+
+    private fun finishOwnedHostComposition(): Boolean {
+        if (!hostCompositionOwned) return true
+
+        val connection = currentInputConnection ?: return false
+        hostCompositionMutationInProgress = true
+        return try {
+            val finished = connection.finishComposingText()
+            if (finished) {
+                resetHostCompositionTracking()
+            }
+            finished
+        } finally {
+            hostCompositionMutationInProgress = false
+        }
+    }
+
+    private fun resetHostCompositionTracking() {
+        hostCompositionOwned = false
+        hostCompositionText = ""
+    }
+
     private fun cycleRegister() {
         register = when (register) {
             Register.RAW -> Register.NATURAL
@@ -443,6 +562,7 @@ class IntentKeyboardService : InputMethodService() {
             Register.CIVILIZED -> Register.RAW
         }
         invalidateRenderedPreview()
+        syncHostComposition(buffer.toString())
         refreshViews()
         scheduleAutoRender()
     }
