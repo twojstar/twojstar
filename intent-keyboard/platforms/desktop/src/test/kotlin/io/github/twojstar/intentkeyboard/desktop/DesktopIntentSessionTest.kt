@@ -56,6 +56,21 @@ class DesktopIntentSessionTest {
     }
 
     @Test
+    fun blankSemanticDraftDoesNotClearClipboardButRawPreservesWhitespace() = runBlocking {
+        val session = DesktopIntentSession()
+        session.updateRawIntent("   \n  ")
+
+        val rendered = session.render()
+        assertEquals("", rendered.previewText)
+        assertFalse(rendered.canCopy)
+        assertNull(session.copyTextOrNull())
+
+        val raw = session.setRegister(Register.RAW)
+        assertTrue(raw.canCopy)
+        assertEquals("   \n  ", session.copyTextOrNull())
+    }
+
+    @Test
     fun lockViolationBlocksCopy() = runBlocking {
         val renderer = object : SemanticRenderer {
             override suspend fun render(request: io.github.twojstar.intentkeyboard.RenderRequest) =
