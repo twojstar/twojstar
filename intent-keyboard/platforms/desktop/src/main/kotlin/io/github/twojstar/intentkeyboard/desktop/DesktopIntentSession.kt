@@ -100,9 +100,14 @@ class DesktopIntentSession(
     fun copyTextOrNull(): String? = synchronized(stateLock) {
         if (rawIntent.isEmpty()) return@synchronized null
         if (register == Register.RAW) return@synchronized rawIntent
+        if (rawIntent.isBlank()) return@synchronized null
 
         renderedResult
-            ?.takeIf { hasCurrentPreviewLocked() && it.canCommit }
+            ?.takeIf {
+                hasCurrentPreviewLocked() &&
+                    it.canCommit &&
+                    it.text.isNotBlank()
+            }
             ?.text
     }
 
@@ -119,7 +124,8 @@ class DesktopIntentSession(
             canCopy = when {
                 rawIntent.isEmpty() -> false
                 register == Register.RAW -> true
-                else -> currentResult?.canCommit == true
+                rawIntent.isBlank() -> false
+                else -> currentResult?.canCommit == true && currentResult.text.isNotBlank()
             },
         )
     }
