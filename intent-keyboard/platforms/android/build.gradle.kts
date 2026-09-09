@@ -32,4 +32,5 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.ktor.client.okhttp)
     implementation(libs.litert.lm.android)
+    testImplementation(libs.junit4)
 }
