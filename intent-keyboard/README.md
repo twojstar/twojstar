@@ -50,11 +50,11 @@ The shared engine lives in Kotlin Multiplatform `commonMain` code. Platform inte
 
 The keyboard UI and operating-system hooks stay platform-specific. Intent parsing, rendering contracts, tone/recipient profiles, translation routing and lock validation belong in the shared core.
 
-See [`docs/concept.md`](docs/concept.md) for the architecture and MVP boundary. The repeatable Android real-device performance/quality gate lives in [`docs/android-local-benchmark.md`](docs/android-local-benchmark.md).
+See [`docs/concept.md`](docs/concept.md) for the architecture and current implementation status. The repeatable Android physical gates are [`docs/android-editor-matrix.md`](docs/android-editor-matrix.md) for host composition behavior and [`docs/android-local-benchmark.md`](docs/android-local-benchmark.md) for local-model performance/quality.
 
 ## Current prototype
 
-The first Android slice is now real rather than a mock app:
+The Android slice is now a real system IME rather than a mock app:
 
 1. Install the debug APK produced by `Intent keyboard CI`.
 2. Open **Intent Keyboard** and install the recommended offline model, or import another `.litertlm` model manually.
@@ -65,6 +65,8 @@ The first Android slice is now real rather than a mock app:
 7. Pick `Raw`, `Natural` or `Civilized`; `Natural` and `Civilized` refresh the semantic preview automatically after a short typing pause. **Render** forces an immediate refresh, **Revert** returns an uncommitted preview to the raw draft, and **Commit** inserts the current safe output into the host app.
 
 The Android preview uses trailing-edge debounce rather than starting inference on every keypress. Stale renders are cancelled or ignored, and `LocalSemanticRuntime` serializes access to the native engine so only one LiteRT-LM inference owns it at a time. RAW mode does not schedule semantic auto-rendering. Semantic tone/language/recipient preferences are read for each render, so changing presentation settings never replaces the raw intent source. The mechanical fallback remains intentionally limited and may not realize tone, recipient context or translation requests without a model-backed renderer.
+
+Android mirrors the keyboard-owned draft into host composing text. Safe previews replace that same owned region, and a tested ownership policy treats cursor movement, editor switches and host-side composition loss as boundaries. The policy is covered by JVM tests; compatibility across real native fields, WebView and messaging/editor apps remains a physical validation gate rather than a CI claim.
 
 Revert is deliberately pre-commit only. It restores the unchanged raw draft, suppresses automatic re-rendering of that exact version, and keeps the selected register/settings intact. Editing the draft, changing render settings/register, or pressing Render allows a new preview. Android restores its owned host composing region to raw before discarding the preview; if that restoration fails, the rendered preview is kept instead of letting keyboard and host state diverge. Draft/preview history is process-local and short-lived, and Commit clears it rather than creating a persistent undo log.
 
@@ -90,17 +92,19 @@ Android can now use a local LiteRT-LM 0.16.1 model end to end:
 
 The setup screen also exposes process-local runtime diagnostics for actual keyboard renders: successful/failed local samples, median and p95 latency, last latency and last input/output character counts. The collector keeps at most 20 successful timings in memory, stores no draft/completion text, writes nothing to disk and can be reset manually. Installer smoke tests, mechanical renders and remote renders do not count as successful local samples.
 
-Remote rendering keeps the same semantic pipeline rather than creating a translation-only path. A ready local model is always attempted first. If no local model is ready, or local rendering fails, an explicitly enabled remote provider may be used. Successful remote renders carry an on-keyboard warning that draft text left the device; failed remote attempts warn that the draft may have left the device before the runtime degrades mechanically.
+Remote rendering keeps the same semantic pipeline rather than creating a translation-only path. A ready local model is always attempted first. If no local model is ready, or local rendering fails, an explicitly enabled remote provider may be used. A tested fallback policy distinguishes confirmed remote success (`draft text left this device`) from failed remote attempts (`draft may have left this device`) before degrading mechanically.
 
 Remote configuration stores only enablement, HTTPS base URL and model name as ordinary app-private preferences. An optional bearer token is encrypted with an AES-GCM key held by Android Keystore; the plaintext token is never written to preferences, source, APK metadata or logs, and the setup UI never reads the stored token back into the field. `android:allowBackup="false"` remains set for the application.
 
 No model is bundled in the repository or APK. The runtime prunes obsolete private model copies only after releasing any engine that could still reference them. Local processing remains the default.
 
-Regardless of provider, the model does not get the final word: exact time/money locks are validated again after rendering, and an unsafe preview cannot be committed. Sensitive/password fields bypass semantic buffering entirely.
+Regardless of provider, the model does not get the final word. Automatic VERBATIM protection covers exact times, supported currency values, explicit HTTP(S) URLs and non-empty quoted/backtick literals, and unsafe previews cannot be committed. General `SEMANTIC` equivalence validation is not implemented yet, so rewritten output carrying a semantic lock fails closed rather than being guessed safe. Sensitive/password fields bypass semantic buffering entirely.
 
 Translation already travels through this same register/tone/recipient/language/lock pipeline. Real-device quality validation for the managed local Qwen model remains a separate gate before claiming local translation quality broadly.
 
-The desktop proof now exercises the same core from a JVM/Swing companion app. `DesktopIntentSession` keeps raw/register/preview state short-lived, rejects stale late renders, and allows output only when the current shared-pipeline result is safe. The first `DesktopTextSink` copies output to the system clipboard after an explicit **Copy** action; it does not inject text into another app, install a native input method, register global keyboard hooks or monitor clipboard contents. CI tests the session and publishes a portable desktop ZIP. See [`platforms/desktop/README.md`](platforms/desktop/README.md).
+The iOS keyboard now has debounced preview, safe commit/Revert and persistent extension-local tone/recipient/source/target preferences. `RequestsOpenAccess` stays `false`, so the current extension does not use remote providers or shared-container writes. `IosSemanticBridge` routes those preferences through the shared core; the current iOS renderer remains mechanical and reports limitations instead of pretending model-backed tone/translation happened. See [`platforms/ios/README.md`](platforms/ios/README.md).
+
+The desktop proof exercises the same core from a JVM/Swing companion app. `DesktopIntentSession` keeps raw/register/render-settings/preview state short-lived, rejects stale late renders, and allows output only when the current shared-pipeline result is safe. Tone, recipient and source/target language settings are process-local. The first `DesktopTextSink` copies output to the system clipboard after an explicit **Copy** action; it does not inject text into another app, install a native input method, register global keyboard hooks or monitor clipboard contents. CI tests the session and publishes a portable desktop ZIP. See [`platforms/desktop/README.md`](platforms/desktop/README.md).
 
 ## Project layout
 
