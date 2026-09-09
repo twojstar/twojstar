@@ -149,6 +149,56 @@ MVP scope:
 
 Translation, recipient-aware profiles and desktop integration come after the semantic rewrite loop is trustworthy.
 
+## Follow-up implementation queue
+
+Keep these as separate logical slices rather than one broad refactor:
+
+1. **Host composition ownership on Android**
+   - Mirror the keyboard-owned draft into the host editor through composing text.
+   - Let a safe semantic preview replace the same composing region instead of inserting a second copy.
+   - Treat cursor movement, editor switches and lost composing regions as ownership boundaries.
+   - Avoid composition entirely in sensitive/password fields.
+
+2. **Composition hardening across real editors**
+   - Exercise `onUpdateSelection`, composing-region loss and cursor movement in native text fields, WebView and common messaging/editor apps.
+   - Fall back to finalizing or abandoning the keyboard-owned composition rather than rewriting text after ownership becomes ambiguous.
+
+3. **Tone and language settings**
+   - Expose `FRIENDLY`, `NEUTRAL`, `WORK` and `FORMAL` without conflating tone with register.
+   - Add source/target language selection while keeping language values in untrusted model input.
+   - Preserve the raw intent as the source of truth when changing tone or language.
+
+4. **Translation through the existing semantic pipeline**
+   - Reuse the same renderer, semantic locks and integrity checks instead of creating a translation-only path.
+   - Start with local-model translation where quality is acceptable, then allow explicit remote-provider fallback.
+
+5. **Remote provider settings and credentials**
+   - Keep local processing as the default.
+   - Add explicit provider enablement, base URL/model selection and secure credential storage.
+   - Never embed tokens in source, APK metadata or logs.
+   - Show a clear indicator whenever draft text may leave the device.
+
+6. **Recipient-aware profiles**
+   - Add reusable recipient/context presets such as friend, work, client or formal office.
+   - Keep profiles as rendering context only; they must not mutate or replace the raw intent.
+
+7. **On-device model/runtime polish**
+   - Benchmark the managed Qwen model on real devices and tune prompt/output limits for keyboard-sized drafts.
+   - Keep CPU as the conservative baseline until accelerator backends are verified for the selected model/runtime pair.
+   - Consider optional alternative model packs without adding large binaries to Git history.
+
+8. **iOS parity for semantic live behavior**
+   - Bring live/debounced preview and equivalent safe commit semantics to the iOS keyboard extension within platform API limits.
+   - Preserve the no-Full-Access/local-first default unless a user explicitly enables capabilities that require more access.
+
+9. **Undo/revert and inspectability**
+   - Make it easy to return from a rendered preview to the raw draft and regenerate with different settings.
+   - Keep only short-lived in-memory draft/history state unless the user explicitly opts into persistence.
+
+10. **Desktop adapter after mobile behavior is proven**
+    - Choose per-platform insertion mechanisms instead of forcing Android/iOS IME assumptions onto desktop.
+    - Reuse the same shared semantic contracts and provider/runtime layer.
+
 ## Working-name note
 
 `IntentIME` was considered, but an unrelated current product named **Intentime** already exists. The repository folder therefore uses the neutral working name `intent-keyboard` until branding is decided.
