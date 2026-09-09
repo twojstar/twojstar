@@ -526,8 +526,12 @@ class IntentKeyboardService : InputMethodService() {
         if (sensitiveField) return false
 
         val connection = currentInputConnection ?: return false
-        if (hostCompositionOwned && hostCompositionConnection !== connection) {
-            if (!finishOwnedHostComposition()) return false
+        if (
+            hostCompositionOwned &&
+            hostCompositionConnection !== connection &&
+            !finishOwnedHostComposition()
+        ) {
+            return false
         }
 
         hostCompositionMutationInProgress = true
@@ -541,8 +545,6 @@ class IntentKeyboardService : InputMethodService() {
                     hostCompositionConnection = connection
                     hostCompositionText = text
                 }
-            } else if (hostCompositionConnection === connection) {
-                resetHostCompositionTracking()
             }
             updated
         } finally {
