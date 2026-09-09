@@ -41,12 +41,24 @@ jobs:
         with:
           gradle-version: "9.6.0"
 
-      - run: gradle :core:desktopTest :platforms:android:assembleDebug --stacktrace
+      - run: >-
+          gradle
+          :core:desktopTest
+          :platforms:android:assembleDebug
+          :platforms:desktop:test
+          :platforms:desktop:distZip
+          --stacktrace
 
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: intent-keyboard-android-debug
           path: intent-keyboard/platforms/android/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: intent-keyboard-desktop
+          path: intent-keyboard/platforms/desktop/build/distributions/*.zip
           if-no-files-found: error
 
   ios:
