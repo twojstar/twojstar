@@ -20,6 +20,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 data class ManagedModelSpec(
@@ -79,45 +81,47 @@ class ManagedModelInstaller(
         spec: ManagedModelSpec = ManagedModelCatalog.recommended,
         onProgress: suspend (ManagedModelInstallProgress) -> Unit = {},
     ): LocalModelSelection = withContext(Dispatchers.IO) {
-        currentManagedSelection(spec)?.let { return@withContext it }
+        installMutex.withLock {
+            currentManagedSelection(spec)?.let { return@withLock it }
 
-        cleanupStaleDownloads()
-        ensureEnoughSpace(spec)
+            cleanupStaleDownloads()
+            ensureEnoughSpace(spec)
 
-        val downloadDirectory = requireDownloadDirectory()
-        val stagingFile = File(
-            downloadDirectory,
-            "${spec.id}-${UUID.randomUUID()}.litertlm.part",
-        )
-
-        try {
-            onProgress(ManagedModelInstallProgress.Connecting)
-            downloadAndVerify(spec, stagingFile, onProgress)
-            currentCoroutineContext().ensureActive()
-
-            onProgress(ManagedModelInstallProgress.Testing)
-            smokeTestModel(stagingFile)
-            currentCoroutineContext().ensureActive()
-
-            onProgress(ManagedModelInstallProgress.Activating)
-            modelStore.installVerifiedModelFile(
-                source = stagingFile,
-                displayName = spec.displayName,
-                sizeBytes = spec.sizeBytes,
-                managedModelId = spec.id,
-                managedSha256 = spec.sha256,
+            val downloadDirectory = requireDownloadDirectory()
+            val stagingFile = File(
+                downloadDirectory,
+                "${spec.id}-${UUID.randomUUID()}.litertlm.part",
             )
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: ManagedModelInstallException) {
-            throw error
-        } catch (error: LocalModelStoreException) {
-            throw ManagedModelInstallException(
-                "The downloaded model was verified but could not be activated.",
-                error,
-            )
-        } finally {
-            deleteBestEffort(stagingFile)
+
+            try {
+                onProgress(ManagedModelInstallProgress.Connecting)
+                downloadAndVerify(spec, stagingFile, onProgress)
+                currentCoroutineContext().ensureActive()
+
+                onProgress(ManagedModelInstallProgress.Testing)
+                smokeTestModel(stagingFile)
+                currentCoroutineContext().ensureActive()
+
+                onProgress(ManagedModelInstallProgress.Activating)
+                modelStore.installVerifiedModelFile(
+                    source = stagingFile,
+                    displayName = spec.displayName,
+                    sizeBytes = spec.sizeBytes,
+                    managedModelId = spec.id,
+                    managedSha256 = spec.sha256,
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: ManagedModelInstallException) {
+                throw error
+            } catch (error: LocalModelStoreException) {
+                throw ManagedModelInstallException(
+                    "The downloaded model was verified but could not be activated.",
+                    error,
+                )
+            } finally {
+                deleteBestEffort(stagingFile)
+            }
         }
     }
 
@@ -460,6 +464,8 @@ class ManagedModelInstaller(
     }
 
     private companion object {
+        val installMutex = Mutex()
+
         const val DOWNLOAD_DIRECTORY = "managed-model-downloads"
         const val CONNECT_TIMEOUT_MS = 15_000
         const val READ_TIMEOUT_MS = 60_000
