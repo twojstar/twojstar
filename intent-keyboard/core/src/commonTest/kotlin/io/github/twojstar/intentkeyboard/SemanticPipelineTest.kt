@@ -31,6 +31,53 @@ class SemanticPipelineTest {
     }
 
     @Test
+    fun transformedTextWithSemanticLockFailsClosed() = runTest {
+        val lock = SemanticLock("tomorrow at 6 PM", LockMode.SEMANTIC)
+        val pipeline = SemanticPipeline(
+            renderer = object : SemanticRenderer {
+                override suspend fun render(request: RenderRequest) =
+                    RendererOutcome.Success(RenderResult("Jutro o 18:00."))
+            },
+        )
+
+        val result = pipeline.render(
+            RenderRequest(
+                rawIntent = "tomorrow at 6 PM",
+                targetLanguage = "Polish",
+                locks = listOf(lock),
+            ),
+        )
+
+        assertFalse(result.canCommit)
+        assertEquals(listOf(lock), result.violatedLocks)
+        assertTrue(result.warnings.any { "could not be validated" in it && lock.value in it })
+    }
+
+    @Test
+    fun unchangedTextNeedsNoSemanticInferenceToPreserveLock() = runTest {
+        val raw = "tomorrow at 6 PM"
+        val lock = SemanticLock(raw, LockMode.SEMANTIC)
+        val pipeline = SemanticPipeline(
+            renderer = object : SemanticRenderer {
+                override suspend fun render(request: RenderRequest) =
+                    RendererOutcome.Success(RenderResult(request.rawIntent))
+            },
+        )
+
+        val result = pipeline.render(
+            RenderRequest(
+                rawIntent = raw,
+                register = Register.RAW,
+                locks = listOf(lock),
+            ),
+        )
+
+        assertTrue(result.canCommit)
+        assertTrue(result.violatedLocks.isEmpty())
+        assertTrue(result.warnings.isEmpty())
+    }
+
+    @Test
     fun rendererFailureBecomesSemanticRenderException() = runTest {
         val pipeline = SemanticPipeline(
             renderer = object : SemanticRenderer {
