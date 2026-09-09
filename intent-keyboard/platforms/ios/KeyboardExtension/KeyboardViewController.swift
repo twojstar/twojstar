@@ -278,6 +278,9 @@ final class KeyboardViewController: UIInputViewController {
         let hasCurrentPreview = renderedSource == rawIntent && !renderedText.isEmpty
 
         if registerName != "RAW" && !hasCurrentPreview {
+            if autoRenderTask == nil && renderTask == nil {
+                scheduleAutoRender()
+            }
             statusLabel.text = "Preview is not ready yet. Wait, press Render, or switch to Raw."
             refreshCompactLayout()
             return false
@@ -387,6 +390,11 @@ final class KeyboardViewController: UIInputViewController {
 
         renderTask = Task { [weak self] in
             guard let self else { return }
+            defer {
+                if generation == renderGeneration {
+                    renderTask = nil
+                }
+            }
 
             do {
                 let result = try await semanticBridge.render(
