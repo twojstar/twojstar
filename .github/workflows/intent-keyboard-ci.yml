@@ -44,6 +44,7 @@ jobs:
       - run: >-
           gradle
           :core:desktopTest
+          :platforms:android:testDebugUnitTest
           :platforms:android:assembleDebug
           :platforms:desktop:test
           :platforms:desktop:distZip
