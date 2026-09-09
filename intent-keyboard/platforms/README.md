@@ -29,16 +29,17 @@ The iOS adapter consumes the same semantic pipeline and render result contract r
 
 ## Desktop
 
-Desktop is a target for the shared core immediately, but system-wide text insertion is deliberately left adapter-specific.
+The first desktop proof is a JVM/Swing companion app over the existing `jvm("desktop")` core target.
 
-Possible frontends:
+- `DesktopIntentSession` owns only short-lived draft/register/preview state and delegates rendering/locks to the shared core.
+- revision and render-sequence guards prevent late results from replacing newer drafts,
+- `Revert` drops an uncommitted preview without deleting the raw draft,
+- `SystemClipboardTextSink` publishes safe output only after an explicit **Copy** action,
+- CI tests the session and builds a portable application ZIP.
 
-- native input method,
-- accessibility-based insertion,
-- companion overlay / command palette,
-- editor/plugin bridges.
+The proof deliberately does **not** install a native input method, inject through accessibility APIs, register global keyboard hooks or monitor the clipboard. Those mechanisms differ materially between Windows, macOS and Linux and should be evaluated as separate adapters after the companion UX is proven.
 
-The first desktop proof should validate the semantic engine and UX, not force one lowest-common-denominator keyboard abstraction across Windows, macOS and Linux.
+See [`desktop/README.md`](desktop/README.md) for run/build instructions and the exact output boundary.
 
 ## Non-goal
 
