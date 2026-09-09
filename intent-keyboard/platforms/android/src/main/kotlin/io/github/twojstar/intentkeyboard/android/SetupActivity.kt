@@ -160,12 +160,10 @@ class SetupActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        val managedState = managedInstallCoordinator.state
         if (
             !manualModelOperationInProgress &&
-            managedInstallCoordinator.state in setOf(
-                ManagedModelInstallState.Idle,
-                managedInstallCoordinator.state.takeIf { it is ManagedModelInstallState.Completed },
-            )
+            (managedState is ManagedModelInstallState.Idle || managedState is ManagedModelInstallState.Completed)
         ) {
             refreshModelStatus()
             updateModelControls()
@@ -190,10 +188,15 @@ class SetupActivity : Activity() {
     }
 
     private fun toggleManagedModelInstall() {
-        if (managedInstallCoordinator.state is ManagedModelInstallState.Running) {
-            managedInstallCoordinator.cancel()
-        } else if (!isRecommendedModelInstalled()) {
-            managedInstallCoordinator.start()
+        when (val state = managedInstallCoordinator.state) {
+            is ManagedModelInstallState.Running -> {
+                if (state.progress != ManagedModelInstallProgress.Activating) {
+                    managedInstallCoordinator.cancel()
+                }
+            }
+            else -> if (!isRecommendedModelInstalled()) {
+                managedInstallCoordinator.start()
+            }
         }
     }
 
@@ -320,17 +323,24 @@ class SetupActivity : Activity() {
     }
 
     private fun updateModelControls() {
-        val managedRunning = managedInstallCoordinator.state is ManagedModelInstallState.Running
+        val runningState = managedInstallCoordinator.state as? ManagedModelInstallState.Running
+        val activationInProgress = runningState?.progress == ManagedModelInstallProgress.Activating
+        val managedRunning = runningState != null
         val selection = modelStore.current()
-        val recommendedInstalled = isRecommendedModelInstalled(selection)
+        val recommendedInstalled = isRecommendedModelInstalled()
 
         installRecommendedModelButton?.apply {
             text = when {
+                activationInProgress -> getString(R.string.model_download_activating)
                 managedRunning -> getString(R.string.cancel_model_download)
                 recommendedInstalled -> getString(R.string.recommended_model_installed)
                 else -> getString(R.string.install_recommended_model)
             }
-            isEnabled = managedRunning || (!manualModelOperationInProgress && !recommendedInstalled)
+            isEnabled = when {
+                activationInProgress -> false
+                managedRunning -> true
+                else -> !manualModelOperationInProgress && !recommendedInstalled
+            }
         }
 
         importModelButton?.isEnabled = !manualModelOperationInProgress && !managedRunning
@@ -338,14 +348,8 @@ class SetupActivity : Activity() {
             !manualModelOperationInProgress && !managedRunning && selection != null
     }
 
-    private fun isRecommendedModelInstalled(
-        selection: LocalModelSelection? = modelStore.current(),
-    ): Boolean {
-        val recommended = ManagedModelCatalog.recommended
-        return selection?.managedModelId == recommended.id &&
-            selection.managedSha256.equals(recommended.sha256, ignoreCase = true) &&
-            selection.sizeBytes == recommended.sizeBytes
-    }
+    private fun isRecommendedModelInstalled(): Boolean =
+        managedInstallCoordinator.currentManagedSelection() != null
 
     private fun matchWidth() = LinearLayout.LayoutParams(
         LinearLayout.LayoutParams.MATCH_PARENT,
