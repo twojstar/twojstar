@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class IntentKeyboardService : InputMethodService() {
@@ -39,6 +40,7 @@ class IntentKeyboardService : InputMethodService() {
     private var sensitiveField = false
     private var activeEditorInfo: EditorInfo? = null
     private var renderGeneration = 0L
+    private var autoRenderJob: Job? = null
     private var renderJob: Job? = null
 
     private var rawView: TextView? = null
@@ -57,6 +59,9 @@ class IntentKeyboardService : InputMethodService() {
         val runtime = LocalSemanticRuntime(applicationContext, scope) { state ->
             semanticState = state
             refreshEngineView()
+            if (state is LocalSemanticRuntimeState.Ready) {
+                scheduleAutoRender()
+            }
         }
         semanticRuntime = runtime
         runtime.start()
@@ -116,6 +121,7 @@ class IntentKeyboardService : InputMethodService() {
             clearInternalBuffer()
         } else {
             refreshViews()
+            scheduleAutoRender()
         }
 
         if (nextSensitive) {
@@ -133,6 +139,7 @@ class IntentKeyboardService : InputMethodService() {
     override fun onEvaluateFullscreenMode(): Boolean = false
 
     override fun onDestroy() {
+        autoRenderJob?.cancel()
         renderJob?.cancel()
         semanticRuntime?.close()
         semanticRuntime = null
@@ -239,6 +246,7 @@ class IntentKeyboardService : InputMethodService() {
         buffer.append(text)
         invalidateRenderedPreview()
         refreshViews()
+        scheduleAutoRender()
     }
 
     private fun backspace() {
@@ -250,6 +258,7 @@ class IntentKeyboardService : InputMethodService() {
         buffer.deleteCharAt(buffer.lastIndex)
         invalidateRenderedPreview()
         refreshViews()
+        scheduleAutoRender()
     }
 
     private fun deleteHostSelectionOrPreviousCodePoint() {
@@ -288,7 +297,45 @@ class IntentKeyboardService : InputMethodService() {
         connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
     }
 
-    private fun renderBuffer() {
+    private fun scheduleAutoRender() {
+        autoRenderJob?.cancel()
+        autoRenderJob = null
+
+        if (sensitiveField) return
+        if (register == Register.RAW) {
+            clearTransientRenderStatus()
+            return
+        }
+
+        val raw = buffer.toString()
+        if (raw.isBlank()) {
+            clearTransientRenderStatus()
+            return
+        }
+
+        val generation = renderGeneration
+        statusView?.text = STATUS_PREVIEW_PENDING
+        autoRenderJob = scope.launch {
+            delay(AUTO_RENDER_DEBOUNCE_MS)
+            if (
+                generation != renderGeneration ||
+                sensitiveField ||
+                raw != buffer.toString() ||
+                register == Register.RAW
+            ) {
+                return@launch
+            }
+
+            renderBuffer(fromAutoPreview = true)
+        }
+    }
+
+    private fun renderBuffer(fromAutoPreview: Boolean = false) {
+        if (!fromAutoPreview) {
+            autoRenderJob?.cancel()
+            autoRenderJob = null
+        }
+
         if (sensitiveField) {
             statusView?.text = "Semantic rendering is disabled for sensitive fields."
             return
@@ -306,7 +353,7 @@ class IntentKeyboardService : InputMethodService() {
         renderJob?.cancel()
         val requestedRegister = register
         val generation = ++renderGeneration
-        statusView?.text = "Rendering…"
+        statusView?.text = STATUS_RENDERING
 
         renderJob = scope.launch {
             try {
@@ -355,13 +402,29 @@ class IntentKeyboardService : InputMethodService() {
         val raw = buffer.toString()
         if (raw.isEmpty()) return true
 
+        if (raw.isBlank()) {
+            return commitOutput(raw)
+        }
+
         val hasCurrentPreview = renderedSource == raw && renderedText.isNotBlank()
+        if (register != Register.RAW && !hasCurrentPreview) {
+            if (autoRenderJob?.isActive != true && renderJob?.isActive != true) {
+                scheduleAutoRender()
+            }
+            statusView?.text = "Preview is not ready yet. Wait, press Render, or switch to Raw."
+            return false
+        }
+
         if (hasCurrentPreview && !renderedCanCommit) {
             statusView?.text = "Commit blocked until protected values are preserved."
             return false
         }
 
-        val output = if (hasCurrentPreview) renderedText else raw
+        val output = if (register == Register.RAW) raw else renderedText
+        return commitOutput(output)
+    }
+
+    private fun commitOutput(output: String): Boolean {
         val connection = currentInputConnection
         if (connection == null || !connection.commitText(output, 1)) {
             statusView?.text = "Commit failed. Draft preserved."
@@ -381,15 +444,25 @@ class IntentKeyboardService : InputMethodService() {
         }
         invalidateRenderedPreview()
         refreshViews()
+        scheduleAutoRender()
     }
 
     private fun invalidateRenderedPreview() {
+        autoRenderJob?.cancel()
+        autoRenderJob = null
         renderJob?.cancel()
         renderJob = null
         renderGeneration += 1
         renderedSource = ""
         renderedText = ""
         renderedCanCommit = true
+    }
+
+    private fun clearTransientRenderStatus() {
+        val status = statusView?.text?.toString() ?: return
+        if (status == STATUS_PREVIEW_PENDING || status == STATUS_RENDERING) {
+            statusView?.text = ""
+        }
     }
 
     private fun clearInternalBuffer() {
@@ -488,4 +561,10 @@ class IntentKeyboardService : InputMethodService() {
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()
+
+    private companion object {
+        const val AUTO_RENDER_DEBOUNCE_MS = 450L
+        const val STATUS_PREVIEW_PENDING = "Preview updates after a short pause…"
+        const val STATUS_RENDERING = "Rendering…"
+    }
 }
