@@ -18,6 +18,7 @@ final class KeyboardViewController: UIInputViewController {
     private var renderedSource = ""
     private var renderedText = ""
     private var renderedCanCommit = true
+    private var autoRenderSuppressedSource: String?
     private var registerIndex = 1
     private var characterPage = CharacterPage.letters
     private var renderGeneration: UInt64 = 0
@@ -29,6 +30,7 @@ final class KeyboardViewController: UIInputViewController {
     private let previewLabel = UILabel()
     private let statusLabel = UILabel()
     private let registerButton = UIButton(type: .system)
+    private let revertButton = UIButton(type: .system)
     private let pageButton = UIButton(type: .system)
     private let enterButton = UIButton(type: .system)
     private let rootStack = UIStackView()
@@ -93,11 +95,19 @@ final class KeyboardViewController: UIInputViewController {
         let renderButton = makeControlButton("Render") { [weak self] in
             self?.renderBuffer()
         }
+
+        revertButton.configuration = compactButtonConfiguration(filled: false)
+        revertButton.setTitle("Revert", for: .normal)
+        revertButton.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        revertButton.addAction(UIAction { [weak self] _ in
+            self?.revertPreview()
+        }, for: .touchUpInside)
+
         let commitButton = makeControlButton("Commit") { [weak self] in
             self?.commitBuffer()
         }
 
-        let toolbar = makeRow([registerButton, renderButton, commitButton])
+        let toolbar = makeRow([registerButton, renderButton, revertButton, commitButton])
 
         keysStack.axis = .vertical
         keysStack.spacing = 3
@@ -239,6 +249,7 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func append(_ text: String) {
+        autoRenderSuppressedSource = nil
         rawIntent.append(text)
         invalidateRenderedPreview()
         refreshViews()
@@ -251,6 +262,7 @@ final class KeyboardViewController: UIInputViewController {
             return
         }
 
+        autoRenderSuppressedSource = nil
         rawIntent.removeLast()
         invalidateRenderedPreview()
         refreshViews()
@@ -278,6 +290,11 @@ final class KeyboardViewController: UIInputViewController {
         let hasCurrentPreview = renderedSource == rawIntent && !renderedText.isEmpty
 
         if registerName != "RAW" && !hasCurrentPreview {
+            if autoRenderSuppressedSource == rawIntent {
+                statusLabel.text = "Preview reverted. Press Render, edit the draft, or switch to Raw."
+                refreshCompactLayout()
+                return false
+            }
             if autoRenderTask == nil && renderTask == nil {
                 scheduleAutoRender()
             }
@@ -322,6 +339,7 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func cycleRegister() {
+        autoRenderSuppressedSource = nil
         registerIndex = (registerIndex + 1) % registerNames.count
         invalidateRenderedPreview()
         refreshViews()
@@ -340,7 +358,10 @@ final class KeyboardViewController: UIInputViewController {
         }
 
         let source = rawIntent
-        if source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if
+            source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            source == autoRenderSuppressedSource
+        {
             statusLabel.text = ""
             refreshCompactLayout()
             return
@@ -361,6 +382,7 @@ final class KeyboardViewController: UIInputViewController {
             guard !Task.isCancelled else { return }
             guard generation == renderGeneration else { return }
             guard source == rawIntent else { return }
+            guard source != autoRenderSuppressedSource else { return }
             guard registerName == registerNames[registerIndex] else { return }
 
             autoRenderTask = nil
@@ -370,6 +392,7 @@ final class KeyboardViewController: UIInputViewController {
 
     private func renderBuffer(fromAutoPreview: Bool = false) {
         if !fromAutoPreview {
+            autoRenderSuppressedSource = nil
             autoRenderTask?.cancel()
             autoRenderTask = nil
         }
@@ -431,6 +454,21 @@ final class KeyboardViewController: UIInputViewController {
         }
     }
 
+    private func revertPreview() {
+        let hasCurrentPreview = renderedSource == rawIntent && !renderedText.isEmpty
+        guard hasCurrentPreview else {
+            statusLabel.text = "No current preview to revert."
+            refreshCompactLayout()
+            return
+        }
+
+        autoRenderSuppressedSource = rawIntent
+        invalidateRenderedPreview()
+        refreshViews()
+        statusLabel.text = "Reverted to raw draft. Edit it or press Render to regenerate."
+        refreshCompactLayout()
+    }
+
     private func refreshHostContext() {
         let documentIdentifier = textDocumentProxy.documentIdentifier
         let documentChanged = activeDocumentIdentifier != nil && activeDocumentIdentifier != documentIdentifier
@@ -481,6 +519,7 @@ final class KeyboardViewController: UIInputViewController {
 
     private func clearBuffer() {
         rawIntent = ""
+        autoRenderSuppressedSource = nil
         invalidateRenderedPreview()
         refreshViews()
     }
@@ -489,6 +528,7 @@ final class KeyboardViewController: UIInputViewController {
         rawLabel.text = rawIntent.isEmpty ? "intent: …" : "intent: \(rawIntent)"
         previewLabel.text = renderedText.isEmpty ? "preview: …" : "preview: \(renderedText)"
         registerButton.setTitle(registerNames[registerIndex].capitalized, for: .normal)
+        revertButton.isEnabled = renderedSource == rawIntent && !renderedText.isEmpty
         pageButton.setTitle(characterPage == .letters ? "123" : "ABC", for: .normal)
         refreshReturnKey()
         refreshCompactLayout()
