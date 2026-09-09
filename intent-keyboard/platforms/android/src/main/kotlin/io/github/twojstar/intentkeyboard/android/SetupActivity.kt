@@ -19,11 +19,9 @@ import android.widget.TextView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Suppress("DEPRECATION")
 class SetupActivity : Activity() {
@@ -31,12 +29,15 @@ class SetupActivity : Activity() {
     private val modelStore by lazy(LazyThreadSafetyMode.NONE) {
         LocalModelStore(applicationContext)
     }
-    private val managedModelInstaller by lazy(LazyThreadSafetyMode.NONE) {
-        ManagedModelInstaller(applicationContext, modelStore)
+    private val managedInstallCoordinator by lazy(LazyThreadSafetyMode.NONE) {
+        ManagedModelInstallCoordinator.get(applicationContext)
     }
 
-    private var modelOperationInProgress = false
-    private var managedInstallJob: Job? = null
+    private val managedStateListener: (ManagedModelInstallState) -> Unit = { state ->
+        renderManagedInstallState(state)
+    }
+
+    private var manualModelOperationInProgress = false
     private var modelStatusView: TextView? = null
     private var installRecommendedModelButton: Button? = null
     private var importModelButton: Button? = null
@@ -82,7 +83,6 @@ class SetupActivity : Activity() {
             }, matchWidth())
 
             installRecommendedModelButton = Button(context).also { button ->
-                button.text = getString(R.string.install_recommended_model)
                 button.isAllCaps = false
                 button.setOnClickListener { toggleManagedModelInstall() }
                 addView(button, matchWidth())
@@ -150,11 +150,31 @@ class SetupActivity : Activity() {
         )
 
         refreshModelStatus()
+        updateModelControls()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        managedInstallCoordinator.addListener(managedStateListener)
     }
 
     override fun onResume() {
         super.onResume()
-        if (!modelOperationInProgress) refreshModelStatus()
+        if (
+            !manualModelOperationInProgress &&
+            managedInstallCoordinator.state in setOf(
+                ManagedModelInstallState.Idle,
+                managedInstallCoordinator.state.takeIf { it is ManagedModelInstallState.Completed },
+            )
+        ) {
+            refreshModelStatus()
+            updateModelControls()
+        }
+    }
+
+    override fun onStop() {
+        managedInstallCoordinator.removeListener(managedStateListener)
+        super.onStop()
     }
 
     override fun onDestroy() {
@@ -170,50 +190,29 @@ class SetupActivity : Activity() {
     }
 
     private fun toggleManagedModelInstall() {
-        val running = managedInstallJob
-        if (running?.isActive == true) {
-            running.cancel()
-            return
+        if (managedInstallCoordinator.state is ManagedModelInstallState.Running) {
+            managedInstallCoordinator.cancel()
+        } else if (!isRecommendedModelInstalled()) {
+            managedInstallCoordinator.start()
         }
-
-        installRecommendedModel()
     }
 
-    private fun installRecommendedModel() {
-        val spec = ManagedModelCatalog.recommended
-        modelOperationInProgress = true
-        setModelControlsEnabled(false)
-        installRecommendedModelButton?.apply {
-            isEnabled = true
-            text = getString(R.string.cancel_model_download)
-        }
-        modelStatusView?.text = getString(R.string.model_download_connecting)
-
-        val job = scope.launch {
-            try {
-                managedModelInstaller.install(spec) { progress ->
-                    withContext(Dispatchers.Main.immediate) {
-                        showManagedInstallProgress(progress)
-                    }
+    private fun renderManagedInstallState(state: ManagedModelInstallState) {
+        when (state) {
+            ManagedModelInstallState.Idle -> refreshModelStatus()
+            is ManagedModelInstallState.Running -> showManagedInstallProgress(state.progress)
+            is ManagedModelInstallState.Completed -> refreshModelStatus()
+            ManagedModelInstallState.Cancelled -> {
+                modelStatusView?.text = getString(R.string.model_download_cancelled)
+            }
+            is ManagedModelInstallState.Failed -> {
+                Log.e(TAG, "Managed offline model installation failed", state.cause)
+                modelStatusView?.text = state.message.ifBlank {
+                    getString(R.string.model_download_failed)
                 }
-                refreshModelStatus()
-            } catch (error: CancellationException) {
-                if (!isFinishing && !isDestroyed) {
-                    modelStatusView?.text = getString(R.string.model_download_cancelled)
-                }
-                throw error
-            } catch (error: ManagedModelInstallException) {
-                Log.e(TAG, "Managed offline model installation failed", error)
-                modelStatusView?.text = error.message ?: getString(R.string.model_download_failed)
-            } finally {
-                managedInstallJob = null
-                modelOperationInProgress = false
-                installRecommendedModelButton?.text = getString(R.string.install_recommended_model)
-                setModelControlsEnabled(true)
             }
         }
-
-        managedInstallJob = job
+        updateModelControls()
     }
 
     private fun showManagedInstallProgress(progress: ManagedModelInstallProgress) {
@@ -266,8 +265,8 @@ class SetupActivity : Activity() {
     }
 
     private fun importLocalModel(uri: Uri) {
-        modelOperationInProgress = true
-        setModelControlsEnabled(false)
+        manualModelOperationInProgress = true
+        updateModelControls()
         modelStatusView?.text = getString(R.string.importing_local_model)
 
         scope.launch {
@@ -280,15 +279,15 @@ class SetupActivity : Activity() {
                 Log.e(TAG, "Local model import failed", error)
                 modelStatusView?.text = error.message ?: getString(R.string.local_model_import_failed)
             } finally {
-                modelOperationInProgress = false
-                setModelControlsEnabled(true)
+                manualModelOperationInProgress = false
+                updateModelControls()
             }
         }
     }
 
     private fun clearLocalModel() {
-        modelOperationInProgress = true
-        setModelControlsEnabled(false)
+        manualModelOperationInProgress = true
+        updateModelControls()
 
         scope.launch {
             try {
@@ -300,16 +299,14 @@ class SetupActivity : Activity() {
                 Log.e(TAG, "Local model clear failed", error)
                 modelStatusView?.text = error.message ?: getString(R.string.local_model_clear_failed)
             } finally {
-                modelOperationInProgress = false
-                setModelControlsEnabled(true)
+                manualModelOperationInProgress = false
+                updateModelControls()
             }
         }
     }
 
     private fun refreshModelStatus() {
         val selection = modelStore.current()
-        clearModelButton?.isEnabled = selection != null
-
         modelStatusView?.text = if (selection == null) {
             getString(R.string.local_model_none)
         } else {
@@ -322,10 +319,32 @@ class SetupActivity : Activity() {
         }
     }
 
-    private fun setModelControlsEnabled(enabled: Boolean) {
-        installRecommendedModelButton?.isEnabled = enabled
-        importModelButton?.isEnabled = enabled
-        clearModelButton?.isEnabled = enabled && modelStore.current() != null
+    private fun updateModelControls() {
+        val managedRunning = managedInstallCoordinator.state is ManagedModelInstallState.Running
+        val selection = modelStore.current()
+        val recommendedInstalled = isRecommendedModelInstalled(selection)
+
+        installRecommendedModelButton?.apply {
+            text = when {
+                managedRunning -> getString(R.string.cancel_model_download)
+                recommendedInstalled -> getString(R.string.recommended_model_installed)
+                else -> getString(R.string.install_recommended_model)
+            }
+            isEnabled = managedRunning || (!manualModelOperationInProgress && !recommendedInstalled)
+        }
+
+        importModelButton?.isEnabled = !manualModelOperationInProgress && !managedRunning
+        clearModelButton?.isEnabled =
+            !manualModelOperationInProgress && !managedRunning && selection != null
+    }
+
+    private fun isRecommendedModelInstalled(
+        selection: LocalModelSelection? = modelStore.current(),
+    ): Boolean {
+        val recommended = ManagedModelCatalog.recommended
+        return selection?.managedModelId == recommended.id &&
+            selection.managedSha256.equals(recommended.sha256, ignoreCase = true) &&
+            selection.sizeBytes == recommended.sizeBytes
     }
 
     private fun matchWidth() = LinearLayout.LayoutParams(
