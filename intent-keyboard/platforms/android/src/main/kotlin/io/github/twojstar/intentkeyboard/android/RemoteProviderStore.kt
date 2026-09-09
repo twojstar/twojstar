@@ -6,8 +6,6 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import io.github.twojstar.intentkeyboard.BearerTokenProvider
 import io.github.twojstar.intentkeyboard.OpenAiCompatibleConfig
-import java.io.IOException
-import java.security.GeneralSecurityException
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -79,7 +77,7 @@ class RemoteProviderStore(context: Context) : BearerTokenProvider {
         }
     }
 
-    private fun encrypt(token: String): EncryptedToken = try {
+    private fun encrypt(token: String): EncryptedToken = runCatching {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
         EncryptedToken(
@@ -89,23 +87,21 @@ class RemoteProviderStore(context: Context) : BearerTokenProvider {
             ),
             iv = Base64.encodeToString(cipher.iv, Base64.NO_WRAP),
         )
-    } catch (error: GeneralSecurityException) {
+    }.getOrElse { error ->
         throw RemoteProviderStoreException("Could not encrypt the provider token.", error)
     }
 
-    private fun decrypt(token: EncryptedToken): String = try {
+    private fun decrypt(token: EncryptedToken): String = runCatching {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         val iv = Base64.decode(token.iv, Base64.NO_WRAP)
         cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
         val plaintext = cipher.doFinal(Base64.decode(token.ciphertext, Base64.NO_WRAP))
         plaintext.toString(Charsets.UTF_8)
-    } catch (error: GeneralSecurityException) {
+    }.getOrElse { error ->
         throw RemoteProviderStoreException("Could not decrypt the provider token.", error)
-    } catch (error: IllegalArgumentException) {
-        throw RemoteProviderStoreException("Stored provider token data is invalid.", error)
     }
 
-    private fun getOrCreateKey(): SecretKey = try {
+    private fun getOrCreateKey(): SecretKey = runCatching {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
         (keyStore.getKey(KEY_ALIAS, null) as? SecretKey) ?: KeyGenerator.getInstance(
             KeyProperties.KEY_ALGORITHM_AES,
@@ -122,10 +118,8 @@ class RemoteProviderStore(context: Context) : BearerTokenProvider {
             )
             generateKey()
         }
-    } catch (error: GeneralSecurityException) {
+    }.getOrElse { error ->
         throw RemoteProviderStoreException("Could not access Android Keystore.", error)
-    } catch (error: IOException) {
-        throw RemoteProviderStoreException("Could not load Android Keystore.", error)
     }
 
     private data class EncryptedToken(
