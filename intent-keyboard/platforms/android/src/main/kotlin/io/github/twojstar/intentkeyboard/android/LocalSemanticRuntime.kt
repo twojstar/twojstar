@@ -147,7 +147,7 @@ class LocalSemanticRuntime(
             )
         } catch (_: SemanticRenderException) {
             fallbackPipeline.render(request).withWarning(
-                "Local and remote rendering failed; mechanical fallback used.",
+                "Local and remote rendering failed; mechanical fallback used. Draft text left this device.",
             )
         }
     }
@@ -158,7 +158,7 @@ class LocalSemanticRuntime(
             remote.render(request).withWarning("Remote fallback used; draft text left this device.")
         } catch (_: SemanticRenderException) {
             fallbackPipeline.render(request).withWarning(
-                "Remote provider failed; mechanical fallback used.",
+                "Remote provider failed; mechanical fallback used. Draft text left this device.",
             )
         }
     }
