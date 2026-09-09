@@ -80,13 +80,7 @@ class ManagedModelInstaller(
         ensureEnoughSpace(spec)
         cleanupStaleDownloads()
 
-        val downloadDirectory = downloadDirectory()
-        if (!downloadDirectory.isDirectory && !downloadDirectory.mkdirs()) {
-            throw@withContext ManagedModelInstallException(
-                "Could not create temporary storage for the offline model.",
-            )
-        }
-
+        val downloadDirectory = requireDownloadDirectory()
         val stagingFile = File(
             downloadDirectory,
             "${spec.id}-${UUID.randomUUID()}.litertlm.part",
@@ -117,7 +111,7 @@ class ManagedModelInstaller(
                 error,
             )
         } finally {
-            stagingFile.delete()
+            deleteBestEffort(stagingFile)
         }
     }
 
@@ -193,72 +187,23 @@ class ManagedModelInstaller(
 
         try {
             connection = openHttpsConnection(spec.downloadUrl)
-            val declaredLength = connection.contentLengthLong
-            if (declaredLength > 0L && declaredLength != spec.sizeBytes) {
-                throw ManagedModelInstallException(
-                    "The model source reported an unexpected file size.",
-                )
-            }
+            validateDeclaredLength(connection, spec)
 
             val digest = MessageDigest.getInstance("SHA-256")
-            var downloaded = 0L
-            var nextProgressAt = 0L
+            val downloadedBytes = copyResponseBody(
+                connection = connection,
+                destination = destination,
+                spec = spec,
+                digest = digest,
+                onProgress = onProgress,
+            )
 
-            connection.inputStream.use { networkInput ->
-                BufferedInputStream(networkInput, BUFFER_SIZE).use { input ->
-                    FileOutputStream(destination).use { fileOutput ->
-                        val output = BufferedOutputStream(fileOutput, BUFFER_SIZE)
-                        try {
-                            val buffer = ByteArray(BUFFER_SIZE)
-                            while (true) {
-                                currentCoroutineContext().ensureActive()
-                                val read = input.read(buffer)
-                                if (read < 0) break
-                                if (read == 0) continue
-
-                                output.write(buffer, 0, read)
-                                digest.update(buffer, 0, read)
-                                downloaded += read
-
-                                if (downloaded > spec.sizeBytes) {
-                                    throw ManagedModelInstallException(
-                                        "The downloaded model exceeded its pinned size.",
-                                    )
-                                }
-
-                                if (downloaded >= nextProgressAt || downloaded == spec.sizeBytes) {
-                                    onProgress(
-                                        ManagedModelInstallProgress.Downloading(
-                                            downloadedBytes = downloaded,
-                                            totalBytes = spec.sizeBytes,
-                                        ),
-                                    )
-                                    nextProgressAt = downloaded + PROGRESS_STEP_BYTES
-                                }
-                            }
-
-                            output.flush()
-                            fileOutput.fd.sync()
-                        } finally {
-                            output.close()
-                        }
-                    }
-                }
-            }
-
-            if (downloaded != spec.sizeBytes) {
-                throw ManagedModelInstallException(
-                    "The model download was incomplete.",
-                )
-            }
-
-            onProgress(ManagedModelInstallProgress.Verifying)
-            val actualSha256 = digest.digest().toHexString()
-            if (!actualSha256.equals(spec.sha256, ignoreCase = true)) {
-                throw ManagedModelInstallException(
-                    "The downloaded model failed its SHA-256 integrity check.",
-                )
-            }
+            verifyDownloadedArtifact(
+                spec = spec,
+                downloadedBytes = downloadedBytes,
+                digest = digest,
+                onProgress = onProgress,
+            )
         } catch (error: CancellationException) {
             throw error
         } catch (error: ManagedModelInstallException) {
@@ -278,6 +223,89 @@ class ManagedModelInstaller(
         }
     }
 
+    private fun validateDeclaredLength(
+        connection: HttpURLConnection,
+        spec: ManagedModelSpec,
+    ) {
+        val declaredLength = connection.contentLengthLong
+        if (declaredLength > 0L && declaredLength != spec.sizeBytes) {
+            throw ManagedModelInstallException(
+                "The model source reported an unexpected file size.",
+            )
+        }
+    }
+
+    private suspend fun copyResponseBody(
+        connection: HttpURLConnection,
+        destination: File,
+        spec: ManagedModelSpec,
+        digest: MessageDigest,
+        onProgress: suspend (ManagedModelInstallProgress) -> Unit,
+    ): Long {
+        var downloaded = 0L
+        var nextProgressAt = 0L
+
+        connection.inputStream.use { networkInput ->
+            BufferedInputStream(networkInput, BUFFER_SIZE).use { input ->
+                FileOutputStream(destination).use { fileOutput ->
+                    BufferedOutputStream(fileOutput, BUFFER_SIZE).use { output ->
+                        val buffer = ByteArray(BUFFER_SIZE)
+                        while (true) {
+                            currentCoroutineContext().ensureActive()
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            if (read == 0) continue
+
+                            downloaded += read
+                            if (downloaded > spec.sizeBytes) {
+                                throw ManagedModelInstallException(
+                                    "The downloaded model exceeded its pinned size.",
+                                )
+                            }
+
+                            output.write(buffer, 0, read)
+                            digest.update(buffer, 0, read)
+
+                            if (downloaded >= nextProgressAt || downloaded == spec.sizeBytes) {
+                                onProgress(
+                                    ManagedModelInstallProgress.Downloading(
+                                        downloadedBytes = downloaded,
+                                        totalBytes = spec.sizeBytes,
+                                    ),
+                                )
+                                nextProgressAt = downloaded + PROGRESS_STEP_BYTES
+                            }
+                        }
+
+                        output.flush()
+                        fileOutput.fd.sync()
+                    }
+                }
+            }
+        }
+
+        return downloaded
+    }
+
+    private suspend fun verifyDownloadedArtifact(
+        spec: ManagedModelSpec,
+        downloadedBytes: Long,
+        digest: MessageDigest,
+        onProgress: suspend (ManagedModelInstallProgress) -> Unit,
+    ) {
+        if (downloadedBytes != spec.sizeBytes) {
+            throw ManagedModelInstallException("The model download was incomplete.")
+        }
+
+        onProgress(ManagedModelInstallProgress.Verifying)
+        val actualSha256 = digest.digest().toHexString()
+        if (!actualSha256.equals(spec.sha256, ignoreCase = true)) {
+            throw ManagedModelInstallException(
+                "The downloaded model failed its SHA-256 integrity check.",
+            )
+        }
+    }
+
     private fun openHttpsConnection(initialUrl: String): HttpURLConnection {
         var url = URL(initialUrl)
 
@@ -294,40 +322,49 @@ class ManagedModelInstaller(
                 setRequestProperty("Accept-Encoding", "identity")
                 setRequestProperty("User-Agent", USER_AGENT)
             }
+            var handedOff = false
 
-            val status = connection.responseCode
-            if (status in REDIRECT_CODES) {
-                val location = connection.getHeaderField("Location")
-                connection.disconnect()
+            try {
+                val status = connection.responseCode
+                if (status in REDIRECT_CODES) {
+                    val location = connection.getHeaderField("Location")
+                    if (location.isNullOrBlank()) {
+                        throw ManagedModelInstallException(
+                            "The model source returned an invalid redirect.",
+                        )
+                    }
+                    if (redirectCount == MAX_REDIRECTS) {
+                        throw ManagedModelInstallException("Too many model download redirects.")
+                    }
 
-                if (location.isNullOrBlank()) {
-                    throw ManagedModelInstallException(
-                        "The model source returned an invalid redirect.",
-                    )
+                    url = URL(url, location)
+                } else {
+                    if (status != HttpURLConnection.HTTP_OK) {
+                        throw ManagedModelInstallException(
+                            "Model download failed with HTTP $status.",
+                        )
+                    }
+
+                    handedOff = true
+                    return connection
                 }
-                if (redirectCount == MAX_REDIRECTS) {
-                    throw ManagedModelInstallException("Too many model download redirects.")
-                }
-
-                url = URL(url, location)
-                return@repeat
+            } finally {
+                if (!handedOff) connection.disconnect()
             }
-
-            if (status != HttpURLConnection.HTTP_OK) {
-                connection.disconnect()
-                throw ManagedModelInstallException(
-                    "Model download failed with HTTP $status.",
-                )
-            }
-
-            return connection
         }
 
         throw ManagedModelInstallException("Too many model download redirects.")
     }
 
     private fun ensureEnoughSpace(spec: ManagedModelSpec) {
-        val availableBytes = StatFs(appContext.filesDir.absolutePath).availableBytes
+        val availableBytes = try {
+            StatFs(appContext.filesDir.absolutePath).availableBytes
+        } catch (error: IllegalArgumentException) {
+            throw ManagedModelInstallException("Could not inspect available storage.", error)
+        } catch (error: SecurityException) {
+            throw ManagedModelInstallException("Android blocked the storage availability check.", error)
+        }
+
         if (availableBytes < spec.sizeBytes + MIN_FREE_SPACE_BYTES) {
             throw ManagedModelInstallException(
                 "Not enough free storage for the offline model.",
@@ -335,12 +372,40 @@ class ManagedModelInstaller(
         }
     }
 
-    private fun cleanupStaleDownloads() {
+    private fun requireDownloadDirectory(): File {
         val directory = downloadDirectory()
-        directory.listFiles()
-            ?.asSequence()
-            ?.filter { it.isFile && it.name.endsWith(".litertlm.part") }
-            ?.forEach { it.delete() }
+        try {
+            if (!directory.isDirectory && !directory.mkdirs()) {
+                throw ManagedModelInstallException(
+                    "Could not create temporary storage for the offline model.",
+                )
+            }
+        } catch (error: SecurityException) {
+            throw ManagedModelInstallException(
+                "Android blocked temporary storage for the offline model.",
+                error,
+            )
+        }
+        return directory
+    }
+
+    private fun cleanupStaleDownloads() {
+        try {
+            downloadDirectory().listFiles()
+                ?.asSequence()
+                ?.filter { it.isFile && it.name.endsWith(".litertlm.part") }
+                ?.forEach(::deleteBestEffort)
+        } catch (_: SecurityException) {
+            // Stale cache cleanup is optional and must not block a new verified download.
+        }
+    }
+
+    private fun deleteBestEffort(file: File) {
+        try {
+            file.delete()
+        } catch (_: SecurityException) {
+            // Cache cleanup failure must not replace the primary installation result.
+        }
     }
 
     private fun downloadDirectory(): File = File(appContext.cacheDir, DOWNLOAD_DIRECTORY)
