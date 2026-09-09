@@ -1,6 +1,7 @@
 package io.github.twojstar.intentkeyboard.desktop
 
 import io.github.twojstar.intentkeyboard.Register
+import io.github.twojstar.intentkeyboard.SemanticRenderException
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
@@ -33,6 +34,7 @@ private class DesktopIntentWindow(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var renderJob: Job? = null
+    private var uiGeneration = 0L
 
     private val frame = JFrame("Intent Keyboard")
     private val rawArea = JTextArea(8, 64)
@@ -55,7 +57,7 @@ private class DesktopIntentWindow(
         registerBox.selectedItem = Register.NATURAL
         registerBox.addActionListener {
             val selected = registerBox.selectedItem as? Register ?: return@addActionListener
-            renderJob?.cancel()
+            invalidatePendingUi()
             applyState(session.setRegister(selected))
             statusLabel.text = "Register changed. Render a fresh preview before copying."
         }
@@ -70,7 +72,7 @@ private class DesktopIntentWindow(
             addActionListener { renderCurrentDraft() }
         }
         revertButton.addActionListener {
-            renderJob?.cancel()
+            invalidatePendingUi()
             val before = session.currentState()
             val state = session.revert()
             applyState(state)
@@ -109,7 +111,7 @@ private class DesktopIntentWindow(
         frame.defaultCloseOperation = WindowConstants.DO_NOTHING_ON_CLOSE
         frame.addWindowListener(object : WindowAdapter() {
             override fun windowClosing(event: WindowEvent) {
-                renderJob?.cancel()
+                invalidatePendingUi()
                 scope.cancel()
                 frame.dispose()
             }
@@ -123,18 +125,21 @@ private class DesktopIntentWindow(
     }
 
     private fun draftChanged() {
-        renderJob?.cancel()
+        invalidatePendingUi()
         applyState(session.updateRawIntent(rawArea.text))
         statusLabel.text = "Draft changed. Render a fresh preview before copying."
     }
 
     private fun renderCurrentDraft() {
-        renderJob?.cancel()
+        invalidatePendingUi()
+        val generation = uiGeneration
         statusLabel.text = "Rendering…"
         renderJob = scope.launch {
             try {
-                val state = session.render()
+                session.render()
                 SwingUtilities.invokeLater {
+                    if (generation != uiGeneration) return@invokeLater
+                    val state = session.currentState()
                     applyState(state)
                     statusLabel.text = when {
                         state.previewText == null -> "Draft changed before rendering completed."
@@ -145,12 +150,20 @@ private class DesktopIntentWindow(
                 }
             } catch (_: CancellationException) {
                 // A newer edit or render owns the UI now.
-            } catch (error: Exception) {
+            } catch (error: SemanticRenderException) {
                 SwingUtilities.invokeLater {
+                    if (generation != uiGeneration) return@invokeLater
+                    applyState(session.currentState())
                     statusLabel.text = "Render failed: ${error.message ?: "renderer error"}"
                 }
             }
         }
+    }
+
+    private fun invalidatePendingUi() {
+        renderJob?.cancel()
+        renderJob = null
+        uiGeneration += 1
     }
 
     private fun copyCurrentOutput() {
