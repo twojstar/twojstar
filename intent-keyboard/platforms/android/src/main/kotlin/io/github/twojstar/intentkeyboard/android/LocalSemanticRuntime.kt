@@ -155,31 +155,41 @@ class LocalSemanticRuntime(
     }
 
     private suspend fun renderRemoteAfterLocalFailure(request: RenderRequest): RenderResult {
-        val remote = remotePipeline() ?: return fallbackPipeline.render(request).withWarning(
-            "Local rendering failed; mechanical fallback used.",
+        val remote = remotePipeline()
+        return executeFallback(
+            request = request,
+            remote = remote,
+            plan = RemoteFallbackPolicy.afterLocalFailure(remoteAvailable = remote != null),
         )
-
-        return try {
-            remote.render(request).withWarning(
-                "Local render failed; remote fallback used. Draft text left this device.",
-            )
-        } catch (_: SemanticRenderException) {
-            fallbackPipeline.render(request).withWarning(
-                "Local and remote rendering failed; mechanical fallback used. " +
-                    "Remote request was attempted; draft may have left this device.",
-            )
-        }
     }
 
     private suspend fun renderRemoteOrMechanical(request: RenderRequest): RenderResult {
-        val remote = remotePipeline() ?: return fallbackPipeline.render(request)
-        return try {
-            remote.render(request).withWarning("Remote fallback used; draft text left this device.")
-        } catch (_: SemanticRenderException) {
-            fallbackPipeline.render(request).withWarning(
-                "Remote provider failed; mechanical fallback used. " +
-                    "Remote request was attempted; draft may have left this device.",
-            )
+        val remote = remotePipeline()
+        return executeFallback(
+            request = request,
+            remote = remote,
+            plan = RemoteFallbackPolicy.withoutLocal(remoteAvailable = remote != null),
+        )
+    }
+
+    private suspend fun executeFallback(
+        request: RenderRequest,
+        remote: SemanticPipeline?,
+        plan: RemoteFallbackPlan,
+    ): RenderResult = when (plan) {
+        is RemoteFallbackPlan.Mechanical -> {
+            val result = fallbackPipeline.render(request)
+            if (plan.warning != null) result.withWarning(plan.warning) else result
+        }
+        is RemoteFallbackPlan.TryRemote -> {
+            val provider = checkNotNull(remote) {
+                "Remote fallback policy requested a provider that is not configured"
+            }
+            try {
+                provider.render(request).withWarning(plan.successWarning)
+            } catch (_: SemanticRenderException) {
+                fallbackPipeline.render(request).withWarning(plan.failureWarning)
+            }
         }
     }
 
