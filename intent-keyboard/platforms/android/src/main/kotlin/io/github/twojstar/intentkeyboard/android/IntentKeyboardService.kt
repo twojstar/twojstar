@@ -6,6 +6,7 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -43,6 +44,7 @@ class IntentKeyboardService : InputMethodService() {
     private var autoRenderJob: Job? = null
     private var renderJob: Job? = null
     private var hostCompositionOwned = false
+    private var hostCompositionConnection: InputConnection? = null
     private var hostCompositionText = ""
     private var hostCompositionMutationInProgress = false
 
@@ -118,29 +120,34 @@ class IntentKeyboardService : InputMethodService() {
 
         activeEditorInfo = attribute
         val nextSensitive = isSensitive(attribute)
-
-        if (nextSensitive && hostCompositionOwned) {
-            finishOwnedHostComposition()
-        }
+        val mustFinalizePrevious = hostCompositionOwned && (nextSensitive || !restarting)
+        val previousFinalized = !mustFinalizePrevious || finishOwnedHostComposition()
 
         sensitiveField = nextSensitive
 
         if (nextSensitive || !restarting) {
-            resetHostCompositionTracking()
             clearInternalBuffer()
         } else {
             refreshViews()
             scheduleAutoRender()
         }
 
-        if (nextSensitive) {
-            statusView?.text = "Sensitive field: semantic buffering disabled."
+        when {
+            nextSensitive -> {
+                statusView?.text = "Sensitive field: semantic buffering disabled."
+            }
+            !previousFinalized -> {
+                statusView?.text = "Previous draft could not be finalized; host mirror paused."
+            }
         }
     }
 
     override fun onFinishInput() {
-        resetHostCompositionTracking()
+        val finalized = finishOwnedHostComposition()
         clearInternalBuffer()
+        if (!finalized) {
+            statusView?.text = "Draft finalization failed; host composition ownership retained."
+        }
         sensitiveField = false
         activeEditorInfo = null
         super.onFinishInput()
@@ -165,7 +172,7 @@ class IntentKeyboardService : InputMethodService() {
 
         if (
             hostCompositionMutationInProgress ||
-            !hostCompositionOwned ||
+            !ownsCurrentHostComposition() ||
             sensitiveField ||
             buffer.isEmpty()
         ) {
@@ -181,10 +188,12 @@ class IntentKeyboardService : InputMethodService() {
 
         val compositionEnd = maxOf(candidatesStart, candidatesEnd)
         if (newSelStart != compositionEnd || newSelEnd != compositionEnd) {
-            finishOwnedHostComposition()
-            resetHostCompositionTracking()
-            clearInternalBuffer()
-            statusView?.text = "Draft finalized after cursor move."
+            if (finishOwnedHostComposition()) {
+                clearInternalBuffer()
+                statusView?.text = "Draft finalized after cursor move."
+            } else {
+                statusView?.text = "Could not finalize draft after cursor move."
+            }
         }
     }
 
@@ -489,22 +498,22 @@ class IntentKeyboardService : InputMethodService() {
     private fun commitOutput(output: String): Boolean {
         val connection = currentInputConnection
         if (connection == null) {
-            statusView?.text = "Commit failed. Draft preserved."
+            statusView?.text = STATUS_COMMIT_FAILED
             return false
         }
 
-        if (hostCompositionOwned) {
+        if (ownsCurrentHostComposition(connection)) {
             if (hostCompositionText != output && !syncHostComposition(output)) {
-                statusView?.text = "Commit failed. Draft preserved."
+                statusView?.text = STATUS_COMMIT_FAILED
                 return false
             }
 
             if (!finishOwnedHostComposition()) {
-                statusView?.text = "Commit failed. Draft preserved."
+                statusView?.text = STATUS_COMMIT_FAILED
                 return false
             }
         } else if (!connection.commitText(output, 1)) {
-            statusView?.text = "Commit failed. Draft preserved."
+            statusView?.text = STATUS_COMMIT_FAILED
             return false
         }
 
@@ -517,6 +526,10 @@ class IntentKeyboardService : InputMethodService() {
         if (sensitiveField) return false
 
         val connection = currentInputConnection ?: return false
+        if (hostCompositionOwned && hostCompositionConnection !== connection) {
+            if (!finishOwnedHostComposition()) return false
+        }
+
         hostCompositionMutationInProgress = true
         return try {
             val updated = connection.setComposingText(text, 1)
@@ -525,8 +538,11 @@ class IntentKeyboardService : InputMethodService() {
                     resetHostCompositionTracking()
                 } else {
                     hostCompositionOwned = true
+                    hostCompositionConnection = connection
                     hostCompositionText = text
                 }
+            } else if (hostCompositionConnection === connection) {
+                resetHostCompositionTracking()
             }
             updated
         } finally {
@@ -534,10 +550,15 @@ class IntentKeyboardService : InputMethodService() {
         }
     }
 
+    private fun ownsCurrentHostComposition(
+        connection: InputConnection? = currentInputConnection,
+    ): Boolean =
+        hostCompositionOwned && hostCompositionConnection != null && hostCompositionConnection === connection
+
     private fun finishOwnedHostComposition(): Boolean {
         if (!hostCompositionOwned) return true
 
-        val connection = currentInputConnection ?: return false
+        val connection = hostCompositionConnection ?: return false
         hostCompositionMutationInProgress = true
         return try {
             val finished = connection.finishComposingText()
@@ -552,6 +573,7 @@ class IntentKeyboardService : InputMethodService() {
 
     private fun resetHostCompositionTracking() {
         hostCompositionOwned = false
+        hostCompositionConnection = null
         hostCompositionText = ""
     }
 
@@ -686,5 +708,6 @@ class IntentKeyboardService : InputMethodService() {
         const val AUTO_RENDER_DEBOUNCE_MS = 450L
         const val STATUS_PREVIEW_PENDING = "Preview updates after a short pause…"
         const val STATUS_RENDERING = "Rendering…"
+        const val STATUS_COMMIT_FAILED = "Commit failed. Draft preserved."
     }
 }
