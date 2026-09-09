@@ -30,5 +30,6 @@ android {
 dependencies {
     implementation(project(":core"))
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.ktor.client.okhttp)
     implementation(libs.litert.lm.android)
 }
