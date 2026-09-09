@@ -1,6 +1,7 @@
 package io.github.twojstar.intentkeyboard.android
 
 import android.content.Context
+import android.content.SharedPreferences
 import io.github.twojstar.intentkeyboard.RecipientProfile
 import io.github.twojstar.intentkeyboard.Tone
 
@@ -50,6 +51,20 @@ class RenderPreferenceStore(context: Context) {
         }.apply()
     }
 
+    fun registerChangeListener(
+        onChanged: () -> Unit,
+    ): SharedPreferences.OnSharedPreferenceChangeListener {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key in RENDER_KEYS) onChanged()
+        }
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+        return listener
+    }
+
+    fun unregisterChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        preferences.unregisterOnSharedPreferenceChangeListener(listener)
+    }
+
     private fun setLanguage(key: String, language: String?) {
         val normalized = language.normalizedLanguage()
         preferences.edit().apply {
@@ -66,5 +81,11 @@ class RenderPreferenceStore(context: Context) {
         const val KEY_SOURCE_LANGUAGE = "source_language"
         const val KEY_TARGET_LANGUAGE = "target_language"
         const val KEY_RECIPIENT_PROFILE = "recipient_profile"
+        val RENDER_KEYS = setOf(
+            KEY_TONE,
+            KEY_SOURCE_LANGUAGE,
+            KEY_TARGET_LANGUAGE,
+            KEY_RECIPIENT_PROFILE,
+        )
     }
 }
