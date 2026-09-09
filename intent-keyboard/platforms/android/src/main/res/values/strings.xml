@@ -10,6 +10,7 @@
     <string name="local_model_size_unknown">unknown size</string>
     <string name="recommended_model_summary">Recommended: Qwen3 0.6B INT4 no-think (%1$s). Runs locally on CPU after installation; Apache-2.0 model license.</string>
     <string name="install_recommended_model">Install recommended offline model</string>
+    <string name="recommended_model_installed">Recommended offline model installed</string>
     <string name="cancel_model_download">Cancel model download</string>
     <string name="model_source_license">Model source &amp; license</string>
     <string name="model_download_connecting">Connecting to the model source…</string>
