@@ -32,7 +32,7 @@ class SemanticPipelineTest {
 
     @Test
     fun transformedTextWithSemanticLockFailsClosed() = runTest {
-        val lock = SemanticLock("tomorrow at 6 PM", LockMode.SEMANTIC)
+        val lock = SemanticLock(SEMANTIC_TIME, LockMode.SEMANTIC)
         val pipeline = SemanticPipeline(
             renderer = object : SemanticRenderer {
                 override suspend fun render(request: RenderRequest) =
@@ -42,7 +42,7 @@ class SemanticPipelineTest {
 
         val result = pipeline.render(
             RenderRequest(
-                rawIntent = "tomorrow at 6 PM",
+                rawIntent = SEMANTIC_TIME,
                 targetLanguage = "Polish",
                 locks = listOf(lock),
             ),
@@ -55,7 +55,7 @@ class SemanticPipelineTest {
 
     @Test
     fun unchangedTextNeedsNoSemanticInferenceToPreserveLock() = runTest {
-        val raw = "tomorrow at 6 PM"
+        val raw = SEMANTIC_TIME
         val lock = SemanticLock(raw, LockMode.SEMANTIC)
         val pipeline = SemanticPipeline(
             renderer = object : SemanticRenderer {
@@ -207,5 +207,9 @@ class SemanticPipelineTest {
             },
         )
         failure?.let { throw it }
+    }
+
+    private companion object {
+        const val SEMANTIC_TIME = "tomorrow at 6 PM"
     }
 }
