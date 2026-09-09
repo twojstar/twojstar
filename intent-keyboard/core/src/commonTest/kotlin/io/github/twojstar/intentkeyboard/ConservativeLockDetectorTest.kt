@@ -8,11 +8,10 @@ import kotlin.test.assertTrue
 class ConservativeLockDetectorTest {
     @Test
     fun detectsExplicitUrlsAndQuotedLiterals() {
-        val text = """Wyślij "ABC-123" przez https://example.com/a?x=1&y=2, potem `nie zmieniaj` i „ważne”"""
+        val text = """Wyślij "ABC-123" przez https://example.com/a?x=1&y=2 potem `nie zmieniaj` i „ważne”"""
         val values = ConservativeLockDetector.detect(text).map { it.value }
 
         assertTrue("https://example.com/a?x=1&y=2" in values)
-        assertFalse("https://example.com/a?x=1&y=2," in values)
         assertTrue("\"ABC-123\"" in values)
         assertTrue("`nie zmieniaj`" in values)
         assertTrue("„ważne”" in values)
@@ -46,28 +45,38 @@ class ConservativeLockDetectorTest {
 
     @Test
     fun acceptsCaseInsensitiveHttpScheme() {
-        val values = ConservativeLockDetector.detect("HTTP://example.com/resource;").map { it.value }
+        val values = ConservativeLockDetector.detect("HTTP://example.com/resource").map { it.value }
 
         assertTrue("HTTP://example.com/resource" in values)
     }
 
     @Test
-    fun keepsInternalApostrophesAndDropsTrailingProsePunctuation() {
-        val text = "Use 'https://example.com/O'Reilly?author=O'Reilly'! Then visit https://example.org?"
+    fun trimsOnlyPunctuationOutsideExplicitWrappers() {
+        val text = "Use 'https://example.com/O'Reilly?author=O'Reilly'! Then see [(https://example.org/path)]?"
         val values = ConservativeLockDetector.detect(text).map { it.value }
 
         assertTrue("https://example.com/O'Reilly?author=O'Reilly" in values)
-        assertTrue("https://example.org" in values)
-        assertFalse(values.any { it.endsWith("'!") || it.endsWith("?") })
+        assertTrue("https://example.org/path" in values)
+        assertFalse(values.any { it.endsWith("'!") || it.endsWith(")]?") })
     }
 
     @Test
-    fun dropsUnmatchedClosingDelimitersButKeepsBalancedUrlPathDelimiters() {
-        val text = "See (https://example.com). Keep https://example.org/a(b)[c]{d}."
+    fun preservesBalancedUrlPathDelimitersInsideSourceWrappers() {
+        val text = "See (https://example.org/a(b)[c]{d})."
         val values = ConservativeLockDetector.detect(text).map { it.value }
 
-        assertTrue("https://example.com" in values)
-        assertFalse("https://example.com)" in values)
         assertTrue("https://example.org/a(b)[c]{d}" in values)
+    }
+
+    @Test
+    fun keepsAmbiguousLegalUriEndingsProtectedWithoutWrappers() {
+        val text = "https://example.com/path! https://example.com/query? https://example.com/item, https://example.com/O'Reilly https://example.com/path)]"
+        val values = ConservativeLockDetector.detect(text).map { it.value }
+
+        assertTrue("https://example.com/path!" in values)
+        assertTrue("https://example.com/query?" in values)
+        assertTrue("https://example.com/item," in values)
+        assertTrue("https://example.com/O'Reilly" in values)
+        assertTrue("https://example.com/path)]" in values)
     }
 }
