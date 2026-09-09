@@ -21,11 +21,84 @@ data class LiteRtLmCpuConfig(
     val modelPath: String,
     val cacheDir: String? = null,
     val threadCount: Int? = null,
+    val maxNumTokens: Int? = null,
 ) {
     init {
         require(modelPath.isNotBlank()) { "modelPath must not be blank" }
         require(cacheDir == null || cacheDir.isNotBlank()) { "cacheDir must be null or non-blank" }
         require(threadCount == null || threadCount > 0) { "threadCount must be positive or null" }
+        require(maxNumTokens == null || maxNumTokens > 0) { "maxNumTokens must be positive or null" }
+    }
+}
+
+data class LiteRtLmGenerationConfig(
+    val maxOutputToken: Int = DEFAULT_KEYBOARD_MAX_OUTPUT_TOKENS,
+) {
+    init {
+        require(maxOutputToken > 0) { "maxOutputToken must be positive" }
+    }
+
+    companion object {
+        const val DEFAULT_KEYBOARD_MAX_OUTPUT_TOKENS = 512
+    }
+}
+
+data class LocalInferenceMetricsSnapshot(
+    val successfulSamples: Int,
+    val failedSamples: Int,
+    val lastLatencyMillis: Long?,
+    val medianLatencyMillis: Long?,
+    val lastInputCharacters: Int?,
+    val lastOutputCharacters: Int?,
+)
+
+/**
+ * Process-local performance samples for real-device tuning.
+ *
+ * Only timings and character counts are retained. Draft or completion text is never stored, and all
+ * samples disappear when the app process exits.
+ */
+object LocalInferenceMetrics {
+    private const val MAX_SAMPLES = 20
+    private val lock = Any()
+    private val successfulLatenciesMillis = ArrayDeque<Long>(MAX_SAMPLES)
+    private var failedSamples = 0
+    private var lastInputCharacters: Int? = null
+    private var lastOutputCharacters: Int? = null
+
+    fun recordSuccess(latencyMillis: Long, inputCharacters: Int, outputCharacters: Int) {
+        synchronized(lock) {
+            if (successfulLatenciesMillis.size == MAX_SAMPLES) {
+                successfulLatenciesMillis.removeFirst()
+            }
+            successfulLatenciesMillis.addLast(latencyMillis)
+            lastInputCharacters = inputCharacters
+            lastOutputCharacters = outputCharacters
+        }
+    }
+
+    fun recordFailure() {
+        synchronized(lock) {
+            failedSamples += 1
+        }
+    }
+
+    fun snapshot(): LocalInferenceMetricsSnapshot = synchronized(lock) {
+        val sorted = successfulLatenciesMillis.sorted()
+        val median = when {
+            sorted.isEmpty() -> null
+            sorted.size % 2 == 1 -> sorted[sorted.size / 2]
+            else -> (sorted[sorted.size / 2 - 1] + sorted[sorted.size / 2]) / 2
+        }
+
+        LocalInferenceMetricsSnapshot(
+            successfulSamples = successfulLatenciesMillis.size,
+            failedSamples = failedSamples,
+            lastLatencyMillis = successfulLatenciesMillis.lastOrNull(),
+            medianLatencyMillis = median,
+            lastInputCharacters = lastInputCharacters,
+            lastOutputCharacters = lastOutputCharacters,
+        )
     }
 }
 
@@ -46,6 +119,7 @@ suspend fun createCpuLiteRtLmEngine(config: LiteRtLmCpuConfig): Engine {
         EngineConfig(
             modelPath = modelFile.absolutePath,
             backend = Backend.CPU(threadCount = config.threadCount),
+            maxNumTokens = config.maxNumTokens,
             cacheDir = config.cacheDir,
         ),
     )
@@ -89,6 +163,7 @@ private suspend fun closeCancelledInitialization(
  */
 class LiteRtLmCompletionClient(
     private val engine: Engine,
+    private val generationConfig: LiteRtLmGenerationConfig = LiteRtLmGenerationConfig(),
 ) : SemanticCompletionClient {
     private val inferenceMutex = Mutex()
 
@@ -97,30 +172,42 @@ class LiteRtLmCompletionClient(
     }
 
     override suspend fun complete(prompt: ModelPrompt): CompletionOutcome = inferenceMutex.withLock {
+        val startedAtNanos = System.nanoTime()
         try {
             val text = withContext(Dispatchers.IO) {
                 engine.createConversation(
                     ConversationConfig(
                         systemInstruction = Contents.of(prompt.instructions),
                         automaticToolCalling = false,
+                        maxOutputToken = generationConfig.maxOutputToken,
                     ),
                 ).use { conversation ->
                     conversation.sendMessage(prompt.input).toString()
                 }
             }
 
+            val latencyMillis = (System.nanoTime() - startedAtNanos) / 1_000_000L
             if (text.isBlank()) {
+                LocalInferenceMetrics.recordFailure()
                 CompletionOutcome.Failure("LiteRT-LM returned no text completion.")
             } else {
+                LocalInferenceMetrics.recordSuccess(
+                    latencyMillis = latencyMillis,
+                    inputCharacters = prompt.input.length,
+                    outputCharacters = text.length,
+                )
                 CompletionOutcome.Success(text)
             }
         } catch (error: CancellationException) {
             throw error
         } catch (error: LiteRtLmJniException) {
+            LocalInferenceMetrics.recordFailure()
             CompletionOutcome.Failure("LiteRT-LM inference failed.", error)
         } catch (error: IllegalStateException) {
+            LocalInferenceMetrics.recordFailure()
             CompletionOutcome.Failure("LiteRT-LM engine is unavailable.", error)
         } catch (error: UnsatisfiedLinkError) {
+            LocalInferenceMetrics.recordFailure()
             CompletionOutcome.Failure("LiteRT-LM native runtime is unavailable.", error)
         }
     }
