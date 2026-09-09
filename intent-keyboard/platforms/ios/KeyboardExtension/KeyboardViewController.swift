@@ -7,6 +7,10 @@ final class KeyboardViewController: UIInputViewController {
         case numbers
     }
 
+    private static let autoRenderDebounceNanoseconds: UInt64 = 450_000_000
+    private static let statusPreviewPending = "Preview updates after a short pause…"
+    private static let statusRendering = "Rendering…"
+
     private let semanticBridge = IosSemanticBridge()
     private let registerNames = ["RAW", "NATURAL", "CIVILIZED"]
 
@@ -16,6 +20,8 @@ final class KeyboardViewController: UIInputViewController {
     private var renderedCanCommit = true
     private var registerIndex = 1
     private var characterPage = CharacterPage.letters
+    private var renderGeneration: UInt64 = 0
+    private var autoRenderTask: Task<Void, Never>?
     private var renderTask: Task<Void, Never>?
     private var activeDocumentIdentifier: UUID?
 
@@ -236,6 +242,7 @@ final class KeyboardViewController: UIInputViewController {
         rawIntent.append(text)
         invalidateRenderedPreview()
         refreshViews()
+        scheduleAutoRender()
     }
 
     private func backspace() {
@@ -247,6 +254,7 @@ final class KeyboardViewController: UIInputViewController {
         rawIntent.removeLast()
         invalidateRenderedPreview()
         refreshViews()
+        scheduleAutoRender()
     }
 
     private func handleEnter() {
@@ -262,13 +270,33 @@ final class KeyboardViewController: UIInputViewController {
     private func commitBuffer() -> Bool {
         guard !rawIntent.isEmpty else { return true }
 
+        if rawIntent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return commitOutput(rawIntent)
+        }
+
+        let registerName = registerNames[registerIndex]
         let hasCurrentPreview = renderedSource == rawIntent && !renderedText.isEmpty
-        if hasCurrentPreview && !renderedCanCommit {
-            statusLabel.text = "Commit blocked until protected values are preserved."
+
+        if registerName != "RAW" && !hasCurrentPreview {
+            if autoRenderTask == nil && renderTask == nil {
+                scheduleAutoRender()
+            }
+            statusLabel.text = "Preview is not ready yet. Wait, press Render, or switch to Raw."
+            refreshCompactLayout()
             return false
         }
 
-        let output = hasCurrentPreview ? renderedText : rawIntent
+        if hasCurrentPreview && !renderedCanCommit {
+            statusLabel.text = "Commit blocked until protected values are preserved."
+            refreshCompactLayout()
+            return false
+        }
+
+        let output = registerName == "RAW" ? rawIntent : renderedText
+        return commitOutput(output)
+    }
+
+    private func commitOutput(_ output: String) -> Bool {
         let documentIdentifier = textDocumentProxy.documentIdentifier
         textDocumentProxy.insertText(output)
 
@@ -297,19 +325,76 @@ final class KeyboardViewController: UIInputViewController {
         registerIndex = (registerIndex + 1) % registerNames.count
         invalidateRenderedPreview()
         refreshViews()
+        scheduleAutoRender()
     }
 
-    private func renderBuffer() {
-        guard !rawIntent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    private func scheduleAutoRender() {
+        autoRenderTask?.cancel()
+        autoRenderTask = nil
+
+        let registerName = registerNames[registerIndex]
+        if registerName == "RAW" {
+            statusLabel.text = ""
+            refreshCompactLayout()
+            return
+        }
+
+        let source = rawIntent
+        if source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            statusLabel.text = ""
+            refreshCompactLayout()
+            return
+        }
+
+        let generation = renderGeneration
+        statusLabel.text = Self.statusPreviewPending
+        refreshCompactLayout()
+
+        autoRenderTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: Self.autoRenderDebounceNanoseconds)
+            } catch {
+                return
+            }
+
+            guard let self else { return }
+            guard !Task.isCancelled else { return }
+            guard generation == renderGeneration else { return }
+            guard source == rawIntent else { return }
+            guard registerName == registerNames[registerIndex] else { return }
+
+            autoRenderTask = nil
+            renderBuffer(fromAutoPreview: true)
+        }
+    }
+
+    private func renderBuffer(fromAutoPreview: Bool = false) {
+        if !fromAutoPreview {
+            autoRenderTask?.cancel()
+            autoRenderTask = nil
+        }
+
+        guard !rawIntent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            statusLabel.text = ""
+            refreshCompactLayout()
+            return
+        }
 
         renderTask?.cancel()
         let source = rawIntent
         let registerName = registerNames[registerIndex]
-        statusLabel.text = "Rendering…"
+        renderGeneration &+= 1
+        let generation = renderGeneration
+        statusLabel.text = Self.statusRendering
         refreshCompactLayout()
 
         renderTask = Task { [weak self] in
             guard let self else { return }
+            defer {
+                if generation == renderGeneration {
+                    renderTask = nil
+                }
+            }
 
             do {
                 let result = try await semanticBridge.render(
@@ -318,6 +403,7 @@ final class KeyboardViewController: UIInputViewController {
                 )
 
                 guard !Task.isCancelled else { return }
+                guard generation == renderGeneration else { return }
                 guard source == rawIntent else { return }
                 guard registerName == registerNames[registerIndex] else { return }
 
@@ -338,6 +424,7 @@ final class KeyboardViewController: UIInputViewController {
                 return
             } catch {
                 guard !Task.isCancelled else { return }
+                guard generation == renderGeneration else { return }
                 statusLabel.text = "Render failed: \(error.localizedDescription)"
                 refreshCompactLayout()
             }
@@ -382,8 +469,11 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func invalidateRenderedPreview() {
+        autoRenderTask?.cancel()
+        autoRenderTask = nil
         renderTask?.cancel()
         renderTask = nil
+        renderGeneration &+= 1
         renderedSource = ""
         renderedText = ""
         renderedCanCommit = true
