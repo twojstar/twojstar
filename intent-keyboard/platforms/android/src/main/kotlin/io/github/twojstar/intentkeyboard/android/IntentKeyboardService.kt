@@ -584,7 +584,9 @@ class IntentKeyboardService : InputMethodService() {
             Register.CIVILIZED -> Register.RAW
         }
         invalidateRenderedPreview()
-        syncHostComposition(buffer.toString())
+        if (buffer.isNotEmpty()) {
+            syncHostComposition(buffer.toString())
+        }
         refreshViews()
         scheduleAutoRender()
     }
