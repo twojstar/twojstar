@@ -310,6 +310,7 @@ class LocalSemanticRuntime(
             val previous = activeEngine
             activeEngine = null
             activePipeline = fallbackPipeline
+            LocalInferenceMetrics.reset()
             releaseEngine(previous)
         }
     }
@@ -329,7 +330,7 @@ class LocalSemanticRuntime(
             } catch (error: IllegalStateException) {
                 Log.w(TAG, "LiteRT-LM engine was already unavailable during cleanup", error)
             } catch (error: UnsatisfiedLinkError) {
-                Log.w(TAG, "LiteRT-LM native runtime disappeared during cleanup", error)
+                Log.w(TAG, "LiteRT-LM engine was already unavailable during cleanup", error)
             }
         }
     }
