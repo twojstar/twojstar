@@ -60,7 +60,9 @@ The first Android slice is now real rather than a mock app:
 2. Open **Intent Keyboard** and install the recommended offline model, or import another `.litertlm` model manually.
 3. Enable the keyboard in Android settings and choose it from the system input-method picker.
 4. Type rough text into the keyboard's private intent buffer.
-5. Pick `Raw`, `Natural` or `Civilized`, press **Render**, inspect the preview, then **Commit** it into the host app.
+5. Pick `Raw`, `Natural` or `Civilized`; `Natural` and `Civilized` refresh the semantic preview automatically after a short typing pause. **Render** forces an immediate refresh, and **Commit** inserts the current safe preview into the host app.
+
+The Android preview uses trailing-edge debounce rather than starting inference on every keypress. Stale renders are cancelled or ignored, and `LocalSemanticRuntime` serializes access to the native engine so only one LiteRT-LM inference owns it at a time. RAW mode does not schedule semantic auto-rendering.
 
 `MechanicalRenderer` remains the deterministic local fallback. The shared core also contains a real model-backed path:
 
