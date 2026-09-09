@@ -30,9 +30,12 @@ The iOS prototype now mirrors the safe live-preview behavior of the Android adap
 3. `Natural` and `Civilized` schedule a semantic preview after a 450 ms trailing-edge debounce; `Raw` never auto-renders,
 4. **Render** cancels any pending debounce and forces an immediate preview,
 5. inspect the preview and any lock/fallback warning,
-6. **Commit** inserts the current safe preview through `textDocumentProxy`.
+6. **Revert** discards the current uncommitted preview while preserving the raw draft and selected register,
+7. **Commit** inserts the current safe preview through `textDocumentProxy`.
 
 Changing the draft or register cancels the previous render and invalidates its preview. Late results are ignored unless their source text, register and render generation still match the current draft. In `Natural` or `Civilized`, Commit is blocked until a current preview exists; it never silently falls back to committing stale or unrendered raw text. `Raw` remains an explicit direct-commit mode, and whitespace-only input can still be committed without waiting for a semantic render.
+
+After Revert, automatic rendering is suppressed for that exact unchanged draft so the preview does not immediately reappear after the debounce. Editing the draft, changing register, or pressing Render clears that suppression and allows regeneration. Revert only applies before Commit: the extension keeps no persistent sent-text history or post-commit undo mechanism.
 
 Backspace edits the private buffer first and falls through to the host text field when the buffer is empty. Switching to another text-document context clears an unsent draft. The globe key switches to the next enabled keyboard.
 

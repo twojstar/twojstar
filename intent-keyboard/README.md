@@ -62,9 +62,11 @@ The first Android slice is now real rather than a mock app:
 4. Optionally configure an OpenAI-compatible remote provider. Remote fallback is disabled by default and must be explicitly enabled.
 5. Enable the keyboard in Android settings and choose it from the system input-method picker.
 6. Type rough text into the keyboard's private intent buffer.
-7. Pick `Raw`, `Natural` or `Civilized`; `Natural` and `Civilized` refresh the semantic preview automatically after a short typing pause. **Render** forces an immediate refresh, and **Commit** inserts the current safe preview into the host app.
+7. Pick `Raw`, `Natural` or `Civilized`; `Natural` and `Civilized` refresh the semantic preview automatically after a short typing pause. **Render** forces an immediate refresh, **Revert** returns an uncommitted preview to the raw draft, and **Commit** inserts the current safe output into the host app.
 
 The Android preview uses trailing-edge debounce rather than starting inference on every keypress. Stale renders are cancelled or ignored, and `LocalSemanticRuntime` serializes access to the native engine so only one LiteRT-LM inference owns it at a time. RAW mode does not schedule semantic auto-rendering. Semantic tone/language/recipient preferences are read for each render, so changing presentation settings never replaces the raw intent source. The mechanical fallback remains intentionally limited and may not realize tone, recipient context or translation requests without a model-backed renderer.
+
+Revert is deliberately pre-commit only. It restores the unchanged raw draft, suppresses automatic re-rendering of that exact version, and keeps the selected register/settings intact. Editing the draft, changing render settings/register, or pressing Render allows a new preview. Android restores its owned host composing region to raw before discarding the preview; if that restoration fails, the rendered preview is kept instead of letting keyboard and host state diverge. Draft/preview history is process-local and short-lived, and Commit clears it rather than creating a persistent undo log.
 
 `MechanicalRenderer` remains the deterministic local fallback. The shared core also contains a real model-backed path:
 
