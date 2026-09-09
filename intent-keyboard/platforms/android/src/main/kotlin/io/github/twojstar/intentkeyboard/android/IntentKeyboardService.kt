@@ -61,7 +61,11 @@ class IntentKeyboardService : InputMethodService() {
     override fun onCreate() {
         super.onCreate()
 
-        val runtime = LocalSemanticRuntime(applicationContext, scope) { state ->
+        val runtime = LocalSemanticRuntime(
+            applicationContext,
+            scope,
+            onRenderPreferencesChanged = ::handleRenderPreferencesChanged,
+        ) { state ->
             semanticState = state
             refreshEngineView()
             if (state is LocalSemanticRuntimeState.Ready) {
@@ -206,6 +210,15 @@ class IntentKeyboardService : InputMethodService() {
         semanticRuntime = null
         scope.cancel()
         super.onDestroy()
+    }
+
+    private fun handleRenderPreferencesChanged() {
+        invalidateRenderedPreview()
+        if (buffer.isNotEmpty()) {
+            syncHostComposition(buffer.toString())
+        }
+        refreshViews()
+        scheduleAutoRender()
     }
 
     private fun toolbar(): LinearLayout = LinearLayout(this).apply {
