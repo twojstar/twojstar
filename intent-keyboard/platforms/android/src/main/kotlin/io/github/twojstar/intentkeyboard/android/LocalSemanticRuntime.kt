@@ -8,6 +8,7 @@ import com.google.ai.edge.litertlm.LiteRtLmJniException
 import io.github.twojstar.intentkeyboard.MechanicalRenderer
 import io.github.twojstar.intentkeyboard.ModelSemanticRenderer
 import io.github.twojstar.intentkeyboard.OpenAiCompatibleCompletionClient
+import io.github.twojstar.intentkeyboard.Register
 import io.github.twojstar.intentkeyboard.RenderRequest
 import io.github.twojstar.intentkeyboard.RenderResult
 import io.github.twojstar.intentkeyboard.SemanticPipeline
@@ -94,13 +95,17 @@ class LocalSemanticRuntime(
         )
 
         return runtimeMutex.withLock {
+            if (effectiveRequest.register == Register.RAW) {
+                return@withLock fallbackPipeline.render(effectiveRequest)
+            }
+
             if (activeEngine == null) {
                 renderRemoteOrMechanical(effectiveRequest)
             } else {
                 try {
                     activePipeline.render(effectiveRequest)
-                } catch (error: SemanticRenderException) {
-                    renderRemoteAfterLocalFailure(effectiveRequest, error)
+                } catch (_: SemanticRenderException) {
+                    renderRemoteAfterLocalFailure(effectiveRequest)
                 }
             }
         }
@@ -131,13 +136,15 @@ class LocalSemanticRuntime(
         }
     }
 
-    private suspend fun renderRemoteAfterLocalFailure(
-        request: RenderRequest,
-        localFailure: SemanticRenderException,
-    ): RenderResult {
-        val remote = remotePipeline() ?: throw localFailure
+    private suspend fun renderRemoteAfterLocalFailure(request: RenderRequest): RenderResult {
+        val remote = remotePipeline() ?: return fallbackPipeline.render(request).withWarning(
+            "Local rendering failed; mechanical fallback used.",
+        )
+
         return try {
-            remote.render(request).withWarning("Local render failed; remote fallback used. Draft text left this device.")
+            remote.render(request).withWarning(
+                "Local render failed; remote fallback used. Draft text left this device.",
+            )
         } catch (_: SemanticRenderException) {
             fallbackPipeline.render(request).withWarning(
                 "Local and remote rendering failed; mechanical fallback used.",
