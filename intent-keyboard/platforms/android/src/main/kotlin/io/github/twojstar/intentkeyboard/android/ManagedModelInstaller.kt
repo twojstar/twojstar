@@ -2,6 +2,9 @@ package io.github.twojstar.intentkeyboard.android
 
 import android.content.Context
 import android.os.StatFs
+import com.google.ai.edge.litertlm.LiteRtLmJniException
+import io.github.twojstar.intentkeyboard.CompletionOutcome
+import io.github.twojstar.intentkeyboard.ModelPrompt
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
@@ -13,6 +16,7 @@ import java.security.MessageDigest
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -46,6 +50,7 @@ sealed interface ManagedModelInstallProgress {
         val totalBytes: Long,
     ) : ManagedModelInstallProgress
     data object Verifying : ManagedModelInstallProgress
+    data object Testing : ManagedModelInstallProgress
     data object Activating : ManagedModelInstallProgress
 }
 
@@ -59,6 +64,8 @@ class ManagedModelInstallException(
  *
  * The catalog pins both the upstream commit and SHA-256. Redirects are allowed only over HTTPS and
  * the final artifact must match both the expected byte count and digest before selection changes.
+ * A tiny LiteRT-LM inference smoke test runs before activation so an incompatible artifact cannot
+ * replace the last known good model merely because its bytes were downloaded correctly.
  */
 class ManagedModelInstaller(
     context: Context,
@@ -89,8 +96,12 @@ class ManagedModelInstaller(
             onProgress(ManagedModelInstallProgress.Connecting)
             downloadAndVerify(spec, stagingFile, onProgress)
             currentCoroutineContext().ensureActive()
-            onProgress(ManagedModelInstallProgress.Activating)
 
+            onProgress(ManagedModelInstallProgress.Testing)
+            smokeTestModel(stagingFile)
+            currentCoroutineContext().ensureActive()
+
+            onProgress(ManagedModelInstallProgress.Activating)
             modelStore.installVerifiedModelFile(
                 source = stagingFile,
                 displayName = spec.displayName,
@@ -107,6 +118,69 @@ class ManagedModelInstaller(
             )
         } finally {
             stagingFile.delete()
+        }
+    }
+
+    private suspend fun smokeTestModel(modelFile: File) {
+        val engine = try {
+            createCpuLiteRtLmEngine(
+                LiteRtLmCpuConfig(
+                    modelPath = modelFile.absolutePath,
+                    cacheDir = appContext.cacheDir.absolutePath,
+                ),
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: LiteRtLmJniException) {
+            throw ManagedModelInstallException("The offline model could not initialize.", error)
+        } catch (error: IllegalStateException) {
+            throw ManagedModelInstallException("The offline model is incompatible with this runtime.", error)
+        } catch (error: UnsatisfiedLinkError) {
+            throw ManagedModelInstallException("LiteRT-LM is unavailable on this device.", error)
+        }
+
+        var closeFailure: Throwable? = null
+        try {
+            when (
+                val outcome = LiteRtLmCompletionClient(engine).complete(
+                    ModelPrompt(
+                        instructions = "Return one short plain-text answer and nothing else.",
+                        input = "Reply with OK.",
+                    ),
+                )
+            ) {
+                is CompletionOutcome.Success -> {
+                    if (outcome.text.isBlank()) {
+                        throw ManagedModelInstallException("The offline model returned no smoke-test output.")
+                    }
+                }
+                is CompletionOutcome.Failure -> {
+                    throw ManagedModelInstallException(
+                        "The offline model failed its inference smoke test.",
+                        outcome.cause,
+                    )
+                }
+            }
+        } finally {
+            withContext(Dispatchers.IO + NonCancellable) {
+                try {
+                    engine.close()
+                } catch (error: LiteRtLmJniException) {
+                    closeFailure = error
+                } catch (error: IllegalStateException) {
+                    closeFailure = error
+                } catch (error: UnsatisfiedLinkError) {
+                    closeFailure = error
+                }
+            }
+        }
+
+        currentCoroutineContext().ensureActive()
+        closeFailure?.let { error ->
+            throw ManagedModelInstallException(
+                "The offline model passed inference but its test engine could not close cleanly.",
+                error,
+            )
         }
     }
 
@@ -271,8 +345,15 @@ class ManagedModelInstaller(
 
     private fun downloadDirectory(): File = File(appContext.cacheDir, DOWNLOAD_DIRECTORY)
 
-    private fun ByteArray.toHexString(): String = joinToString(separator = "") { byte ->
-        "%02x".format(byte.toInt() and 0xff)
+    private fun ByteArray.toHexString(): String {
+        val alphabet = "0123456789abcdef"
+        return buildString(size * 2) {
+            for (byte in this@toHexString) {
+                val value = byte.toInt() and 0xff
+                append(alphabet[value ushr 4])
+                append(alphabet[value and 0x0f])
+            }
+        }
     }
 
     private companion object {
