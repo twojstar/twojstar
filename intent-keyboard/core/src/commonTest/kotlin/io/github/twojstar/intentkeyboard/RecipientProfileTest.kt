@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -21,7 +21,7 @@ class RecipientProfileTest {
             ),
         )
 
-        assertTrue("Write for a client" in prompt.instructions)
+        assertTrue("client or customer" in prompt.instructions)
 
         val envelope = Json.parseToJsonElement(prompt.input) as JsonObject
         assertEquals(raw, envelope["message"]?.jsonPrimitive?.content)
@@ -29,7 +29,7 @@ class RecipientProfileTest {
     }
 
     @Test
-    fun mechanicalFallbackWarnsWhenRecipientContextCannotBeApplied() = runTest {
+    fun mechanicalFallbackWarnsWhenRecipientContextCannotBeApplied() = runBlocking {
         val result = SemanticPipeline(MechanicalRenderer()).render(
             RenderRequest(
                 rawIntent = "hej jutro",
