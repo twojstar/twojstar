@@ -31,6 +31,53 @@ class SemanticPipelineTest {
     }
 
     @Test
+    fun transformedTextWithSemanticLockFailsClosed() = runTest {
+        val lock = SemanticLock(SEMANTIC_TIME, LockMode.SEMANTIC)
+        val pipeline = SemanticPipeline(
+            renderer = object : SemanticRenderer {
+                override suspend fun render(request: RenderRequest) =
+                    RendererOutcome.Success(RenderResult("Jutro o 18:00."))
+            },
+        )
+
+        val result = pipeline.render(
+            RenderRequest(
+                rawIntent = SEMANTIC_TIME,
+                targetLanguage = "Polish",
+                locks = listOf(lock),
+            ),
+        )
+
+        assertFalse(result.canCommit)
+        assertEquals(listOf(lock), result.violatedLocks)
+        assertTrue(result.warnings.any { "could not be validated" in it && lock.value in it })
+    }
+
+    @Test
+    fun unchangedTextNeedsNoSemanticInferenceToPreserveLock() = runTest {
+        val raw = SEMANTIC_TIME
+        val lock = SemanticLock(raw, LockMode.SEMANTIC)
+        val pipeline = SemanticPipeline(
+            renderer = object : SemanticRenderer {
+                override suspend fun render(request: RenderRequest) =
+                    RendererOutcome.Success(RenderResult(request.rawIntent))
+            },
+        )
+
+        val result = pipeline.render(
+            RenderRequest(
+                rawIntent = raw,
+                register = Register.RAW,
+                locks = listOf(lock),
+            ),
+        )
+
+        assertTrue(result.canCommit)
+        assertTrue(result.violatedLocks.isEmpty())
+        assertTrue(result.warnings.isEmpty())
+    }
+
+    @Test
     fun rendererFailureBecomesSemanticRenderException() = runTest {
         val pipeline = SemanticPipeline(
             renderer = object : SemanticRenderer {
@@ -160,5 +207,9 @@ class SemanticPipelineTest {
             },
         )
         failure?.let { throw it }
+    }
+
+    private companion object {
+        const val SEMANTIC_TIME = "tomorrow at 6 PM"
     }
 }
