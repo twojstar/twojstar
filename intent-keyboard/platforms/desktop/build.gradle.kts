@@ -1,20 +1,7 @@
-buildscript {
-    val kotlinVersion = providers.gradleProperty("kotlinVersion").get()
-
-    repositories {
-        mavenCentral()
-    }
-
-    dependencies {
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
-    }
-}
-
 plugins {
     application
+    id("org.jetbrains.kotlin.jvm")
 }
-
-apply(plugin = "org.jetbrains.kotlin.jvm")
 
 dependencies {
     implementation(project(":core"))
