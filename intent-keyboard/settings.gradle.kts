@@ -3,6 +3,7 @@ pluginManagement {
 
     plugins {
         id("org.jetbrains.kotlin.multiplatform") version kotlinVersion
+        id("org.jetbrains.kotlin.jvm") version kotlinVersion
     }
 
     repositories {
