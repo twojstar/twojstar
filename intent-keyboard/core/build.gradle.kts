@@ -10,6 +10,7 @@ kotlin {
         namespace = "io.github.twojstar.intentkeyboard.core"
         compileSdk = libs.versions.androidCompileSdk.get().toInt()
         minSdk = libs.versions.androidMinSdk.get().toInt()
+        withHostTest { }
     }
 
     jvm("desktop")
