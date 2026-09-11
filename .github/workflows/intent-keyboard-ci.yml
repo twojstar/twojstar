@@ -96,6 +96,16 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate --spec platforms/ios/project.yml --project platforms/ios
 
+      - name: Test keyboard preferences
+        run: >-
+          xcodebuild
+          -project platforms/ios/IntentKeyboard.xcodeproj
+          -scheme IntentKeyboardPreferencesTests
+          -configuration Debug
+          -destination 'platform=macOS'
+          CODE_SIGNING_ALLOWED=NO
+          test
+
       - name: Build host and keyboard extension
         run: >-
           xcodebuild
