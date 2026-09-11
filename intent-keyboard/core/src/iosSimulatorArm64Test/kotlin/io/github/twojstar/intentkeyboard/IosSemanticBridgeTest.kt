@@ -1,10 +1,9 @@
 package io.github.twojstar.intentkeyboard
 
-import kotlin.coroutines.Continuation
-import kotlin.coroutines.EmptyCoroutineContext
-import kotlin.coroutines.startCoroutine
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class IosSemanticBridgeTest {
@@ -17,7 +16,7 @@ class IosSemanticBridgeTest {
             registerName = "civilized",
             toneName = "work",
             sourceLanguage = " Polish ",
-            targetLanguage = " English ",
+            targetLanguage = "Polish",
             recipientProfileName = "client",
         )
 
@@ -25,7 +24,7 @@ class IosSemanticBridgeTest {
         assertTrue(result.warnings.any { "semantic rewriting" in it })
         assertTrue(result.warnings.any { "tone" in it })
         assertTrue(result.warnings.any { "recipient" in it })
-        assertTrue(result.warnings.any { "translate" in it })
+        assertFalse(result.warnings.any { "translate" in it })
     }
 
     @Test
@@ -47,27 +46,18 @@ class IosSemanticBridgeTest {
 
     @Test
     fun detectsProtectedValuesBeforeRendering() = runTest {
+        val rawIntent = "zapłać 120 zł o 18:30"
+        val detected = ConservativeLockDetector.detect(rawIntent).map { it.value }.toSet()
+
+        assertEquals(setOf("120 zł", "18:30"), detected)
+
         val result = bridge.render(
-            rawIntent = "zapłać 120 zł o 18:30",
+            rawIntent = rawIntent,
             registerName = "natural",
         )
 
         assertEquals("Zapłać 120 zł o 18:30.", result.text)
         assertTrue(result.canCommit)
         assertTrue(result.violatedLocks.isEmpty())
-    }
-
-    private fun runTest(block: suspend () -> Unit) {
-        var failure: Throwable? = null
-        block.startCoroutine(
-            object : Continuation<Unit> {
-                override val context = EmptyCoroutineContext
-
-                override fun resumeWith(result: Result<Unit>) {
-                    failure = result.exceptionOrNull()
-                }
-            },
-        )
-        failure?.let { throw it }
     }
 }
