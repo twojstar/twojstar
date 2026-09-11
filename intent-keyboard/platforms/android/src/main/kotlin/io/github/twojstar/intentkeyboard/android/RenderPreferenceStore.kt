@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import io.github.twojstar.intentkeyboard.RecipientProfile
 import io.github.twojstar.intentkeyboard.Tone
+import io.github.twojstar.intentkeyboard.normalizedLanguage
 
 data class RenderPreferences(
     val tone: Tone = Tone.DEFAULT,
@@ -71,9 +72,6 @@ class RenderPreferenceStore(context: Context) {
             if (normalized == null) remove(key) else putString(key, normalized)
         }.apply()
     }
-
-    private fun String?.normalizedLanguage(): String? =
-        this?.trim()?.takeIf { it.isNotEmpty() }
 
     private companion object {
         const val PREFERENCES_NAME = "intent_keyboard_render_preferences"
