@@ -55,6 +55,14 @@ targets:
       - framework: ../../core/build/XCFrameworks/debug/IntentKeyboardCore.xcframework
         embed: false
 
+  IntentKeyboardPreferencesTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: KeyboardExtension/KeyboardRenderPreferences.swift
+      - path: KeyboardExtensionTests
+
 schemes:
   IntentKeyboard:
     build:
@@ -63,3 +71,12 @@ schemes:
         IntentKeyboardExtension: all
     run:
       config: Debug
+
+  IntentKeyboardPreferencesTests:
+    build:
+      targets:
+        IntentKeyboardPreferencesTests: all
+    test:
+      config: Debug
+      targets:
+        - IntentKeyboardPreferencesTests
