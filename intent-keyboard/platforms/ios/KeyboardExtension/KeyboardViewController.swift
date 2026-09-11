@@ -7,29 +7,15 @@ final class KeyboardViewController: UIInputViewController {
         case numbers
     }
 
-    private struct RenderPreferenceSnapshot: Equatable {
-        let toneName: String
-        let sourceLanguage: String?
-        let targetLanguage: String?
-        let recipientProfileName: String
-    }
-
     private static let autoRenderDebounceNanoseconds: UInt64 = 450_000_000
     private static let statusPreviewPending = "Preview updates after a short pause…"
     private static let statusRendering = "Rendering…"
 
     private let semanticBridge = IosSemanticBridge()
     private let renderPreferences = KeyboardRenderPreferences()
-    private let registerNames = ["RAW", "NATURAL", "CIVILIZED"]
 
-    private var rawIntent = ""
-    private var renderedSource = ""
-    private var renderedText = ""
-    private var renderedCanCommit = true
-    private var autoRenderSuppressedSource: String?
-    private var registerIndex = 1
+    private var renderState = KeyboardRenderState()
     private var characterPage = CharacterPage.letters
-    private var renderGeneration: UInt64 = 0
     private var autoRenderTask: Task<Void, Never>?
     private var renderTask: Task<Void, Never>?
     private var activeDocumentIdentifier: UUID?
@@ -208,15 +194,15 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func renderPreferencesChanged() {
-        autoRenderSuppressedSource = nil
-        invalidateRenderedPreview()
+        cancelRenderWork()
+        renderState.preferencesChanged()
         refreshPreferencesMenu()
         refreshViews()
         scheduleAutoRender()
     }
 
-    private func renderPreferenceSnapshot() -> RenderPreferenceSnapshot {
-        RenderPreferenceSnapshot(
+    private func renderPreferenceSnapshot() -> KeyboardRenderPreferenceSnapshot {
+        KeyboardRenderPreferenceSnapshot(
             toneName: renderPreferences.tone.rawValue,
             sourceLanguage: renderPreferences.sourceLanguage.language,
             targetLanguage: renderPreferences.targetLanguage.language,
@@ -340,22 +326,20 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func append(_ text: String) {
-        autoRenderSuppressedSource = nil
-        rawIntent.append(text)
-        invalidateRenderedPreview()
+        cancelRenderWork()
+        renderState.append(text)
         refreshViews()
         scheduleAutoRender()
     }
 
     private func backspace() {
-        if rawIntent.isEmpty {
+        guard !renderState.rawIntent.isEmpty else {
             textDocumentProxy.deleteBackward()
             return
         }
 
-        autoRenderSuppressedSource = nil
-        rawIntent.removeLast()
-        invalidateRenderedPreview()
+        cancelRenderWork()
+        renderState.backspace()
         refreshViews()
         scheduleAutoRender()
     }
@@ -371,37 +355,25 @@ final class KeyboardViewController: UIInputViewController {
 
     @discardableResult
     private func commitBuffer() -> Bool {
-        guard !rawIntent.isEmpty else { return true }
-
-        if rawIntent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return commitOutput(rawIntent)
-        }
-
-        let registerName = registerNames[registerIndex]
-        let hasCurrentPreview = renderedSource == rawIntent && !renderedText.isEmpty
-
-        if registerName != "RAW" && !hasCurrentPreview {
-            if autoRenderSuppressedSource == rawIntent {
-                statusLabel.text = "Preview reverted. Press Render, edit the draft, or switch to Raw."
-                refreshCompactLayout()
-                return false
-            }
-            if autoRenderTask == nil && renderTask == nil {
+        switch renderState.commitDecision() {
+        case .nothing:
+            return true
+        case .output(let output):
+            return commitOutput(output)
+        case .previewRequired(let reverted):
+            if !reverted && autoRenderTask == nil && renderTask == nil {
                 scheduleAutoRender()
             }
-            statusLabel.text = "Preview is not ready yet. Wait, press Render, or switch to Raw."
+            statusLabel.text = reverted
+                ? "Preview reverted. Press Render, edit the draft, or switch to Raw."
+                : "Preview is not ready yet. Wait, press Render, or switch to Raw."
             refreshCompactLayout()
             return false
-        }
-
-        if hasCurrentPreview && !renderedCanCommit {
+        case .blockedUnsafePreview:
             statusLabel.text = "Commit blocked until protected values are preserved."
             refreshCompactLayout()
             return false
         }
-
-        let output = registerName == "RAW" ? rawIntent : renderedText
-        return commitOutput(output)
     }
 
     private func commitOutput(_ output: String) -> Bool {
@@ -430,9 +402,8 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func cycleRegister() {
-        autoRenderSuppressedSource = nil
-        registerIndex = (registerIndex + 1) % registerNames.count
-        invalidateRenderedPreview()
+        cancelRenderWork()
+        renderState.cycleRegister()
         refreshViews()
         scheduleAutoRender()
     }
@@ -441,25 +412,13 @@ final class KeyboardViewController: UIInputViewController {
         autoRenderTask?.cancel()
         autoRenderTask = nil
 
-        let registerName = registerNames[registerIndex]
-        if registerName == "RAW" {
-            statusLabel.text = ""
-            refreshCompactLayout()
-            return
-        }
-
-        let source = rawIntent
-        if
-            source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-            source == autoRenderSuppressedSource
-        {
-            statusLabel.text = ""
-            refreshCompactLayout()
-            return
-        }
-
-        let generation = renderGeneration
         let preferences = renderPreferenceSnapshot()
+        guard let request = renderState.autoRenderRequest(preferences: preferences) else {
+            statusLabel.text = ""
+            refreshCompactLayout()
+            return
+        }
+
         statusLabel.text = Self.statusPreviewPending
         refreshCompactLayout()
 
@@ -472,11 +431,10 @@ final class KeyboardViewController: UIInputViewController {
 
             guard let self else { return }
             guard !Task.isCancelled else { return }
-            guard generation == renderGeneration else { return }
-            guard source == rawIntent else { return }
-            guard source != autoRenderSuppressedSource else { return }
-            guard registerName == registerNames[registerIndex] else { return }
-            guard preferences == renderPreferenceSnapshot() else { return }
+            guard renderState.isCurrent(
+                request,
+                preferences: renderPreferenceSnapshot()
+            ) else { return }
 
             autoRenderTask = nil
             renderBuffer(fromAutoPreview: true)
@@ -485,53 +443,48 @@ final class KeyboardViewController: UIInputViewController {
 
     private func renderBuffer(fromAutoPreview: Bool = false) {
         if !fromAutoPreview {
-            autoRenderSuppressedSource = nil
+            renderState.clearAutoRenderSuppression()
             autoRenderTask?.cancel()
             autoRenderTask = nil
         }
 
-        guard !rawIntent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        let preferences = renderPreferenceSnapshot()
+        guard let request = renderState.beginRender(preferences: preferences) else {
             statusLabel.text = ""
             refreshCompactLayout()
             return
         }
 
         renderTask?.cancel()
-        let source = rawIntent
-        let registerName = registerNames[registerIndex]
-        let preferences = renderPreferenceSnapshot()
-        renderGeneration &+= 1
-        let generation = renderGeneration
         statusLabel.text = Self.statusRendering
         refreshCompactLayout()
 
         renderTask = Task { [weak self] in
             guard let self else { return }
             defer {
-                if generation == renderGeneration {
+                if renderState.generation == request.generation {
                     renderTask = nil
                 }
             }
 
             do {
                 let result = try await semanticBridge.render(
-                    rawIntent: source,
-                    registerName: registerName,
-                    toneName: preferences.toneName,
-                    sourceLanguage: preferences.sourceLanguage,
-                    targetLanguage: preferences.targetLanguage,
-                    recipientProfileName: preferences.recipientProfileName
+                    rawIntent: request.source,
+                    registerName: request.registerName,
+                    toneName: request.preferences.toneName,
+                    sourceLanguage: request.preferences.sourceLanguage,
+                    targetLanguage: request.preferences.targetLanguage,
+                    recipientProfileName: request.preferences.recipientProfileName
                 )
 
                 guard !Task.isCancelled else { return }
-                guard generation == renderGeneration else { return }
-                guard source == rawIntent else { return }
-                guard registerName == registerNames[registerIndex] else { return }
-                guard preferences == renderPreferenceSnapshot() else { return }
+                guard renderState.applyRender(
+                    request,
+                    text: result.text,
+                    canCommit: result.canCommit,
+                    preferences: renderPreferenceSnapshot()
+                ) else { return }
 
-                renderedSource = source
-                renderedText = result.text
-                renderedCanCommit = result.canCommit
                 refreshViews()
 
                 if !result.canCommit {
@@ -546,8 +499,10 @@ final class KeyboardViewController: UIInputViewController {
                 return
             } catch {
                 guard !Task.isCancelled else { return }
-                guard generation == renderGeneration else { return }
-                guard preferences == renderPreferenceSnapshot() else { return }
+                guard renderState.isCurrent(
+                    request,
+                    preferences: renderPreferenceSnapshot()
+                ) else { return }
                 statusLabel.text = "Render failed: \(error.localizedDescription)"
                 refreshCompactLayout()
             }
@@ -555,15 +510,14 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func revertPreview() {
-        let hasCurrentPreview = renderedSource == rawIntent && !renderedText.isEmpty
-        guard hasCurrentPreview else {
+        guard renderState.hasCurrentPreview else {
             statusLabel.text = "No current preview to revert."
             refreshCompactLayout()
             return
         }
 
-        autoRenderSuppressedSource = rawIntent
-        invalidateRenderedPreview()
+        cancelRenderWork()
+        guard renderState.revertPreview() else { return }
         refreshViews()
         statusLabel.text = "Reverted to raw draft. Edit it or press Render to regenerate."
         refreshCompactLayout()
@@ -572,9 +526,8 @@ final class KeyboardViewController: UIInputViewController {
     private func refreshHostContext() {
         let documentIdentifier = textDocumentProxy.documentIdentifier
         let documentChanged = activeDocumentIdentifier != nil && activeDocumentIdentifier != documentIdentifier
-        let hasDraft = !rawIntent.isEmpty || !renderedText.isEmpty
 
-        if documentChanged && hasDraft {
+        if documentChanged && renderState.hasDraft {
             clearBuffer()
             statusLabel.text = "Draft cleared after switching text context."
         }
@@ -606,29 +559,28 @@ final class KeyboardViewController: UIInputViewController {
         }
     }
 
-    private func invalidateRenderedPreview() {
+    private func cancelRenderWork() {
         autoRenderTask?.cancel()
         autoRenderTask = nil
         renderTask?.cancel()
         renderTask = nil
-        renderGeneration &+= 1
-        renderedSource = ""
-        renderedText = ""
-        renderedCanCommit = true
     }
 
     private func clearBuffer() {
-        rawIntent = ""
-        autoRenderSuppressedSource = nil
-        invalidateRenderedPreview()
+        cancelRenderWork()
+        renderState.clear()
         refreshViews()
     }
 
     private func refreshViews() {
-        rawLabel.text = rawIntent.isEmpty ? "intent: …" : "intent: \(rawIntent)"
-        previewLabel.text = renderedText.isEmpty ? "preview: …" : "preview: \(renderedText)"
-        registerButton.setTitle(registerNames[registerIndex].capitalized, for: .normal)
-        revertButton.isEnabled = renderedSource == rawIntent && !renderedText.isEmpty
+        rawLabel.text = renderState.rawIntent.isEmpty
+            ? "intent: …"
+            : "intent: \(renderState.rawIntent)"
+        previewLabel.text = renderState.renderedText.isEmpty
+            ? "preview: …"
+            : "preview: \(renderState.renderedText)"
+        registerButton.setTitle(renderState.registerName.capitalized, for: .normal)
+        revertButton.isEnabled = renderState.revertEnabled
         pageButton.setTitle(characterPage == .letters ? "123" : "ABC", for: .normal)
         refreshReturnKey()
         refreshCompactLayout()
@@ -641,8 +593,8 @@ final class KeyboardViewController: UIInputViewController {
         rootStack.spacing = compactHeight ? 2 : 4
         keysStack.spacing = compactHeight ? 2 : 3
         if compactHeight {
-            rawLabel.isHidden = !renderedText.isEmpty || rawIntent.isEmpty
-            previewLabel.isHidden = renderedText.isEmpty
+            rawLabel.isHidden = !renderState.renderedText.isEmpty || renderState.rawIntent.isEmpty
+            previewLabel.isHidden = renderState.renderedText.isEmpty
             statusLabel.isHidden = statusLabel.text?.isEmpty != false
         } else {
             rawLabel.isHidden = false

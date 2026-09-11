@@ -61,6 +61,7 @@ targets:
     deploymentTarget: "13.0"
     sources:
       - path: KeyboardExtension/KeyboardRenderPreferences.swift
+      - path: KeyboardExtension/KeyboardRenderState.swift
       - path: KeyboardExtensionTests
 
 schemes:
