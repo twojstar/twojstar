@@ -30,13 +30,14 @@ class IosSemanticBridgeTest {
 
     @Test
     fun fallsBackSafelyForUnknownNamesAndBlankLanguages() = runTest {
+        val unknown = "unknown"
         val result = bridge.render(
             rawIntent = "hej jutro",
-            registerName = "unknown",
-            toneName = "unknown",
+            registerName = unknown,
+            toneName = unknown,
             sourceLanguage = "   ",
             targetLanguage = "",
-            recipientProfileName = "unknown",
+            recipientProfileName = unknown,
         )
 
         assertEquals("Hej jutro.", result.text)
