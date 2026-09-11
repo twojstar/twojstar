@@ -39,7 +39,7 @@ class LocalInferenceMetricsTest {
 
     @Test
     fun keepsOnlyTheLatestTwentySuccessfulSamples() {
-        (1..25).forEach { value ->
+        for (value in 1..25) {
             LocalInferenceMetrics.recordSuccess(
                 latencyMillis = value.toLong(),
                 inputCharacters = value,
