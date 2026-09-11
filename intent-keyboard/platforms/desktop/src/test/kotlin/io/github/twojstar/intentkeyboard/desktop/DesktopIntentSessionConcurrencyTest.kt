@@ -14,6 +14,7 @@ import kotlinx.coroutines.runBlocking
 class DesktopIntentSessionConcurrencyTest {
     @Test
     fun olderRenderCannotOverwriteNewerResult() = runBlocking {
+        val expected = "new result"
         val calls = AtomicInteger()
         val firstStarted = CompletableDeferred<Unit>()
         val releaseFirst = CompletableDeferred<Unit>()
@@ -24,7 +25,7 @@ class DesktopIntentSessionConcurrencyTest {
                     releaseFirst.await()
                     return RendererOutcome.Success(RenderResult("old result"))
                 }
-                return RendererOutcome.Success(RenderResult("new result"))
+                return RendererOutcome.Success(RenderResult(expected))
             }
         }
         val session = DesktopIntentSession(renderer)
@@ -34,11 +35,11 @@ class DesktopIntentSessionConcurrencyTest {
         firstStarted.await()
         val newer = async { session.render() }
 
-        assertEquals("new result", newer.await().previewText)
+        assertEquals(expected, newer.await().previewText)
         releaseFirst.complete(Unit)
 
-        assertEquals("new result", older.await().previewText)
-        assertEquals("new result", session.currentState().previewText)
-        assertEquals("new result", session.copyTextOrNull())
+        assertEquals(expected, older.await().previewText)
+        assertEquals(expected, session.currentState().previewText)
+        assertEquals(expected, session.copyTextOrNull())
     }
 }
