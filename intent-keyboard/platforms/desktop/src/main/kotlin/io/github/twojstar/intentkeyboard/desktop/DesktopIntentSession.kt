@@ -9,6 +9,7 @@ import io.github.twojstar.intentkeyboard.RenderResult
 import io.github.twojstar.intentkeyboard.SemanticPipeline
 import io.github.twojstar.intentkeyboard.SemanticRenderer
 import io.github.twojstar.intentkeyboard.Tone
+import io.github.twojstar.intentkeyboard.normalizedLanguage
 
 data class DesktopRenderPreferences(
     val tone: Tone = Tone.DEFAULT,
@@ -181,9 +182,6 @@ class DesktopIntentSession(
         renderedSource = ""
         renderedResult = null
     }
-
-    private fun String?.normalizedLanguage(): String? =
-        this?.trim()?.takeIf { it.isNotEmpty() }
 
     private data class RenderToken(
         val rawIntent: String,
