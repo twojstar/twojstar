@@ -83,8 +83,12 @@ jobs:
         with:
           gradle-version: "9.6.0"
 
-      - name: Assemble shared iOS XCFramework
-        run: gradle :core:assembleIntentKeyboardCoreDebugXCFramework --stacktrace
+      - name: Test and assemble shared iOS core
+        run: >-
+          gradle
+          :core:iosSimulatorArm64Test
+          :core:assembleIntentKeyboardCoreDebugXCFramework
+          --stacktrace
 
       - name: Install XcodeGen
         run: brew install xcodegen
