@@ -18,17 +18,19 @@ class LiteRtLmConfigTest {
 
     @Test
     fun cpuConfigRejectsInvalidValues() {
+        val modelPath = "/model"
+
         assertThrows(IllegalArgumentException::class.java) {
             LiteRtLmCpuConfig(modelPath = "   ")
         }
         assertThrows(IllegalArgumentException::class.java) {
-            LiteRtLmCpuConfig(modelPath = "/model", cacheDir = "")
+            LiteRtLmCpuConfig(modelPath = modelPath, cacheDir = "")
         }
         assertThrows(IllegalArgumentException::class.java) {
-            LiteRtLmCpuConfig(modelPath = "/model", threadCount = 0)
+            LiteRtLmCpuConfig(modelPath = modelPath, threadCount = 0)
         }
         assertThrows(IllegalArgumentException::class.java) {
-            LiteRtLmCpuConfig(modelPath = "/model", maxNumTokens = -1)
+            LiteRtLmCpuConfig(modelPath = modelPath, maxNumTokens = -1)
         }
     }
 
