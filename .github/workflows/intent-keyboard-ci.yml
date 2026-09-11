@@ -82,10 +82,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           gradle-version: "9.6.0"
+          gradle-home-cache-includes: |
+            caches
+            notifications
+            konan
 
       - name: Test and assemble shared iOS core
         run: >-
           gradle
+          "-Pkonan.data.dir=$GRADLE_USER_HOME/konan"
           :core:iosSimulatorArm64Test
           :core:assembleIntentKeyboardCoreDebugXCFramework
           --stacktrace
