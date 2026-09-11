@@ -41,7 +41,4 @@ class IosSemanticBridge {
         value: String,
         fallback: T,
     ): T = enumValues<T>().firstOrNull { it.name == value.uppercase() } ?: fallback
-
-    private fun String?.normalizedLanguage(): String? =
-        this?.trim()?.takeIf { it.isNotEmpty() }
 }
