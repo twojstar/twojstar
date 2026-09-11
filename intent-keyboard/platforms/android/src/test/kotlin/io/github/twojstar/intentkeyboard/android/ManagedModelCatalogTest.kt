@@ -22,6 +22,10 @@ class ManagedModelCatalogTest {
         assertHttps(download)
         assertHttps(source)
         assertEquals(download.host, source.host)
+        assertEquals(
+            download.path.substringBefore("/resolve"),
+            source.path.substringBefore("/tree"),
+        )
 
         val downloadRevision = pathSegmentAfter(download, "resolve")
         val sourceRevision = pathSegmentAfter(source, "tree")
