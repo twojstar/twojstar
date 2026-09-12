@@ -26,14 +26,6 @@ if not defined PDN_INSTALL_KIND (
   )
 )
 
-if /I "%PDN_INSTALL_KIND%"=="classic-custom" if not defined PDN_CLASSIC_DIR (
-  set /p "PDN_CLASSIC_DIR=Classic Paint.NET folder (without quotes): "
-  if not defined PDN_CLASSIC_DIR (
-    echo Classic Paint.NET folder is required.
-    exit /b 1
-  )
-)
-
 if /I not "%PDN_INSTALL_KIND%"=="store" if not defined PDN_ELEVATED (
   set "PDN_INSTALLER=%~f0"
   set "PDN_CHILD_ARG=%PDN_INSTALL_KIND%"
@@ -44,6 +36,14 @@ if /I not "%PDN_INSTALL_KIND%"=="store" if not defined PDN_ELEVATED (
     exit /b 1
   )
   exit /b 0
+)
+
+if /I "%PDN_INSTALL_KIND%"=="classic-custom" if not defined PDN_CLASSIC_DIR (
+  set /p "PDN_CLASSIC_DIR=Classic Paint.NET folder (without quotes): "
+  if not defined PDN_CLASSIC_DIR (
+    echo Classic Paint.NET folder is required.
+    exit /b 1
+  )
 )
 
 echo.
