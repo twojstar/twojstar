@@ -96,6 +96,8 @@ Use the release ZIP and run `Install.bat`, then choose the installation type and
 
 `C:\Program Files\paint.net\Effects\Travny.PaintDotNet.AI`
 
+Classic installation also removes the previous per-user copy of this plugin from Documents after a successful install, preventing Paint.NET from discovering both old and new copies.
+
 Microsoft Store builds fall back to `Documents\Paint.NET App Files\Effects\Travny.PaintDotNet.AI`.
 
 Portable Paint.NET users can create `Effects\Travny.PaintDotNet.AI`, copy everything from `Common\Travny.PaintDotNet.AI` into it, then add the matching adapter DLL from `Paint.NET-5.1` or `Paint.NET-5.2+`.

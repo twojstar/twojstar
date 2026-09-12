@@ -50,6 +50,8 @@ The ZIP includes `Install.bat`. Choose a standard Classic install, Microsoft Sto
 C:\Program Files\paint.net\FileTypes
 ```
 
+Classic installation also removes only the previous Travny ICO adapter DLLs from the per-user Documents FileTypes directory, so an upgrade does not leave duplicate copies loaded.
+
 Microsoft Store builds fall back to `Documents\Paint.NET App Files\FileTypes`; portable builds use `<Paint.NET directory>\FileTypes`. Restart Paint.NET after replacing a plugin DLL.
 
 Multi-image ICO files open without an extra dialog. The document is sized to the largest decodable frame and each decodable icon image is placed on its own named layer. This avoids interfering with Paint.NET's Save As preview, which may reopen the temporary ICO while the save dialog is active.
