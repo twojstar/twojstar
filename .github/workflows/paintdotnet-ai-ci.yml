@@ -26,8 +26,8 @@ env:
   PLUGIN_DIR: paintdotnet/ai
   PDN_51_URL: https://github.com/paintdotnet/release/releases/download/v5.1.12/paint.net.5.1.12.portable.x64.zip
   PDN_51_SHA256: d5ae7043f2fb9d365b48dfe243a2aca1c74924de99b04b6445916c95354aefa3
-  PDN_52_URL: https://github.com/paintdotnet/release/releases/download/v5.2-alpha.5.200.9719.1528/paint.net.5.200.9719.1528.portable.x64.zip
-  PDN_52_SHA256: 8a7be1aa650bf09341c2905dcfcc88b662bcf2fb24aff34d8ffc771afc4c88d0
+  PDN_52_URL: https://github.com/paintdotnet/release/releases/download/v5.2-alpha.5.200.9739.41506/paint.net.5.200.9739.41506.portable.x64.zip
+  PDN_52_SHA256: b0251c87f5c6de25a05c93abe58657327911262050ef50cc932515f8b5a1cba5
   MODEL_URL: https://huggingface.co/CoderViking/realesr-general-x4v3-onnx/resolve/main/realesr-general-x4v3.onnx?download=true
   MODEL_SHA256: 1940a93ee08283a0a7286183186357b1688fe9fa8ede74604b424586aaddf112
 
