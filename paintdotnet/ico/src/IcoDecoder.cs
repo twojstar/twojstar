@@ -55,7 +55,17 @@ internal sealed class IcoDocument : IDisposable
             decodeCache[key] = result;
             return result;
         }
-        catch (Exception ex) when (IsDecodeFailure(ex))
+        catch (ExternalException)
+        {
+            decodeCache[key] = false;
+            return false;
+        }
+        catch (EndOfStreamException)
+        {
+            decodeCache[key] = false;
+            return false;
+        }
+        catch (InvalidDataException)
         {
             decodeCache[key] = false;
             return false;
@@ -138,11 +148,6 @@ internal sealed class IcoDocument : IDisposable
             remaining -= read;
         }
     }
-
-    private static bool IsDecodeFailure(Exception ex) =>
-        ex is ExternalException
-            or EndOfStreamException
-            or InvalidDataException;
 
     public void Dispose()
     {
