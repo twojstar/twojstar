@@ -1,0 +1,68 @@
+name: Remotely Save GDrive patch CI
+
+# Applies the Google Drive patch to upstream's latest build and runs the test, so a
+# minified-name mismatch is caught here instead of only at the next local re-patch.
+# Does NOT publish anything: upstream's `pro/` (which is what this patches) is under
+# the PolyForm Strict License, which permits personal use but not redistribution or
+# derivative works - see remotely-save-gdrive-patch/README.md. The patched build stays
+# local to whoever runs patch_gdrive.py on their own vault.
+
+on: # yamllint disable-line rule:truthy
+  push:
+    branches: ["main"]
+    paths:
+      - "remotely-save-gdrive-patch/**"
+      - ".github/workflows/remotely-save-gdrive-patch-ci.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "remotely-save-gdrive-patch/**"
+      - ".github/workflows/remotely-save-gdrive-patch-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: remotely-save-gdrive-patch-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      UPSTREAM_REPO: remotely-save/remotely-save
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve upstream release
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(gh api "repos/$UPSTREAM_REPO/releases/latest" --jq .tag_name)"
+          if [ -z "$version" ]; then
+            echo "::error::could not resolve $UPSTREAM_REPO's latest release"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Download upstream main.js
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_VERSION: ${{ steps.upstream.outputs.version }}
+        run: |
+          mkdir -p dist
+          gh release download "$UPSTREAM_VERSION" --repo "$UPSTREAM_REPO" --pattern main.js --output dist/main.js
+
+      - name: Apply Google Drive patch
+        run: python3 remotely-save-gdrive-patch/patch_gdrive.py dist/main.js --apply
+
+      - name: Build and run the patch test
+        run: |
+          python3 remotely-save-gdrive-patch/build_test.py dist/main.js dist/test-class.mjs
+          node remotely-save-gdrive-patch/test_runner.mjs dist/test-class.mjs
