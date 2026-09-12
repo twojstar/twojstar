@@ -67,7 +67,7 @@ jobs:
           Copy-Item 'plugins/audacity/vst3/build-sdk/VST3/Release/TravnyAutoDeclip.vst3' -Destination $stage -Recurse
           @(
             'Travny Auto Declip 0.1'
-            'Copy TravnyAutoDeclip.vst3 into a standard VST3 plug-in directory, then rescan effects in Audacity.'
+            'Copy TravnyAutoDeclip.vst3 into C:\Program Files\Common Files\VST3, then rescan effects in Audacity.'
           ) | Set-Content (Join-Path $stage 'INSTALL.txt')
           Compress-Archive -Path "$stage/*" -DestinationPath "$env:RUNNER_TEMP/audacity-auto-declip-windows.zip" -Force
 
@@ -89,7 +89,7 @@ jobs:
           Copy-Item 'plugins/audacity/vst3/build-sdk/VST3/Release/TravnySmartTransition.vst3' -Destination $stage -Recurse
           @(
             'Travny Smart Transition 0.1 experimental'
-            'Copy TravnySmartTransition.vst3 into a standard VST3 plug-in directory, then rescan effects in Audacity.'
+            'Copy TravnySmartTransition.vst3 into C:\Program Files\Common Files\VST3, then rescan effects in Audacity.'
             'This artifact is for host testing. It is intentionally not published in the repository-wide Latest release until the Audacity latency/preview/apply compatibility gate passes.'
           ) | Set-Content (Join-Path $stage 'INSTALL.txt')
           Compress-Archive -Path "$stage/*" -DestinationPath "$env:RUNNER_TEMP/audacity-smart-transition-windows.zip" -Force

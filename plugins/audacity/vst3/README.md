@@ -44,6 +44,8 @@ There is one known blocking integration question: generic VST3 `ProcessData` doe
 
 Before promotion, real Audacity testing must prove how preview and Apply bracket selected-region processing, whether the host supplies enough compensated processing for the reported latency, that cancellation resets state, and that different host block sizes produce the same plan/output contract. If Audacity does not provide a usable boundary, the adapter design changes before release. Until that host gate passes, the workflow ZIP is a development artifact rather than a supported release.
 
+A Windows host smoke of `Travny Smart Transition` on **Audacity 3.7.9** passes discovery, Preview, Apply, Undo, and host responsiveness. This confirms the basic host path only; selection-boundary behavior, latency compensation, cancellation, and block-size invariance remain release gates, so the experimental artifact is still not promoted to Latest.
+
 ## Released packages
 
 Ready-to-copy Auto Declip packages are published in the repository-wide GitHub **Latest** release:
@@ -51,7 +53,7 @@ Ready-to-copy Auto Declip packages are published in the repository-wide GitHub *
 - [Windows x64](https://github.com/twojstar/twojstar/releases/latest/download/audacity-auto-declip-windows.zip)
 - [Linux x64](https://github.com/twojstar/twojstar/releases/latest/download/audacity-auto-declip-linux.zip)
 
-Each archive contains the `TravnyAutoDeclip.vst3` bundle plus a tiny `INSTALL.txt`. Install by extracting the archive, copying the `.vst3` bundle into a standard VST3 plug-in directory for your OS, then rescanning effects in Audacity. The repository does not install a background helper and the plug-ins perform no runtime downloads.
+Each archive contains the `TravnyAutoDeclip.vst3` bundle plus a tiny `INSTALL.txt`. On Windows x64, copy the `.vst3` bundle to `C:\Program Files\Common Files\VST3`; on Linux, use your standard VST3 plug-in directory. Then rescan effects in Audacity. The repository does not install a background helper and the plug-ins perform no runtime downloads.
 
 ## Layout
 
