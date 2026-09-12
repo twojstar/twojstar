@@ -125,7 +125,7 @@ html = html
   .replace(/<link\b[^>]*>\s*/gi, "")
   .replace('class="brand" href="/"', 'class="brand" href="#"');
 
-const tagOnlyHtml = html.replace(/(<script\b[^>]*>)[\s\S]*?<\/script>/gi, "$1</script>");
+const tagOnlyHtml = html.replace(/(<script\b[^>]*>)[\s\S]*?<\/script(?:\s[^>]*)?>/gi, "$1</script>");
 for (const forbidden of [
   /<script\b[^>]*\bsrc=/i,
   /<link\b[^>]*\brel=["']stylesheet["']/i,
