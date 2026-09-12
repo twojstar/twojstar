@@ -34,7 +34,6 @@ jobs:
     timeout-minutes: 15
     env:
       UPSTREAM_REPO: remotely-save/remotely-save
-      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,6 +41,8 @@ jobs:
 
       - name: Resolve upstream release
         id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           version="$(gh api "repos/$UPSTREAM_REPO/releases/latest" --jq .tag_name)"
           if [ -z "$version" ]; then
@@ -52,6 +53,7 @@ jobs:
 
       - name: Download upstream main.js
         env:
+          GH_TOKEN: ${{ github.token }}
           UPSTREAM_VERSION: ${{ steps.upstream.outputs.version }}
         run: |
           mkdir -p dist

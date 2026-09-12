@@ -31,7 +31,7 @@ calls to `PATCH` on an existing file id, and trashes extra duplicate
   bundle provides around the Drive class (same short names as the actual
   minified build, on purpose - the extracted class calls them directly).
 - `test_runner.mjs` - `node test_runner.mjs <out.mjs>` dynamically
-  imports the generated class module and runs 9 dedup/upload checks
+  imports the generated class module and runs dedup/upload checks
   against a fake Drive. No Obsidian, no real Drive account, no network.
 
 ## Anchors are pinned to a specific upstream build

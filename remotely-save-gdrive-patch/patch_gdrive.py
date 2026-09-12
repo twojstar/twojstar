@@ -30,33 +30,42 @@ FIELDS = ("kind,fileExtension,md5Checksum,mimeType,parents,size,spaces,id,name,t
 HELPER = """}
 /* remotely-save local patch: resolve an existing Drive file/folder id for name+parent,
    so writeFile/mkdir can update in place instead of creating yet another copy.
-   Keeps the OLDEST match (stable id + Drive revision history) and moves any extra
-   duplicate FILES to the Drive trash. Folders are never trashed. */
+   Keeps the OLDEST match (stable id + Drive revision history). Duplicate FILES are
+   moved to trash only after a successful upload; folders are never trashed. */
 async _rsvFindExisting(name,parentID,isFolder){
   try{
     const esc=name.split(String.fromCharCode(92)).join(String.fromCharCode(92,92)).split("'").join(String.fromCharCode(92)+"'");
     const folderMime="application/vnd.google-apps.folder";
     const q=`name='${esc}' and '${parentID}' in parents and trashed=false and mimeType${isFolder?"=":"!="}'${folderMime}'`;
-    const url=`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&pageSize=100&orderBy=createdTime&fields=files(id,name,mimeType,createdTime,modifiedTime)`;
-    const res=await fetch(url,{method:"GET",headers:{Authorization:`Bearer ${await this._getAccessToken()}`}});
-    if(res.status!==200){console.warn(`remotely-save patch: lookup failed for ${name} (HTTP ${res.status}), falling back to create`);return undefined}
-    const found=(await res.json()).files||[];
+    const found=[];
+    let pageToken;
+    do{
+      const token=void 0===pageToken?"":`&pageToken=${encodeURIComponent(pageToken)}`;
+      const url=`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&pageSize=100&orderBy=createdTime&fields=nextPageToken,files(id,name,mimeType,createdTime,modifiedTime)${token}`;
+      const res=await fetch(url,{method:"GET",headers:{Authorization:`Bearer ${await this._getAccessToken()}`}});
+      if(res.status!==200){console.warn(`remotely-save patch: lookup failed for ${name} (HTTP ${res.status}), falling back to create`);return undefined}
+      const data=await res.json();
+      found.push(...(data.files||[]));
+      pageToken=data.nextPageToken;
+    }while(pageToken);
     if(found.length===0)return undefined;
-    if(!isFolder&&found.length>1){
-      for(let k=1;k<found.length;k++){
-        try{
-          const del=await fetch(`https://www.googleapis.com/drive/v3/files/${found[k].id}`,{method:"PATCH",headers:{Authorization:`Bearer ${await this._getAccessToken()}`,"Content-Type":"application/json"},body:JSON.stringify({trashed:true})});
-          console.info(`remotely-save patch: trashed duplicate ${name} id=${found[k].id} (HTTP ${del.status})`);
-        }catch(err){console.warn(`remotely-save patch: cannot trash duplicate ${name}`,err)}
-      }
-    }
-    return found[0].id;
+    return {id:found[0].id,duplicates:isFolder?[]:found.slice(1).map(file=>file.id)};
   }catch(err){console.warn(`remotely-save patch: lookup threw for ${name}`,err);return undefined}
+}
+async _rsvTrashDuplicates(name,duplicates){
+  for(const id of duplicates){
+    let del;
+    try{
+      del=await fetch(`https://www.googleapis.com/drive/v3/files/${id}`,{method:"PATCH",headers:{Authorization:`Bearer ${await this._getAccessToken()}`,"Content-Type":"application/json"},body:JSON.stringify({trashed:true})});
+    }catch(err){console.warn(`remotely-save patch: cannot trash duplicate ${name} id=${id}`,err);throw err}
+    if(del.status!==200){const err=new Error(`cannot trash duplicate ${name} id=${id} (HTTP ${del.status})`);console.warn(`remotely-save patch: ${err.message}`);throw err}
+    console.info(`remotely-save patch: trashed duplicate ${name} id=${id} (HTTP ${del.status})`);
+  }
 }
 """
 
 REPLACEMENTS = [
-    # 0. inject the helper right before writeFile
+    # 0. inject the helpers right before writeFile
     (
         '}writeFile(e,t,i,n){',
         HELPER + 'writeFile(e,t,i,n){',
@@ -65,8 +74,8 @@ REPLACEMENTS = [
     (
         'if(t.byteLength<=5242880){const a=new FormData,'
         'd={name:l,modifiedTime:Vp(i,!0),createdTime:Vp(n,!0),parents:[o]};',
-        'if(t.byteLength<=5242880){const _rsvID=yield this._rsvFindExisting(l,o,!1);'
-        'const a=new FormData,'
+        'if(t.byteLength<=5242880){const _rsvFound=yield this._rsvFindExisting(l,o,!1),'
+        '_rsvID=void 0===_rsvFound?void 0:_rsvFound.id;const a=new FormData,'
         'd=void 0===_rsvID?{name:l,modifiedTime:Vp(i,!0),createdTime:Vp(n,!0),parents:[o]}'
         ':{name:l,modifiedTime:Vp(i,!0)};',
     ),
@@ -80,15 +89,23 @@ REPLACEMENTS = [
         '{method:void 0===_rsvID?"POST":"PATCH",'
         'headers:{Authorization:`Bearer ${yield this._getAccessToken()}`},body:a});',
     ),
-    # 3. resumable branch (>5 MiB): metadata depends on create-vs-update
+    # 3. multipart branch: clean duplicates only after the upload succeeds
+    (
+        'if(200!==c.status&&201!==c.status)throw Error(`create file ${e} failed! meta=${JSON.stringify(d)}`);'
+        'const u=yield c.json();',
+        'if(200!==c.status&&201!==c.status)throw Error(`create file ${e} failed! meta=${JSON.stringify(d)}`);'
+        'yield this._rsvTrashDuplicates(l,void 0===_rsvFound?[]:_rsvFound.duplicates);const u=yield c.json();',
+    ),
+    # 4. resumable branch (>5 MiB): metadata depends on create-vs-update
     (
         '{const a={name:l,modifiedTime:Vp(i,!0),createdTime:Vp(n,!0),parents:[o]},'
         'd=JSON.stringify(a),',
-        '{const _rsvID=yield this._rsvFindExisting(l,o,!1);'
+        '{const _rsvFound=yield this._rsvFindExisting(l,o,!1),'
+        '_rsvID=void 0===_rsvFound?void 0:_rsvFound.id;'
         'const a=void 0===_rsvID?{name:l,modifiedTime:Vp(i,!0),createdTime:Vp(n,!0),parents:[o]}'
         ':{name:l,modifiedTime:Vp(i,!0)},d=JSON.stringify(a),',
     ),
-    # 4. resumable branch: session start POST -> PATCH when the file exists
+    # 5. resumable branch: session start POST -> PATCH when the file exists
     (
         'u=yield fetch("https://www.googleapis.com/upload/drive/v3/files'
         '?uploadType=resumable&fields=' + FIELDS + '",{method:"POST",headers:c,body:d});',
@@ -96,13 +113,20 @@ REPLACEMENTS = [
         '${void 0===_rsvID?"":"/"+_rsvID}?uploadType=resumable&fields=' + FIELDS + '`,'
         '{method:void 0===_rsvID?"POST":"PATCH",headers:c,body:d});',
     ),
-    # 5. mkdir: reuse an existing folder instead of creating a second one
+    # 6. resumable branch: clean duplicates only after every chunk succeeds
+    (
+        'if(void 0===m)throw Error(`something goes wrong while uploading large file ${e}`);return m',
+        'if(void 0===m)throw Error(`something goes wrong while uploading large file ${e}`);'
+        'yield this._rsvTrashDuplicates(l,void 0===_rsvFound?[]:_rsvFound.duplicates);return m',
+    ),
+    # 7. mkdir: reuse an existing folder instead of creating a second one
     (
         'const a={mimeType:kh,modifiedTime:Vp(t,!0),createdTime:Vp(i,!0),name:s,parents:[o]},'
         'l=yield fetch("https://www.googleapis.com/drive/v3/files",{method:"POST",'
         'headers:{Authorization:`Bearer ${yield this._getAccessToken()}`,'
         '"Content-Type":"application/json"},body:JSON.stringify(a)});',
-        'const _rsvFID=yield this._rsvFindExisting(s,o,!0);'
+        'const _rsvFolder=yield this._rsvFindExisting(s,o,!0),'
+        '_rsvFID=void 0===_rsvFolder?void 0:_rsvFolder.id;'
         'const a={mimeType:kh,modifiedTime:Vp(t,!0),createdTime:Vp(i,!0),name:s,parents:[o]},'
         'l=yield fetch(void 0===_rsvFID?"https://www.googleapis.com/drive/v3/files"'
         ':`https://www.googleapis.com/drive/v3/files/${_rsvFID}?fields=' + FIELDS + '`,'
@@ -111,7 +135,7 @@ REPLACEMENTS = [
         '"Content-Type":"application/json"},'
         'body:void 0===_rsvFID?JSON.stringify(a):JSON.stringify({modifiedTime:Vp(t,!0)})});',
     ),
-    # 6. rm(): the trash PATCH sent a JSON body without a JSON content type
+    # 8. rm(): the trash PATCH sent a JSON body without a JSON content type
     (
         'if(200!==(yield fetch(`https://www.googleapis.com/drive/v3/files/${r}`,'
         '{method:"PATCH",headers:{Authorization:`Bearer ${yield this._getAccessToken()}`},'
