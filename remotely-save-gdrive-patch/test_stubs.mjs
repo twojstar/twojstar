@@ -7,19 +7,21 @@
 // for, called as `this.checkConnectCommonOps()` - static would break that call site.
 export class Mp { checkConnectCommonOps() { return true } }
 
-export const r = (thisArg, _unusedA, _unusedP, generator) => new Promise((resolve, reject) => {
+const asyncHelper = (thisArg, _unusedA, _unusedP, generator) => new Promise((resolve, reject) => {
   const iterator = generator.call(thisArg)
   function step(operation, value) {
-    let result = undefined
-    try { result = operation.call(iterator, value) } catch (error) { return reject(error) }
-    if (result.done) return resolve(result.value)
-    return Promise.resolve(result.value).then(
-      value => step(iterator.next, value),
-      value => step(iterator.throw, value),
-    )
+    try {
+      const result = operation.call(iterator, value)
+      if (result.done) return resolve(result.value)
+      return Promise.resolve(result.value).then(
+        fulfilledValue => step(iterator.next, fulfilledValue),
+        rejectedValue => step(iterator.throw, rejectedValue),
+      )
+    } catch (error) { return reject(error) }
   }
   step(iterator.next)
 })
+export { asyncHelper as r }
 
 export const I = "application/octet-stream"
 export const kh = "application/vnd.google-apps.folder"
@@ -48,8 +50,8 @@ export const th = (size, chunk) => {
 }
 export class vh {
   on() { return this }
-  add(callback) { void this; return callback() }
-  async onIdle() { return this }
+  add(callback) { return callback.call(this) }
+  onIdle() { return Promise.resolve(this) }
   pause() { return this }
   clear() { return this }
 }

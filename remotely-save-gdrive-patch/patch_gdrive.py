@@ -12,16 +12,15 @@ instead of silently no-op'ing or corrupting output when an anchor does not match
 exactly once.
 
 Usage:
-  python patch_gdrive.py [plugin_path] [--apply]
+  python patch_gdrive.py <plugin_path> [--apply]
 
-  plugin_path defaults to the local Obsidian vault's installed copy. Without --apply,
-  only reports whether every anchor matches; add --apply to write the patched file
+  plugin_path is the installed Remotely Save main.js to patch. Without --apply, only
+  reports whether every anchor matches; add --apply to write the patched file
   (a plugin_path + '.orig' backup is written first).
 """
 import shutil
 import sys
 
-DEFAULT_PLUGIN = r'C:\Users\travn\Documents\Obsidian_Vault\.obsidian\plugins\remotely-save\main.js'
 
 FIELDS = ("kind,fileExtension,md5Checksum,mimeType,parents,size,spaces,id,name,trashed,"
           "createdTime,modifiedTime,quotaBytesUsed,originalFilename,fullFileExtension,"
@@ -148,6 +147,12 @@ REPLACEMENTS = [
 ]
 
 MARKER = 'class Bh extends Mp{constructor(e,t,r){super(),this.kind="googledrive"'
+PATCH_SENTINELS = (
+    'async _rsvFindExisting(name,parentID,isFolder){',
+    'async _rsvTrashDuplicates(name,duplicates){',
+    'const _rsvFound=yield this._rsvFindExisting(l,o,!1),',
+    'const _rsvFolder=yield this._rsvFindExisting(s,o,!0),',
+)
 
 
 def class_span(s):
@@ -184,12 +189,17 @@ def class_span(s):
 def main():
     apply = '--apply' in sys.argv
     positional = [a for a in sys.argv[1:] if a != '--apply']
-    plugin = positional[0] if positional else DEFAULT_PLUGIN
+    if len(positional) != 1:
+        raise SystemExit('usage: python patch_gdrive.py <plugin_path> [--apply]')
+    plugin = positional[0]
     backup = plugin + '.orig'
 
     with open(plugin, encoding='utf-8') as f:
         s = f.read()
-    if '_rsvFindExisting' in s:
+    patched = [sentinel in s for sentinel in PATCH_SENTINELS]
+    if any(patched):
+        if not all(patched):
+            raise SystemExit('ABORT: partial Remotely Save patch detected; restore the original build before re-applying')
         print('ALREADY PATCHED - nothing to do')
         return
     a, b = class_span(s)

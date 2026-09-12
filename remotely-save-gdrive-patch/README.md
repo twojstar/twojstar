@@ -21,9 +21,9 @@ calls to `PATCH` on an existing file id, and trashes extra duplicate
 ## Files
 
 - `patch_gdrive.py` - applies the patch to a `main.js`.
-  `python patch_gdrive.py [path] [--apply]`; without `--apply` it only
-  reports whether every anchor matches. Defaults to the local Obsidian
-  vault's installed copy when no path is given.
+  `python patch_gdrive.py <path> [--apply]`; without `--apply` it only
+  reports whether every anchor matches. Pass the installed Remotely Save
+  `main.js` explicitly so the patch never guesses which vault to modify.
 - `build_test.py` - `python build_test.py <patched_main.js> <out.mjs>`
   extracts the patched class and writes it as a standalone ES module
   importing `test_stubs.mjs`.
@@ -71,10 +71,10 @@ auto-update - that is what originally required re-applying the patch by
 hand after every plugin update, and still does:
 
 ```sh
-python patch_gdrive.py --apply
+python patch_gdrive.py /path/to/your/vault/.obsidian/plugins/remotely-save/main.js --apply
 ```
 
-run again against your own vault's installed copy (the default path)
-whenever Obsidian reverts it. Disabling auto-update for this plugin
+run again against your own vault's installed copy whenever Obsidian reverts
+it. Disabling auto-update for this plugin
 avoids the surprise, at the cost of missing upstream's own fixes until
 you update by hand.
