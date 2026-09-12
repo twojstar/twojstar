@@ -123,8 +123,9 @@ jobs:
           @'
           Paint.NET ICO FileType
 
-          Run Install.bat and select your Paint.NET version. It installs per-user to
-          Documents\Paint.NET App Files\FileTypes, which works with Classic and Store builds.
+          Run Install.bat and select the installation type and Paint.NET version. Classic builds install to
+          C:\Program Files\paint.net\FileTypes (admin required). Microsoft Store builds
+          fall back to Documents\Paint.NET App Files\FileTypes.
 
           Portable users: copy the matching DLL from Paint.NET-5.1 or Paint.NET-5.2+
           to the portable Paint.NET\FileTypes folder. Restart Paint.NET after installation.

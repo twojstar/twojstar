@@ -44,12 +44,12 @@ The modern build requires .NET 11 SDK; the legacy build requires .NET 9 SDK.
 
 ## Install
 
-The ZIP includes `Install.bat`, which installs the matching adapter per-user to `Documents\Paint.NET App Files\FileTypes` for Classic and Microsoft Store builds. For a manual classic installation, you can also copy the DLL to:
+The ZIP includes `Install.bat`. Choose a standard Classic install, Microsoft Store, or a custom Classic folder, then select the Paint.NET version. Classic targets request administrator permission and install the matching adapter to:
 
 ```text
-C:\Program Files\Paint.NET\FileTypes
+C:\Program Files\paint.net\FileTypes
 ```
 
-Store builds may use `Documents\Paint.NET App Files\FileTypes`; portable builds use `<Paint.NET directory>\FileTypes`. Restart Paint.NET after replacing a plugin DLL.
+Microsoft Store builds fall back to `Documents\Paint.NET App Files\FileTypes`; portable builds use `<Paint.NET directory>\FileTypes`. Restart Paint.NET after replacing a plugin DLL.
 
 Multi-image ICO files open without an extra dialog. The document is sized to the largest decodable frame and each decodable icon image is placed on its own named layer. This avoids interfering with Paint.NET's Save As preview, which may reopen the temporary ICO while the save dialog is active.
