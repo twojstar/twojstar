@@ -78,9 +78,9 @@ Both DSP cores are independent of the VST3 SDK so they can be unit-tested on Win
 No third-party SDK is needed:
 
 ```bash
-cmake -S audacity/vst3 -B audacity/vst3/build -DBUILD_TESTING=ON
-cmake --build audacity/vst3/build --config Release
-ctest --test-dir audacity/vst3/build -C Release --output-on-failure
+cmake -S plugins/audacity/vst3 -B plugins/audacity/vst3/build -DBUILD_TESTING=ON
+cmake --build plugins/audacity/vst3/build --config Release
+ctest --test-dir plugins/audacity/vst3/build -C Release --output-on-failure
 ```
 
 ## Build the VST3 effects
@@ -88,11 +88,11 @@ ctest --test-dir audacity/vst3/build -C Release --output-on-failure
 Use a separately reviewed Steinberg VST3 SDK 3.8+ checkout. The repository does **not** download or execute an SDK at configure time.
 
 ```bash
-cmake -S audacity/vst3 -B audacity/vst3/build-sdk \
+cmake -S plugins/audacity/vst3 -B plugins/audacity/vst3/build-sdk \
   -DVST3_SDK_ROOT=/path/to/vst3sdk \
   -DBUILD_TESTING=ON \
   -DSMTG_CREATE_PLUGIN_LINK=OFF
-cmake --build audacity/vst3/build-sdk --config Release \
+cmake --build plugins/audacity/vst3/build-sdk --config Release \
   --target TravnyAutoDeclip TravnySmartTransition
 ```
 
