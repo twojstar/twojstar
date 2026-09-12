@@ -193,7 +193,7 @@ Until then, the VST3 stage must not depend on private Audacity internals or vers
 
 ## Integration with the existing toolbox
 
-- VST3 implementation belongs under `audacity/vst3/src/smarttransition/`.
+- VST3 implementation belongs under `plugins/audacity/vst3/src/smarttransition/`.
 - Reusable analysis/DSP stays host-independent and unit-testable like Auto Declip.
 - Future timeline orchestration belongs here, not duplicated inside the VST3 adapter.
 - Windows + Linux first, CMake source of truth, C++20.

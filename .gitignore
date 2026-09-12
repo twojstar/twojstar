@@ -58,8 +58,8 @@ Desktop.ini
 *.7z
 
 # Paint.NET generated/downloaded files
-/paintdotnet/**/dist/
-/paintdotnet/ai/model/
+/plugins/paintdotnet/**/dist/
+/plugins/paintdotnet/ai/model/
 
 # JVM crash logs
 hs_err_pid*

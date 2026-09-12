@@ -4,11 +4,11 @@ on:
   push:
     branches: [main]
     paths:
-      - "audacity/vst3/**"
+      - "plugins/audacity/vst3/**"
       - ".github/workflows/audacity-vst3-ci.yml"
   pull_request:
     paths:
-      - "audacity/vst3/**"
+      - "plugins/audacity/vst3/**"
       - ".github/workflows/audacity-vst3-ci.yml"
   workflow_dispatch:
 
@@ -26,11 +26,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Configure DSP tests
-        run: cmake -S audacity/vst3 -B audacity/vst3/build -DBUILD_TESTING=ON
+        run: cmake -S plugins/audacity/vst3 -B plugins/audacity/vst3/build -DBUILD_TESTING=ON
       - name: Build DSP tests
-        run: cmake --build audacity/vst3/build --config Release
+        run: cmake --build plugins/audacity/vst3/build --config Release
       - name: Run DSP tests
-        run: ctest --test-dir audacity/vst3/build -C Release --output-on-failure
+        run: ctest --test-dir plugins/audacity/vst3/build -C Release --output-on-failure
 
   vst3:
     name: VST3 · ${{ matrix.os }}
@@ -52,11 +52,11 @@ jobs:
           persist-credentials: false
 
       - name: Configure VST3
-        run: cmake -S audacity/vst3 -B audacity/vst3/build-sdk -DVST3_SDK_ROOT="${{ github.workspace }}/vst3sdk" -DBUILD_TESTING=ON -DSMTG_CREATE_PLUGIN_LINK=OFF
+        run: cmake -S plugins/audacity/vst3 -B plugins/audacity/vst3/build-sdk -DVST3_SDK_ROOT="${{ github.workspace }}/vst3sdk" -DBUILD_TESTING=ON -DSMTG_CREATE_PLUGIN_LINK=OFF
       - name: Build VST3 effects and DSP tests
-        run: cmake --build audacity/vst3/build-sdk --config Release --target TravnyAutoDeclip TravnySmartTransition AutoDeclipDspTests SmartTransitionDspTests
+        run: cmake --build plugins/audacity/vst3/build-sdk --config Release --target TravnyAutoDeclip TravnySmartTransition AutoDeclipDspTests SmartTransitionDspTests
       - name: Run DSP tests in SDK build
-        run: ctest --test-dir audacity/vst3/build-sdk -C Release --output-on-failure
+        run: ctest --test-dir plugins/audacity/vst3/build-sdk -C Release --output-on-failure
 
       - name: Package Windows Auto Declip VST3
         if: runner.os == 'Windows'
@@ -64,7 +64,7 @@ jobs:
         run: |
           $stage = Join-Path $env:RUNNER_TEMP 'audacity-auto-declip-windows'
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
-          Copy-Item 'audacity/vst3/build-sdk/VST3/Release/TravnyAutoDeclip.vst3' -Destination $stage -Recurse
+          Copy-Item 'plugins/audacity/vst3/build-sdk/VST3/Release/TravnyAutoDeclip.vst3' -Destination $stage -Recurse
           @(
             'Travny Auto Declip 0.1'
             'Copy TravnyAutoDeclip.vst3 into a standard VST3 plug-in directory, then rescan effects in Audacity.'
@@ -86,7 +86,7 @@ jobs:
         run: |
           $stage = Join-Path $env:RUNNER_TEMP 'audacity-smart-transition-windows'
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
-          Copy-Item 'audacity/vst3/build-sdk/VST3/Release/TravnySmartTransition.vst3' -Destination $stage -Recurse
+          Copy-Item 'plugins/audacity/vst3/build-sdk/VST3/Release/TravnySmartTransition.vst3' -Destination $stage -Recurse
           @(
             'Travny Smart Transition 0.1 experimental'
             'Copy TravnySmartTransition.vst3 into a standard VST3 plug-in directory, then rescan effects in Audacity.'
@@ -111,7 +111,7 @@ jobs:
           stage="$RUNNER_TEMP/audacity-auto-declip-linux"
           rm -rf "$stage"
           mkdir -p "$stage"
-          cp -a audacity/vst3/build-sdk/VST3/Release/TravnyAutoDeclip.vst3 "$stage/"
+          cp -a plugins/audacity/vst3/build-sdk/VST3/Release/TravnyAutoDeclip.vst3 "$stage/"
           printf '%s\n' \
             'Travny Auto Declip 0.1' \
             'Copy TravnyAutoDeclip.vst3 into a standard VST3 plug-in directory, then rescan effects in Audacity.' \
@@ -138,7 +138,7 @@ jobs:
           stage="$RUNNER_TEMP/audacity-smart-transition-linux"
           rm -rf "$stage"
           mkdir -p "$stage"
-          cp -a audacity/vst3/build-sdk/VST3/Release/TravnySmartTransition.vst3 "$stage/"
+          cp -a plugins/audacity/vst3/build-sdk/VST3/Release/TravnySmartTransition.vst3 "$stage/"
           printf '%s\n' \
             'Travny Smart Transition 0.1 experimental' \
             'Copy TravnySmartTransition.vst3 into a standard VST3 plug-in directory, then rescan effects in Audacity.' \

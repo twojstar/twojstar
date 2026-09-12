@@ -17,7 +17,7 @@ Local AI/restoration pack for Paint.NET. The current **AI Restore** stays the fa
 
 ### Medium — planned
 
-Medium remains part of this same `paintdotnet/ai` pack and reuses the existing ONNX/runtime/install infrastructure.
+Medium remains part of this same `plugins/paintdotnet/ai` pack and reuses the existing ONNX/runtime/install infrastructure.
 
 Target tools:
 
