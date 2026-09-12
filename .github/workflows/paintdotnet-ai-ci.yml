@@ -26,8 +26,8 @@ env:
   PLUGIN_DIR: paintdotnet/ai
   PDN_51_URL: https://github.com/paintdotnet/release/releases/download/v5.1.12/paint.net.5.1.12.portable.x64.zip
   PDN_51_SHA256: d5ae7043f2fb9d365b48dfe243a2aca1c74924de99b04b6445916c95354aefa3
-  PDN_52_URL: https://github.com/paintdotnet/release/releases/download/v5.2-alpha.5.200.9719.1528/paint.net.5.200.9719.1528.portable.x64.zip
-  PDN_52_SHA256: 8a7be1aa650bf09341c2905dcfcc88b662bcf2fb24aff34d8ffc771afc4c88d0
+  PDN_52_URL: https://github.com/paintdotnet/release/releases/download/v5.2-alpha.5.200.9739.41506/paint.net.5.200.9739.41506.portable.x64.zip
+  PDN_52_SHA256: b0251c87f5c6de25a05c93abe58657327911262050ef50cc932515f8b5a1cba5
   MODEL_URL: https://huggingface.co/CoderViking/realesr-general-x4v3-onnx/resolve/main/realesr-general-x4v3.onnx?download=true
   MODEL_SHA256: 1940a93ee08283a0a7286183186357b1688fe9fa8ede74604b424586aaddf112
 
@@ -54,12 +54,16 @@ jobs:
             throw 'Install.bat must be checked out with CRLF line endings.'
           }
 
-      - name: Set up .NET
+      - name: Set up .NET 9
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: |
-            9.0.x
-            10.0.x
+          dotnet-version: 9.0.x
+
+      - name: Set up .NET 11 preview
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 11.0.x
+          dotnet-quality: preview
 
       - name: Verify adapter versions
         shell: pwsh
@@ -119,7 +123,7 @@ jobs:
         shell: pwsh
         run: |
           $legacyBuild = Join-Path $PWD 'bin/Release/net9.0-windows'
-          $modernBuild = Join-Path $PWD 'bin/Release/net10.0-windows'
+          $modernBuild = Join-Path $PWD 'bin/Release/net11.0-windows'
           $dist = Join-Path $PWD 'dist'
           $package = Join-Path $dist 'package'
           $common = Join-Path $package 'Common/Travny.PaintDotNet.AI'
@@ -156,7 +160,7 @@ jobs:
             if (-not (Test-Path $required -PathType Leaf)) { throw "Package file missing: $required" }
           }
 
-          foreach ($tfm in @('net9.0-windows', 'net10.0-windows')) {
+          foreach ($tfm in @('net9.0-windows', 'net11.0-windows')) {
             $smoke = Join-Path $dist "runtime-smoke-$tfm"
             dotnet publish .\tests\ModelSmoke\ModelSmoke.csproj -c Release -f $tfm --no-self-contained -o $smoke --nologo
             if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed for $tfm with exit code $LASTEXITCODE" }
