@@ -1,0 +1,197 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  no-build:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-slim
+    timeout-minutes: 20
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - actions
+          - c-cpp
+          - csharp
+          - javascript-typescript
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  java-kotlin:
+    name: Analyze (java-kotlin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          languages: java-kotlin
+          build-mode: manual
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle 9.6
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          gradle-version: "9.6.0"
+
+      - name: Build Intent Keyboard JVM and Android targets
+        working-directory: intent-keyboard
+        run: >-
+          gradle
+          :core:desktopTest
+          :core:testAndroidHostTest
+          :platforms:android:testDebugUnitTest
+          :platforms:android:assembleDebug
+          :platforms:desktop:test
+          :platforms:desktop:distZip
+          --no-daemon
+          --no-build-cache
+          --no-configuration-cache
+          --stacktrace
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build Xiaomi ADB Tools
+        working-directory: xiaomi-adb-tools
+        run: >-
+          ./gradlew platformJars
+          --no-daemon
+          --no-build-cache
+          --no-configuration-cache
+          --stacktrace
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          category: "/language:java-kotlin"
+
+  swift:
+    name: Analyze (swift)
+    runs-on: macos-latest
+    timeout-minutes: 35
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    defaults:
+      run:
+        working-directory: intent-keyboard
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          languages: swift
+          build-mode: manual
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle 9.6
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          gradle-version: "9.6.0"
+          gradle-home-cache-includes: |
+            caches
+            notifications
+            konan
+
+      - name: Test and assemble shared iOS core
+        run: >-
+          gradle
+          "-Pkonan.data.dir=$GRADLE_USER_HOME/konan"
+          :core:iosSimulatorArm64Test
+          :core:assembleIntentKeyboardCoreDebugXCFramework
+          --stacktrace
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec platforms/ios/project.yml --project platforms/ios
+
+      - name: Test keyboard preferences
+        run: >-
+          xcodebuild
+          -project platforms/ios/IntentKeyboard.xcodeproj
+          -scheme IntentKeyboardPreferencesTests
+          -configuration Debug
+          -destination 'platform=macOS'
+          CODE_SIGNING_ALLOWED=NO
+          test
+
+      - name: Build host and keyboard extension
+        run: >-
+          xcodebuild
+          -project platforms/ios/IntentKeyboard.xcodeproj
+          -scheme IntentKeyboard
+          -configuration Debug
+          -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          ARCHS=arm64
+          ONLY_ACTIVE_ARCH=YES
+          CODE_SIGNING_ALLOWED=NO
+          build
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          category: "/language:swift"
