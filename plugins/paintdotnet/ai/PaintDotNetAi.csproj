@@ -20,7 +20,7 @@
 
   <ItemGroup>
     <Compile Include="src\*.cs" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.29.0" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="$(OnnxRuntimeVersion)" />
   </ItemGroup>
 
   <ItemGroup>
