@@ -1,6 +1,15 @@
 @echo off
 setlocal
 
+if exist "%ProgramFiles%\paint.net\paintdotnet.exe" (
+  powershell -NoProfile -Command "if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { exit 1 }" >nul 2>&1
+  if errorlevel 1 (
+    echo Requesting administrator permission for the Classic Paint.NET install...
+    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    exit /b
+  )
+)
+
 echo Travny Paint.NET AI installer
 echo.
 echo [1] Paint.NET 5.1.x
@@ -22,7 +31,7 @@ if not exist "%AI_COMMON%\Microsoft.ML.OnnxRuntime.dll" goto :incomplete
 if not exist "%AI_COMMON%\onnxruntime.dll" goto :incomplete
 if not exist "%AI_COMMON%\model\realesr-general-x4v3.onnx" goto :incomplete
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; $common = [IO.Path]::GetFullPath($env:AI_COMMON); $adapter = [IO.Path]::GetFullPath($env:AI_ADAPTER); $target = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Paint.NET App Files\Effects\Travny.PaintDotNet.AI'; New-Item -ItemType Directory -Force -Path $target | Out-Null; Get-ChildItem -LiteralPath $common -Force | Copy-Item -Destination $target -Recurse -Force; $installed = Join-Path $target ([IO.Path]::GetFileName($adapter)); Copy-Item -LiteralPath $adapter -Destination $installed -Force; $other = Join-Path $target $env:AI_OTHER; if (Test-Path -LiteralPath $other) { Remove-Item -LiteralPath $other -Force }; if (-not (Test-Path -LiteralPath $installed -PathType Leaf)) { throw 'Adapter installation verification failed.' }; if (-not (Test-Path -LiteralPath (Join-Path $target 'model\realesr-general-x4v3.onnx') -PathType Leaf)) { throw 'Model installation verification failed.' }; Get-ChildItem -LiteralPath $target -Recurse -File | Unblock-File -ErrorAction SilentlyContinue; Write-Host ('Installed to ' + $target)"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; $common = [IO.Path]::GetFullPath($env:AI_COMMON); $adapter = [IO.Path]::GetFullPath($env:AI_ADAPTER); $classic = Join-Path $env:ProgramFiles 'paint.net'; if (Test-Path -LiteralPath (Join-Path $classic 'paintdotnet.exe') -PathType Leaf) { $target = Join-Path $classic 'Effects\Travny.PaintDotNet.AI' } else { $target = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Paint.NET App Files\Effects\Travny.PaintDotNet.AI' }; New-Item -ItemType Directory -Force -Path $target | Out-Null; Get-ChildItem -LiteralPath $common -Force | Copy-Item -Destination $target -Recurse -Force; $installed = Join-Path $target ([IO.Path]::GetFileName($adapter)); Copy-Item -LiteralPath $adapter -Destination $installed -Force; $other = Join-Path $target $env:AI_OTHER; if (Test-Path -LiteralPath $other) { Remove-Item -LiteralPath $other -Force }; if (-not (Test-Path -LiteralPath $installed -PathType Leaf)) { throw 'Adapter installation verification failed.' }; if (-not (Test-Path -LiteralPath (Join-Path $target 'model\realesr-general-x4v3.onnx') -PathType Leaf)) { throw 'Model installation verification failed.' }; Get-ChildItem -LiteralPath $target -Recurse -File | Unblock-File -ErrorAction SilentlyContinue; Write-Host ('Installed to ' + $target)"
 if errorlevel 1 (
   echo Installation failed.
   pause

@@ -92,9 +92,11 @@ The package already ships separate adapters for **Paint.NET 5.1.x** and **Paint.
 
 ## Install
 
-Use the release ZIP and run `Install.bat`, then choose your Paint.NET version. The installer combines the matching adapter with the shared runtime/model files and installs the complete plugin folder to:
+Use the release ZIP and run `Install.bat`, then choose your Paint.NET version. For a normal Classic installation the installer requests administrator permission and installs the complete plugin folder to:
 
-`Documents\Paint.NET App Files\Effects\Travny.PaintDotNet.AI`
+`C:\Program Files\paint.net\Effects\Travny.PaintDotNet.AI`
+
+Microsoft Store builds fall back to `Documents\Paint.NET App Files\Effects\Travny.PaintDotNet.AI`.
 
 Portable Paint.NET users can create `Effects\Travny.PaintDotNet.AI`, copy everything from `Common\Travny.PaintDotNet.AI` into it, then add the matching adapter DLL from `Paint.NET-5.1` or `Paint.NET-5.2+`.
 
