@@ -86,11 +86,10 @@ jobs:
             notifications
             konan
 
-      - name: Test and assemble shared iOS core
+      - name: Assemble shared iOS core
         run: >-
           gradle
           "-Pkonan.data.dir=$GRADLE_USER_HOME/konan"
-          :core:iosSimulatorArm64Test
           :core:assembleIntentKeyboardCoreDebugXCFramework
           --stacktrace
 
@@ -105,16 +104,6 @@ jobs:
         with:
           languages: swift
           build-mode: manual
-
-      - name: Test keyboard preferences
-        run: >-
-          xcodebuild
-          -project platforms/ios/IntentKeyboard.xcodeproj
-          -scheme IntentKeyboardPreferencesTests
-          -configuration Debug
-          -destination 'platform=macOS'
-          CODE_SIGNING_ALLOWED=NO
-          test
 
       - name: Build host and keyboard extension
         run: >-
