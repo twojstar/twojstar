@@ -44,7 +44,7 @@ The modern build requires .NET 11 SDK; the legacy build requires .NET 9 SDK.
 
 ## Install
 
-The ZIP includes `Install.bat`. For a normal Classic installation it requests administrator permission and installs the matching adapter to:
+The ZIP includes `Install.bat`. Choose a standard Classic install, Microsoft Store, or a custom Classic folder, then select the Paint.NET version. Classic targets request administrator permission and install the matching adapter to:
 
 ```text
 C:\Program Files\paint.net\FileTypes

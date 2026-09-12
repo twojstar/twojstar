@@ -92,7 +92,7 @@ The package already ships separate adapters for **Paint.NET 5.1.x** and **Paint.
 
 ## Install
 
-Use the release ZIP and run `Install.bat`, then choose your Paint.NET version. For a normal Classic installation the installer requests administrator permission and installs the complete plugin folder to:
+Use the release ZIP and run `Install.bat`, then choose the installation type and Paint.NET version. The installer distinguishes a standard Classic install, Microsoft Store, and a custom Classic folder. Classic targets request administrator permission and install the complete plugin folder to:
 
 `C:\Program Files\paint.net\Effects\Travny.PaintDotNet.AI`
 

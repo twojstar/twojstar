@@ -181,7 +181,7 @@ jobs:
           @'
           Paint.NET AI Restore
 
-          Run Install.bat and select your Paint.NET version. It combines the matching
+          Run Install.bat and select the installation type and Paint.NET version. It combines the matching
           adapter with the shared ONNX Runtime, model and license files. Classic builds install
           to C:\Program Files\paint.net\Effects\Travny.PaintDotNet.AI (admin required).
           Microsoft Store builds fall back to Documents\Paint.NET App Files\Effects.
