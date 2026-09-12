@@ -22,7 +22,7 @@ The shared ICO codec is plain C#. It does not depend on Pillow, ImageSharp, or a
 
 ## Paint.NET adapters
 
-`PaintDotNetIco.Modern.csproj` targets Paint.NET 5.2's new `PaintDotNet.FileTypes` API on .NET 10. This is the primary adapter and has been tested against Paint.NET 5.2 Alpha build 9719.
+`PaintDotNetIco.Modern.csproj` targets Paint.NET 5.2's new `PaintDotNet.FileTypes` API on .NET 11. This is the primary adapter and has been tested against Paint.NET 5.2 Alpha build 9739.
 
 `PaintDotNetIco.csproj` targets the classic Paint.NET 5.1 FileType API on .NET 9. It is kept as a compatibility adapter and is verified against Paint.NET 5.1.12.
 
@@ -40,7 +40,7 @@ For Paint.NET 5.1.x, build against a 5.1 installation or portable directory:
 dotnet build .\PaintDotNetIco.csproj -c Release -p:PaintDotNetDir='D:\Apps\paint.net-5.1'
 ```
 
-The modern build requires .NET 10 SDK; the legacy build requires .NET 9 SDK.
+The modern build requires .NET 11 SDK; the legacy build requires .NET 9 SDK.
 
 ## Install
 
