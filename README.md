@@ -27,6 +27,7 @@
 | 🎨 **Paint.NET plugins** | [`plugins/paintdotnet/`](plugins/paintdotnet/) · [`ICO`](plugins/paintdotnet/ico/) · [`AI Restore`](plugins/paintdotnet/ai/) | Shared home for Paint.NET plugins: ICO import/export and local restoration effects. |
 | 🎚️ **Audacity plugins** | [`plugins/audacity/`](plugins/audacity/) · [`VST3`](plugins/audacity/vst3/) · [Windows](https://github.com/twojstar/twojstar/releases/latest/download/audacity-auto-declip-windows.zip) · [Linux](https://github.com/twojstar/twojstar/releases/latest/download/audacity-auto-declip-linux.zip) | Local-first audio restoration and workflow effects, starting with Auto Declip. |
 | ⌨️ **Intent Keyboard** | [`intent-keyboard/`](intent-keyboard/) | Multiplatform semantic input experiment: rough intent in, natural text out, with tone, translation and protected facts. |
+| 💾 **Remotely Save GDrive patch** | [`remotely-save-gdrive-patch/`](remotely-save-gdrive-patch/) | Personal-use Google Drive dedup/update patch with a non-redistributing verification harness. |
 
 ## 📦 One rolling release
 
