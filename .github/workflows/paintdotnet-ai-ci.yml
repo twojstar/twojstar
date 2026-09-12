@@ -54,12 +54,16 @@ jobs:
             throw 'Install.bat must be checked out with CRLF line endings.'
           }
 
-      - name: Set up .NET
+      - name: Set up .NET 9
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: |
-            9.0.x
-            10.0.x
+          dotnet-version: 9.0.x
+
+      - name: Set up .NET 11 preview
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 11.0.x
+          dotnet-quality: preview
 
       - name: Verify adapter versions
         shell: pwsh
@@ -119,7 +123,7 @@ jobs:
         shell: pwsh
         run: |
           $legacyBuild = Join-Path $PWD 'bin/Release/net9.0-windows'
-          $modernBuild = Join-Path $PWD 'bin/Release/net10.0-windows'
+          $modernBuild = Join-Path $PWD 'bin/Release/net11.0-windows'
           $dist = Join-Path $PWD 'dist'
           $package = Join-Path $dist 'package'
           $common = Join-Path $package 'Common/Travny.PaintDotNet.AI'
@@ -156,7 +160,7 @@ jobs:
             if (-not (Test-Path $required -PathType Leaf)) { throw "Package file missing: $required" }
           }
 
-          foreach ($tfm in @('net9.0-windows', 'net10.0-windows')) {
+          foreach ($tfm in @('net9.0-windows', 'net11.0-windows')) {
             $smoke = Join-Path $dist "runtime-smoke-$tfm"
             dotnet publish .\tests\ModelSmoke\ModelSmoke.csproj -c Release -f $tfm --no-self-contained -o $smoke --nologo
             if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed for $tfm with exit code $LASTEXITCODE" }
