@@ -1,4 +1,5 @@
 import { classifyChannel } from "./channel-meta.js";
+import { parseM3uWorkspace } from "./playlist-format.js";
 import { describeHls, describeMedia, describeSource } from "./diagnostics.js";
 import { shouldWaitForHlsRecovery } from "./playback-recovery-policy.js";
 import {
@@ -300,81 +301,24 @@ ui.form.addEventListener("submit", (event) => {
   playStream(parsed.href, { preserveAttempt: context.preserveAttempt });
 });
 
-function parseAttributes(line) {
-  const attributes = {};
-  for (const match of line.matchAll(/([\w-]+)="([^"]*)"/g)) {
-    attributes[match[1].toLowerCase()] = match[2];
-  }
-  return attributes;
-}
-
-function extinfTitle(line) {
-  let quoted = false;
-  for (let index = "#EXTINF:".length; index < line.length; index += 1) {
-    const character = line[index];
-    if (character === '"' && line[index - 1] !== "\\") quoted = !quoted;
-    if (character === "," && !quoted) return line.slice(index + 1).trim();
-  }
-  return "";
-}
-
 function parseM3u(source, {
   allowArtwork = false,
   providerId = "local",
   providerLabel = "Lokalna",
 } = {}) {
-  const items = [];
-  let pending = null;
-
-  for (const rawLine of source.replace(/^\uFEFF/, "").split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line) continue;
-
-    if (line.startsWith("#EXTINF:")) {
-      const attributes = parseAttributes(line);
-      pending = {
-        id: attributes["tvg-id"] || "",
-        title: extinfTitle(line) || attributes["tvg-name"] || "",
-        group: attributes["group-title"] || "",
-        logo: allowArtwork ? validRemoteUrl(attributes["tvg-logo"] || "")?.href || "" : "",
-        country: attributes["tvg-country"] || "",
-        language: attributes["tvg-language"] || "",
-        quality: attributes["tvg-quality"] || attributes.quality || attributes.resolution || "",
-        radio: attributes.radio === "true" || attributes.type === "radio",
-      };
-      continue;
-    }
-
-    if (line.startsWith("#")) continue;
-    const url = validRemoteUrl(line);
-    if (!url) {
-      pending = null;
-      continue;
-    }
-
-    const title = pending?.title || url.hostname;
-    const radio = pending?.radio || false;
-    items.push({
-      id: pending?.id || "",
-      url: url.href,
-      title,
-      group: pending?.group || "Bez grupy",
-      logo: pending?.logo || "",
-      country: pending?.country || "",
-      language: pending?.language || "",
-      radio,
-      providerId,
-      providerLabel,
-      ...classifyChannel(url.href, {
-        title,
-        radio,
-        quality: pending?.quality || "",
-      }),
-    });
-    pending = null;
-  }
-
-  return items;
+  return parseM3uWorkspace(source, {
+    allowArtwork,
+    inferRadioFromUrl: false,
+    providerId,
+    providerLabel,
+  }).map((item) => ({
+    ...item,
+    ...classifyChannel(item.url, {
+      title: item.title,
+      radio: Boolean(item.radio),
+      quality: String(item.quality || ""),
+    }),
+  }));
 }
 
 function itemMeta(item) {

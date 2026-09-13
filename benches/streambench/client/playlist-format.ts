@@ -48,6 +48,8 @@ type ParseOptions = {
   providerId?: string;
   providerLabel?: string;
   defaultRadio?: boolean;
+  allowArtwork?: boolean;
+  inferRadioFromUrl?: boolean;
 };
 
 type SerializeOptions = {
@@ -67,7 +69,7 @@ function safeText(value: unknown, maxLength = 500): string {
   return String(value || "").replace(/[\r\n\t]+/g, " ").trim().slice(0, maxLength);
 }
 
-function parseAttributes(line: string): Attributes {
+export function parseM3uAttributes(line: string): Attributes {
   const attributes: Attributes = {};
   for (const match of line.matchAll(ATTRIBUTE_PATTERN)) {
     attributes[match[1].toLowerCase()] = match[2];
@@ -87,7 +89,13 @@ function extinfTitle(line: string): string {
 
 export function parseM3uWorkspace(
   source: unknown,
-  { providerId = "local", providerLabel = "Lokalna", defaultRadio = false }: ParseOptions = {},
+  {
+    providerId = "local",
+    providerLabel = "Lokalna",
+    defaultRadio = false,
+    allowArtwork = true,
+    inferRadioFromUrl = true,
+  }: ParseOptions = {},
 ): PlaylistItem[] {
   const items: PlaylistItem[] = [];
   let pending: PendingItem | null = null;
@@ -97,14 +105,14 @@ export function parseM3uWorkspace(
     if (!line) continue;
 
     if (line.startsWith("#EXTINF:")) {
-      const attributes = parseAttributes(line);
+      const attributes = parseM3uAttributes(line);
       pending = {
         attributes,
         id: attributes["tvg-id"] || "",
         title: extinfTitle(line) || attributes["tvg-name"] || "",
         group: attributes["group-title"] || "",
         album: "",
-        logo: safeUrl(attributes["tvg-logo"]),
+        logo: allowArtwork ? safeUrl(attributes["tvg-logo"]) : "",
         country: attributes["tvg-country"] || "",
         language: attributes["tvg-language"] || "",
         tags: attributes["tvg-tags"] || "",
@@ -134,7 +142,7 @@ export function parseM3uWorkspace(
     }
 
     const title = pending?.title || new URL(url).hostname;
-    const radio = pending?.radio || defaultRadio || AUDIO_PATTERN.test(url);
+    const radio = pending?.radio || defaultRadio || (inferRadioFromUrl && AUDIO_PATTERN.test(url));
     items.push({
       id: pending?.id || "",
       url,

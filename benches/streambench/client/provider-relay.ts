@@ -1,3 +1,5 @@
+import { parseM3uAttributes } from "./playlist-format.js";
+
 const STORAGE_KEY = "streambench.provider-relays.v1";
 const MAX_RELAYS = 500;
 const SIGNATURE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
@@ -28,14 +30,6 @@ function validRelay(sourceUrl: URL, relayValue: unknown, origin: string): URL | 
   return relay;
 }
 
-function parseAttributes(line: string): Record<string, string> {
-  const attributes: Record<string, string> = {};
-  for (const match of line.matchAll(/([\w-]+)="([^"]*)"/g)) {
-    attributes[match[1].toLowerCase()] = match[2];
-  }
-  return attributes;
-}
-
 export function parseProviderRelays(
   source: unknown,
   origin = "https://streambench.invalid",
@@ -46,7 +40,7 @@ export function parseProviderRelays(
     const line = rawLine.trim();
     if (!line) continue;
     if (line.startsWith("#EXTINF:")) {
-      pendingRelay = parseAttributes(line)["streambench-relay"] || "";
+      pendingRelay = parseM3uAttributes(line)["streambench-relay"] || "";
       continue;
     }
     if (line.startsWith("#")) continue;

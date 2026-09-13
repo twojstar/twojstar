@@ -23,6 +23,10 @@ assert(items[0].id === "tv.one" && items[0].url.endsWith("live.mpd"), "IPTV meta
 assert(items[1].album === "BBC" && items[1].group === "Bez grupy", "EXTALB was not preserved independently");
 assert(items[1].tags === "news,pop" && items[1].codec === "MP3" && items[1].bitrate === "128", "radio metadata mismatch");
 assert(items[2].radio && items[2].title === "example.com", "bare radio URL mismatch");
+
+const privacyItems = parseM3uWorkspace(source, { allowArtwork: false, inferRadioFromUrl: false });
+assert(privacyItems[0].logo === "", "artwork opt-out was ignored");
+assert(!privacyItems[2].radio, "radio URL inference opt-out was ignored");
 assert(dedupePlaylist(items).length === 3, "exact URL deduplication failed");
 
 const exported = serializeM3u(items);
