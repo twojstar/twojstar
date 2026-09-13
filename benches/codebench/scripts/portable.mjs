@@ -10,7 +10,6 @@ const helperScripts = [
   "hardening.js",
   "privacy-guard.js",
   "logo-compat.js",
-  "svg-normalize.js",
   "module-shapes.js",
   "style-picker.js",
   "corner-palette.js",
