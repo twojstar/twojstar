@@ -1,3 +1,5 @@
+import { parseM3uWorkspace } from "./playlist-format.js";
+
 const fileInput = document.querySelector("#playlistFile");
 const parseButton = document.querySelector("#parsePlaylist");
 const playlistText = document.querySelector("#playlistText");
@@ -120,72 +122,8 @@ function selectPlayerTab(view) {
 playerTab.addEventListener("click", () => selectPlayerTab("player"));
 metadataTab.addEventListener("click", () => selectPlayerTab("metadata"));
 
-function safeUrl(value) {
-  try {
-    const url = new URL(String(value || "").trim());
-    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
-  } catch {
-    return "";
-  }
-}
-
-function parseAttributes(line) {
-  const attributes = {};
-  for (const match of line.matchAll(/([\w-]+)="([^"]*)"/g)) {
-    attributes[match[1].toLowerCase()] = match[2];
-  }
-  return attributes;
-}
-
-function extinfTitle(line) {
-  let quoted = false;
-  for (let index = "#EXTINF:".length; index < line.length; index += 1) {
-    const character = line[index];
-    if (character === '"' && line[index - 1] !== "\\") quoted = !quoted;
-    if (character === "," && !quoted) return line.slice(index + 1).trim();
-  }
-  return "";
-}
-
 function parseLocalPlaylist(source, defaultRadio = false) {
-  const items = [];
-  let pending = null;
-  for (const rawLine of String(source || "").replace(/^\uFEFF/, "").split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    if (line.startsWith("#EXTINF:")) {
-      const attributes = parseAttributes(line);
-      pending = {
-        id: attributes["tvg-id"] || "",
-        title: extinfTitle(line) || attributes["tvg-name"] || "",
-        group: attributes["group-title"] || "",
-        logo: safeUrl(attributes["tvg-logo"]),
-        country: attributes["tvg-country"] || "",
-        language: attributes["tvg-language"] || "",
-        tags: attributes["tvg-tags"] || "",
-        codec: attributes["tvg-codec"] || "",
-        bitrate: attributes["tvg-bitrate"] || "",
-        quality: attributes["tvg-quality"] || attributes.quality || attributes.resolution || "",
-        radio: attributes.radio === "true" || attributes.type === "radio",
-      };
-      continue;
-    }
-    if (line.startsWith("#")) continue;
-    const url = safeUrl(line);
-    if (!url) {
-      pending = null;
-      continue;
-    }
-    items.push({
-      ...pending,
-      title: pending?.title || new URL(url).hostname,
-      group: pending?.group || "Bez grupy",
-      radio: pending?.radio || defaultRadio || /\.(mp3|aac|m4a|ogg|opus|flac)(?:$|[?#])/i.test(url),
-      url,
-    });
-    pending = null;
-  }
-  return items;
+  return parseM3uWorkspace(source, { defaultRadio });
 }
 
 function itemMeta(item) {
